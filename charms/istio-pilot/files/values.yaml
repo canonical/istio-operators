@@ -1,0 +1,45 @@
+appNamespaces: []
+autoscaleEnabled: true
+autoscaleMax: 5
+autoscaleMin: 1
+configMap: true
+configNamespace: istio-config
+configSource:
+  subscribedResources: []
+cpu:
+  targetAverageUtilization: 80
+deploymentLabels: {}
+enableProtocolSniffingForInbound: false
+enableProtocolSniffingForOutbound: true
+enabled: true
+env: {}
+hub: ""
+image: pilot
+ingress:
+  ingressClass: istio
+  ingressControllerMode: STRICT
+  ingressService: istio-ingressgateway
+jwksResolverExtraRootCA: ""
+keepaliveMaxServerConnectionAge: 30m
+meshNetworks:
+  networks: {}
+namespace: istio-system
+nodeSelector: {}
+plugins: []
+podAnnotations: {}
+podAntiAffinityLabelSelector: []
+podAntiAffinityTermLabelSelector: []
+policy:
+  enabled: false
+replicaCount: 1
+resources:
+  requests:
+    cpu: 500m
+    memory: 2048Mi
+rollingMaxSurge: 100%
+rollingMaxUnavailable: 25%
+sidecar: false
+tag: ""
+tolerations: []
+traceSampling: 1
+useMCP: false

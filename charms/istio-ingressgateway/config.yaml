@@ -1,0 +1,9 @@
+options:
+  proxy-admin-port:
+    type: string
+    default: "15000"
+    description: Proxy admin port
+  status-port:
+    type: string
+    default: "15020"
+    description: Status port

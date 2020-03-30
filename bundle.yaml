@@ -1,0 +1,12 @@
+bundle: kubernetes
+applications:
+  istio-ingressgateway:
+    charm: cs:~kubeflow-charmers/istio-ingressgateway
+    source: ./charms/istio-ingressgateway
+    scale: 1
+  istio-pilot:
+    charm: cs:~kubeflow-charmers/istio-pilot
+    source: ./charms/istio-pilot
+    scale: 1
+relations:
+  - [istio-ingressgateway:istio-pilot, istio-pilot:istio-pilot]

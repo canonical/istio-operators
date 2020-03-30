@@ -1,0 +1,13 @@
+options:
+  monitoring-address:
+    type: string
+    default: ":15014"
+    description: Monitoring address
+  secure-grpc-address:
+    type: string
+    default: ":15011"
+    description: Secure GRPC address
+  xds-ca-port:
+    type: int
+    default: 15012
+    description: xDS (various discovery services) and CA services (TLS)
