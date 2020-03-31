@@ -44,3 +44,4 @@ provides:
 #     interface: http
 #   istio-tracing:
 #     interface: http
+min-juju-version: 2.8-beta1
