@@ -22,12 +22,12 @@ description: |
 
   For more detail, please see: https://istio.io/docs/concepts/what-is-istio/
 maintainers: [Juju Developers <juju@lists.ubuntu.com>]
-tags: [kubeflow, reverse-proxy, service-mesh]
+tags: [service-mesh, ingress]
 series: [kubernetes]
 resources:
   oci-image:
     type: oci-image
-    description: 'Backing OCI image'
+    description: OCI image
     auto-fetch: true
     upstream-source: docker.io/istio/proxyv2:1.5.0
 deployment:

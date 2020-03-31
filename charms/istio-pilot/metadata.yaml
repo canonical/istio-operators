@@ -22,7 +22,7 @@ description: |
 
   For more detail, please see: https://istio.io/docs/concepts/what-is-istio/
 maintainers: [Juju Developers <juju@lists.ubuntu.com>]
-tags: [kubeflow, reverse-proxy, service-mesh]
+tags: [service-mesh]
 series: [kubernetes]
 resources:
   oci-image:
@@ -33,15 +33,4 @@ resources:
 provides:
   istio-pilot:
     interface: http
-# requires:
-#   istio-galley:
-#     interface: http
-#   istio-ingressgateway:
-#     interface: http
-#   istio-policy:
-#     interface: http
-#   istio-telemetry:
-#     interface: http
-#   istio-tracing:
-#     interface: http
 min-juju-version: 2.8-beta1
