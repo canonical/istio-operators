@@ -95,10 +95,10 @@ def start_charm():
                         "PILOT_EXTERNAL_GALLEY": "false",
                     },
                     "ports": [
-                        {"name": "http-leg-disc", "containerPort": 8080},
+                        {"name": "debug", "containerPort": 8080},
                         {"name": "grpc-xds", "containerPort": 15010},
-                        {"name": "tbd", "containerPort": config["xds-ca-port"]},
-                        {"name": "monitoring", "containerPort": 15017},
+                        {"name": "xds", "containerPort": config["xds-ca-port"]},
+                        {"name": "webhook", "containerPort": config['webhook-port']},
                     ],
                     "kubernetes": {
                         "readinessProbe": {
@@ -183,6 +183,7 @@ def start_charm():
                                     "name": hookenv.service_name(),
                                     "namespace": namespace,
                                     "path": "/inject",
+                                    "port": config['webhook-port'],
                                 },
                                 #  "caBundle": ca_bundle,
                             },

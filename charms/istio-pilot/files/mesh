@@ -100,4 +100,4 @@ defaultConfig:
   # If port is 15012, will use SDS.
   # controlPlaneAuthPolicy is for mounted secrets, will wait for the files.
   controlPlaneAuthPolicy: NONE
-  discoveryAddress: istiod.istio-system.svc:15012
+  discoveryAddress: istio-pilot.istio-system.svc:15012
