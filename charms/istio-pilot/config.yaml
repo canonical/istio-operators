@@ -11,3 +11,7 @@ options:
     type: int
     default: 15012
     description: xDS (various discovery services) and CA services (TLS)
+  webhook-port:
+    type: int
+    default: 15017
+    description: Injection and validation webhook port
