@@ -76,15 +76,10 @@ def start_charm():
                     "envConfig": {
                         "JWT_POLICY": "first-party-jwt",
                         "PILOT_CERT_PROVIDER": "istiod",
-                        "POD_NAME": {
-                            "field": {"path": "metadata.name", "api-version": "v1"}
-                        },
+                        "POD_NAME": {"field": {"path": "metadata.name", "api-version": "v1"}},
                         "POD_NAMESPACE": namespace,
                         "SERVICE_ACCOUNT": {
-                            "field": {
-                                "path": "spec.serviceAccountName",
-                                "api-version": "v1",
-                            }
+                            "field": {"path": "spec.serviceAccountName", "api-version": "v1",}
                         },
                         "PILOT_TRACE_SAMPLING": "1",
                         "CONFIG_NAMESPACE": "istio-config",
@@ -103,11 +98,7 @@ def start_charm():
                     "kubernetes": {
                         "readinessProbe": {
                             "failureThreshold": 3,
-                            "httpGet": {
-                                "path": "/ready",
-                                "port": 8080,
-                                "scheme": "HTTP",
-                            },
+                            "httpGet": {"path": "/ready", "port": 8080, "scheme": "HTTP",},
                             "initialDelaySeconds": 5,
                             "periodSeconds": 5,
                             "successThreshold": 1,
@@ -119,10 +110,7 @@ def start_charm():
                             "name": "config-volume",
                             "mountPath": "/etc/istio/config",
                             "files": [
-                                {
-                                    "path": "mesh",
-                                    "content": Path("files/mesh").read_text(),
-                                },
+                                {"path": "mesh", "content": Path("files/mesh").read_text(),},
                                 {
                                     "path": "meshNetworks",
                                     "content": Path("files/meshNetworks").read_text(),
@@ -146,14 +134,8 @@ def start_charm():
                             "name": "inject",
                             "mountPath": "/var/lib/istio/inject",
                             "files": [
-                                {
-                                    "path": "config",
-                                    "content": Path("files/config").read_text(),
-                                },
-                                {
-                                    "path": "values",
-                                    "content": Path("files/values").read_text(),
-                                },
+                                {"path": "config", "content": Path("files/config").read_text(),},
+                                {"path": "values", "content": Path("files/values").read_text(),},
                             ],
                         },
                         #  {
@@ -196,9 +178,7 @@ def start_charm():
                                 }
                             ],
                             "failurePolicy": "Fail",
-                            "namespaceSelector": {
-                                "matchLabels": {"istio-injection": "enabled"}
-                            },
+                            "namespaceSelector": {"matchLabels": {"istio-injection": "enabled"}},
                         }
                     ],
                 },
