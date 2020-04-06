@@ -135,24 +135,13 @@ def start_charm():
                         "PILOT_CERT_PROVIDER": "istiod",
                         "ISTIO_META_USER_SDS": "true",
                         "CA_ADDR": f"{pilot_service}:{pilot_port}",
-                        "NODE_NAME": {
-                            "field": {"path": "spec.nodeName", "api-version": "v1"}
-                        },
-                        "POD_NAME": {
-                            "field": {"path": "metadata.name", "api-version": "v1"}
-                        },
+                        "NODE_NAME": {"field": {"path": "spec.nodeName", "api-version": "v1"}},
+                        "POD_NAME": {"field": {"path": "metadata.name", "api-version": "v1"}},
                         "POD_NAMESPACE": namespace,
-                        "INSTANCE_IP": {
-                            "field": {"path": "status.podIP", "api-version": "v1"}
-                        },
-                        "HOST_IP": {
-                            "field": {"path": "status.hostIP", "api-version": "v1"}
-                        },
+                        "INSTANCE_IP": {"field": {"path": "status.podIP", "api-version": "v1"}},
+                        "HOST_IP": {"field": {"path": "status.hostIP", "api-version": "v1"}},
                         "SERVICE_ACCOUNT": {
-                            "field": {
-                                "path": "spec.serviceAccountName",
-                                "api-version": "v1",
-                            }
+                            "field": {"path": "spec.serviceAccountName", "api-version": "v1",}
                         },
                         "ISTIO_META_WORKLOAD_NAME": hookenv.service_name(),
                         "ISTIO_META_OWNER": f"kubernetes://api/apps/v1/namespaces/{namespace}/deployments/{hookenv.service_name()}",
@@ -181,11 +170,7 @@ def start_charm():
                     "kubernetes": {
                         "readinessProbe": {
                             "failureThreshold": 30,
-                            "httpGet": {
-                                "path": "/healthz/ready",
-                                "port": 15020,
-                                "scheme": "HTTP",
-                            },
+                            "httpGet": {"path": "/healthz/ready", "port": 15020, "scheme": "HTTP",},
                             "initialDelaySeconds": 1,
                             "periodSeconds": 2,
                             "successThreshold": 1,
@@ -219,10 +204,7 @@ def start_charm():
                                 {
                                     "path": "labels",
                                     "content": "\n".join(
-                                        [
-                                            'app="istio-ingressgateway"',
-                                            'istio="ingressgateway"',
-                                        ]
+                                        ['app="istio-ingressgateway"', 'istio="ingressgateway"',]
                                     ),
                                 },
                             ],

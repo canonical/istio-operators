@@ -1,0 +1,20 @@
+name: Lint Code
+
+on:
+  - push
+  - pull_request
+
+jobs:
+  build:
+    name: Lint Code
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out repo
+      uses: actions/checkout@v2
+
+    - name: Install black
+      run: pip3 install --user black==19.10b0
+
+    - name: Check formatting
+      run: ~/.local/bin/black --check .
