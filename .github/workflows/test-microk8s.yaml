@@ -55,6 +55,8 @@ jobs:
       run: sudo microk8s.kubectl apply -f https://raw.githubusercontent.com/istio/istio/release-1.5/samples/bookinfo/networking/bookinfo-gateway.yaml
     - name: Wait for bookinfo application to become ready
       run: sudo microk8s.kubectl wait --for=condition=available deployment --all --timeout=5m
+    - name: Wait a little bit more for bookinfo to come up
+      run: sleep 15
 
     # Test that bookinfo came up
     - name: Ensure bookinfo came up
