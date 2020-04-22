@@ -6,6 +6,7 @@ import yaml
 from charmhelpers.core import hookenv
 from charms import layer
 from charms.reactive import clear_flag, hook, set_flag, when, when_any, when_not
+from jinja2 import Environment, FileSystemLoader
 
 
 @hook("upgrade-charm")
@@ -22,7 +23,7 @@ def charm_ready():
 def configure_http(http):
     namespace = os.environ["JUJU_MODEL_NAME"]
     hostname = f"{hookenv.service_name()}.{namespace}.svc"
-    http.configure(hostname=hostname, port=hookenv.config()['xds-ca-port'])
+    http.configure(hostname=hostname, port=hookenv.config()['xds-ca-tls-port'])
 
 
 @when_any("layer.docker-resource.oci-image.changed")
@@ -38,6 +39,12 @@ def start_charm():
     image = layer.docker_resource.get_info("oci-image")
     namespace = os.environ["JUJU_MODEL_NAME"]
     config = dict(hookenv.config())
+    tconfig = {k.replace('-', '_'): v for k, v in config.items()}
+    tconfig['service_name'] = hookenv.service_name()
+    tconfig['namespace'] = namespace
+    env = Environment(
+        loader=FileSystemLoader('templates'), variable_start_string='[[', variable_end_string=']]'
+    )
 
     layer.caas_base.pod_spec_set(
         {
@@ -79,26 +86,30 @@ def start_charm():
                         "POD_NAME": {"field": {"path": "metadata.name", "api-version": "v1"}},
                         "POD_NAMESPACE": namespace,
                         "SERVICE_ACCOUNT": {
-                            "field": {"path": "spec.serviceAccountName", "api-version": "v1",}
+                            "field": {"path": "spec.serviceAccountName", "api-version": "v1"}
                         },
                         "PILOT_TRACE_SAMPLING": "1",
                         "CONFIG_NAMESPACE": "istio-config",
                         "PILOT_ENABLE_PROTOCOL_SNIFFING_FOR_OUTBOUND": "true",
                         "PILOT_ENABLE_PROTOCOL_SNIFFING_FOR_INBOUND": "false",
                         "INJECTION_WEBHOOK_CONFIG_NAME": f"{namespace}-sidecar-injector",
-                        "ISTIOD_ADDR": f"{hookenv.service_name()}.{namespace}.svc:{config['xds-ca-port']}",
+                        "ISTIOD_ADDR": f"{hookenv.service_name()}.{namespace}.svc:{config['xds-ca-tls-port']}",
                         "PILOT_EXTERNAL_GALLEY": "false",
                     },
                     "ports": [
-                        {"name": "debug", "containerPort": 8080},
-                        {"name": "grpc-xds", "containerPort": 15010},
-                        {"name": "xds", "containerPort": config["xds-ca-port"]},
+                        {"name": "debug", "containerPort": config['debug-port']},
+                        {"name": "grpc-xds", "containerPort": config['xds-ca-port']},
+                        {"name": "xds", "containerPort": config["xds-ca-tls-port"]},
                         {"name": "webhook", "containerPort": config['webhook-port']},
                     ],
                     "kubernetes": {
                         "readinessProbe": {
                             "failureThreshold": 3,
-                            "httpGet": {"path": "/ready", "port": 8080, "scheme": "HTTP",},
+                            "httpGet": {
+                                "path": "/ready",
+                                "port": config['debug-port'],
+                                "scheme": "HTTP",
+                            },
                             "initialDelaySeconds": 5,
                             "periodSeconds": 5,
                             "successThreshold": 1,
@@ -110,14 +121,17 @@ def start_charm():
                             "name": "config-volume",
                             "mountPath": "/etc/istio/config",
                             "files": [
-                                {"path": "mesh", "content": Path("files/mesh").read_text(),},
+                                {
+                                    "path": "mesh",
+                                    "content": env.get_template('mesh').render(tconfig),
+                                },
                                 {
                                     "path": "meshNetworks",
-                                    "content": Path("files/meshNetworks").read_text(),
+                                    "content": env.get_template('meshNetworks').render(tconfig),
                                 },
                                 {
                                     "path": "values.yaml",
-                                    "content": Path("files/values.yaml").read_text(),
+                                    "content": env.get_template('values.yaml').render(tconfig),
                                 },
                             ],
                         },
@@ -126,26 +140,20 @@ def start_charm():
                             "mountPath": "/var/run/secrets/istio-dns",
                             "emptyDir": {"medium": "Memory"},
                         },
-                        #  {
-                        #      "name": "cacerts",
-                        #      "mountPath": "/etc/cacerts",
-                        #  },
                         {
                             "name": "inject",
                             "mountPath": "/var/lib/istio/inject",
                             "files": [
-                                {"path": "config", "content": Path("files/config").read_text(),},
-                                {"path": "values", "content": Path("files/values").read_text(),},
+                                {
+                                    "path": "config",
+                                    "content": env.get_template('config').render(tconfig),
+                                },
+                                {
+                                    "path": "values",
+                                    "content": env.get_template('values').render(tconfig),
+                                },
                             ],
                         },
-                        #  {
-                        #      "name": "istiod",
-                        #      "mountPath": "/var/lib/istio/local",
-                        #  },
-                        #  {
-                        #      "name": "istiod-service-account-token-nhc8h",
-                        #      "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
-                        #  },
                     ],
                 },
             ],

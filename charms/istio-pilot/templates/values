@@ -6,7 +6,7 @@
       "s390x": 2
     },
     "certificates": [],
-    "configNamespace": "istio-system",
+    "configNamespace": "[[ namespace ]]",
     "configValidation": true,
     "controlPlaneSecurityEnabled": false,
     "defaultNodeSelector": {},
@@ -25,7 +25,7 @@
     "hub": "docker.io/istio",
     "imagePullPolicy": "IfNotPresent",
     "imagePullSecrets": [],
-    "istioNamespace": "istio-system",
+    "istioNamespace": "[[ namespace ]]",
     "istiod": {
       "enabled": true
     },
@@ -56,7 +56,7 @@
       "clusterName": "",
       "enabled": false
     },
-    "namespace": "istio-system",
+    "namespace": "[[ namespace ]]",
     "network": "",
     "omitSidecarInjectorConfigMap": false,
     "oneNamespace": false,
@@ -66,9 +66,9 @@
     },
     "pilotCertProvider": "istiod",
     "policyCheckFailOpen": false,
-    "policyNamespace": "istio-system",
+    "policyNamespace": "[[ namespace ]]",
     "priorityClassName": "",
-    "prometheusNamespace": "istio-system",
+    "prometheusNamespace": "[[ namespace ]]",
     "proxy": {
       "accessLogEncoding": "TEXT",
       "accessLogFile": "",
@@ -143,12 +143,12 @@
       },
       "udsPath": ""
     },
-    "securityNamespace": "istio-system",
+    "securityNamespace": "[[ namespace ]]",
     "sts": {
       "servicePort": 0
     },
     "tag": "1.5.0",
-    "telemetryNamespace": "istio-system",
+    "telemetryNamespace": "[[ namespace ]]",
     "tracer": {
       "datadog": {
         "address": "$(HOST_IP):8126"
@@ -182,7 +182,7 @@
     "image": "sidecar_injector",
     "injectLabel": "istio-injection",
     "injectedAnnotations": {},
-    "namespace": "istio-system",
+    "namespace": "[[ namespace ]]",
     "neverInjectSelector": [],
     "objectSelector": {
       "autoInject": true,
