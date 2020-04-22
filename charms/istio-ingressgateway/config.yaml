@@ -1,9 +1,53 @@
 options:
+  log-level:
+    type: string
+    default: "default:info"
+    description: Istio logging level
+  status-port:
+    type: int
+    default: 15020
+    description: Health checks
+  http-port:
+    type: int
+    default: 80
+    description: HTTP
+  https-port:
+    type: int
+    default: 443
+    description: Webhooks
+  kiali-port:
+    type: int
+    default: 15029
+    description: Kiali User Interface
+  prometheus-port:
+    type: int
+    default: 15030
+    description: Prometheus User Interface
+  grafana-port:
+    type: int
+    default: 15031
+    description: Grafana User Interface
+  tracing-port:
+    type: int
+    default: 15032
+    description: Tracing User Interface
+  tls-port:
+    type: int
+    default: 15443
+    description: Ingress / Egress (SNI)
+  citadel-grpc-port:
+    type: int
+    default: 8060
+    description: Citadel GRPC server
+  dns-tls-port:
+    type: int
+    default: 853
+    description: DNS (TLS)
+  xds-ca-port-legacy:
+    type: int
+    default: 15011
+    description: xDS (various discovery services) and CA services (TLS) [legacy]
   proxy-admin-port:
     type: string
     default: "15000"
-    description: Proxy admin port
-  status-port:
-    type: string
-    default: "15020"
-    description: Status port
+    description: Envoy admin port (commands/diagnostics)

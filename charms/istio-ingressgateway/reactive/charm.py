@@ -1,5 +1,4 @@
 import os
-import time
 from pathlib import Path
 
 from kubernetes import client, config
@@ -59,24 +58,17 @@ def start_charm():
     config.load_incluster_config()
     v1 = client.CoreV1Api()
     layer.status.maintenance("Waiting for configmap/istio-ca-root-cert to be created")
-    for _ in range(30):
-        try:
-            config_map = v1.read_namespaced_config_map(
-                name="istio-ca-root-cert", namespace=namespace
-            )
-            if config_map.data.get("root-cert.pem"):
-                break
-            else:
-                hookenv.log("Got empty certificate, waiting for real one")
-                time.sleep(10)
-        except client.rest.ApiException as err:
-            hookenv.log(err)
-            hookenv.log(err.status)
-            hookenv.log(err.reason)
-            hookenv.log(err.body)
-            hookenv.log(err.headers)
-            time.sleep(10)
-    else:
+    try:
+        config_map = v1.read_namespaced_config_map(name="istio-ca-root-cert", namespace=namespace)
+        if not config_map.data.get("root-cert.pem"):
+            hookenv.log("Got empty certificate, waiting for real one")
+            return False
+    except client.rest.ApiException as err:
+        hookenv.log(err)
+        hookenv.log(err.status)
+        hookenv.log(err.reason)
+        hookenv.log(err.body)
+        hookenv.log(err.headers)
         layer.status.blocked("istio-ca-root-cert certificate not found.")
         return False
 
@@ -104,7 +96,7 @@ def start_charm():
                         f"{namespace}.svc.cluster.local",
                         "--proxyLogLevel=warning",
                         "--proxyComponentLogLevel=misc:error",
-                        "--log_output_level=default:info",
+                        f"--log_output_level={cfg['log-level']}",
                         "--drainDuration",
                         "45s",
                         "--parentShutdownDuration",
@@ -113,12 +105,10 @@ def start_charm():
                         "10s",
                         "--serviceCluster",
                         hookenv.service_name(),
-                        # "--zipkinAddress",
-                        # "zipkin.istio-system:9411",
                         "--proxyAdminPort",
                         cfg['proxy-admin-port'],
                         "--statusPort",
-                        cfg['status-port'],
+                        str(cfg['status-port']),
                         "--controlPlaneAuthPolicy",
                         "NONE",
                         "--discoveryAddress",
@@ -141,7 +131,7 @@ def start_charm():
                         "INSTANCE_IP": {"field": {"path": "status.podIP", "api-version": "v1"}},
                         "HOST_IP": {"field": {"path": "status.hostIP", "api-version": "v1"}},
                         "SERVICE_ACCOUNT": {
-                            "field": {"path": "spec.serviceAccountName", "api-version": "v1",}
+                            "field": {"path": "spec.serviceAccountName", "api-version": "v1"}
                         },
                         "ISTIO_META_WORKLOAD_NAME": hookenv.service_name(),
                         "ISTIO_META_OWNER": f"kubernetes://api/apps/v1/namespaces/{namespace}/deployments/{hookenv.service_name()}",
@@ -155,22 +145,26 @@ def start_charm():
                         "ISTIO_META_CLUSTER_ID": "Kubernetes",
                     },
                     "ports": [
-                        {"name": "status-port", "containerPort": 15020},
-                        {"name": "http2", "containerPort": 80},
-                        {"name": "https", "containerPort": 443},
-                        {"name": "kiali", "containerPort": 15029},
-                        {"name": "prometheus", "containerPort": 15030},
-                        {"name": "grafana", "containerPort": 15031},
-                        {"name": "tracing", "containerPort": 15032},
-                        {"name": "tls", "containerPort": 15443},
-                        {"name": "unknown1", "containerPort": 15011},
-                        {"name": "unknown2", "containerPort": 8060},
-                        {"name": "unknown3", "containerPort": 853},
+                        {"name": "status-port", "containerPort": cfg['status-port']},
+                        {"name": "http2", "containerPort": cfg['http-port']},
+                        {"name": "https", "containerPort": cfg['https-port']},
+                        {"name": "kiali", "containerPort": cfg['kiali-port']},
+                        {"name": "prometheus", "containerPort": cfg['prometheus-port']},
+                        {"name": "grafana", "containerPort": cfg['grafana-port']},
+                        {"name": "tracing", "containerPort": cfg['tracing-port']},
+                        {"name": "tls", "containerPort": cfg['tls-port']},
+                        {"name": "pilot", "containerPort": cfg['xds-ca-port-legacy']},
+                        {"name": "citadel", "containerPort": cfg['citadel-grpc-port']},
+                        {"name": "dns-tls", "containerPort": cfg['dns-tls-port']},
                     ],
                     "kubernetes": {
                         "readinessProbe": {
                             "failureThreshold": 30,
-                            "httpGet": {"path": "/healthz/ready", "port": 15020, "scheme": "HTTP",},
+                            "httpGet": {
+                                "path": "/healthz/ready",
+                                "port": cfg['status-port'],
+                                "scheme": "HTTP",
+                            },
                             "initialDelaySeconds": 1,
                             "periodSeconds": 2,
                             "successThreshold": 1,
@@ -203,9 +197,7 @@ def start_charm():
                                 },
                                 {
                                     "path": "labels",
-                                    "content": "\n".join(
-                                        ['app="istio-ingressgateway"', 'istio="ingressgateway"',]
-                                    ),
+                                    "content": 'app="istio-ingressgateway"\nistio="ingressgateway"',
                                 },
                             ],
                         },

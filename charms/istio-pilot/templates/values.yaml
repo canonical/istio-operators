@@ -23,7 +23,7 @@ jwksResolverExtraRootCA: ""
 keepaliveMaxServerConnectionAge: 30m
 meshNetworks:
   networks: {}
-namespace: istio-system
+namespace: [[ namespace ]]
 nodeSelector: {}
 plugins: []
 podAnnotations: {}
