@@ -164,32 +164,37 @@ def start_charm():
                     {"name": crd["metadata"]["name"], "spec": crd["spec"]}
                     for crd in yaml.safe_load_all(Path("files/crds.yaml").read_text())
                 ],
-                "mutatingWebhookConfigurations": {
-                    "sidecar-injector": [
-                        {
-                            "name": "sidecar-injector.istio.io",
-                            "clientConfig": {
-                                "service": {
-                                    "name": hookenv.service_name(),
-                                    "namespace": namespace,
-                                    "path": "/inject",
-                                    "port": config['webhook-port'],
+                "mutatingWebhookConfigurations": [
+                    {
+                        "name": "sidecar-injector",
+                        "webhooks": [
+                            {
+                                "name": "sidecar-injector.istio.io",
+                                "clientConfig": {
+                                    "service": {
+                                        "name": hookenv.service_name(),
+                                        "namespace": namespace,
+                                        "path": "/inject",
+                                        "port": config['webhook-port'],
+                                    },
+                                    #  "caBundle": ca_bundle,
                                 },
-                                #  "caBundle": ca_bundle,
-                            },
-                            "rules": [
-                                {
-                                    "operations": ["CREATE"],
-                                    "apiGroups": [""],
-                                    "apiVersions": ["v1"],
-                                    "resources": ["pods"],
-                                }
-                            ],
-                            "failurePolicy": "Fail",
-                            "namespaceSelector": {"matchLabels": {"istio-injection": "enabled"}},
-                        }
-                    ],
-                },
+                                "rules": [
+                                    {
+                                        "operations": ["CREATE"],
+                                        "apiGroups": [""],
+                                        "apiVersions": ["v1"],
+                                        "resources": ["pods"],
+                                    }
+                                ],
+                                "failurePolicy": "Fail",
+                                "namespaceSelector": {
+                                    "matchLabels": {"istio-injection": "enabled"}
+                                },
+                            }
+                        ],
+                    }
+                ],
             }
         },
     )
