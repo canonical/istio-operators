@@ -38,7 +38,7 @@ jobs:
     - name: Build and deploy istio
       run: sudo juju bundle deploy --build
     - name: Delete juju admission webhook
-      run: sudo microk8s.kubectl delete mutatingwebhookconfigurations/istio-system-model-admission
+      run: sudo microk8s.kubectl delete mutatingwebhookconfigurations/istio-system-model-admission || true
     - name: Wait for operator role to be created
       run: sleep 10
     - name: Set permissions for ingressgateway operator
