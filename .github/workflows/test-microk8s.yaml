@@ -33,12 +33,12 @@ jobs:
       run: |
         set -eux
         sudo juju bootstrap microk8s uk8s
-        sudo juju add-model istio-system microk8s
+        sudo juju add-model istio-system microk8s --config update-status-hook-interval=10s
         sudo juju bundle deploy --build
         sudo microk8s.kubectl delete mutatingwebhookconfigurations/istio-system-model-admission || true
         sleep 10
         sudo microk8s.kubectl patch role -n istio-system istio-ingressgateway-operator -p '{"apiVersion":"rbac.authorization.k8s.io/v1","kind":"Role","metadata":{"name":"istio-ingressgateway-operator"},"rules":[{"apiGroups":["*"],"resources":["*"],"verbs":["*"]}]}'
-        sudo juju wait -wv
+        sudo juju wait -wvt 300
 
     - name: Deploy bookinfo application
       run: |
