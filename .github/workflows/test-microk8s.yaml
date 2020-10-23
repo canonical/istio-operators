@@ -20,9 +20,9 @@ jobs:
     - name: Install charm
       run: sudo snap install charm --classic
     - name: Install juju
-      run: sudo snap install juju --classic --channel latest/edge
+      run: sudo snap install juju --classic --channel 2.8
     - name: Install juju-helpers
-      run: sudo snap install juju-helpers --classic --channel edge
+      run: sudo snap install juju-helpers --classic
     - name: Install juju-wait
       run: sudo snap install juju-wait --classic
 
