@@ -33,4 +33,6 @@ resources:
 provides:
   istio-pilot:
     interface: http
+  service-mesh:
+    interface: service-mesh
 min-juju-version: 2.8-beta1
