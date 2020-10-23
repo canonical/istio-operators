@@ -5,7 +5,7 @@ import yaml
 
 from charmhelpers.core import hookenv
 from charms import layer
-from charms.reactive import clear_flag, hook, set_flag, when, when_any, when_not
+from charms.reactive import clear_flag, endpoint_from_name, hook, set_flag, when, when_any, when_not
 from jinja2 import Environment, FileSystemLoader
 
 
@@ -26,9 +26,14 @@ def configure_http(http):
     http.configure(hostname=hostname, port=hookenv.config()['xds-ca-tls-port'])
 
 
-@when_any("layer.docker-resource.oci-image.changed")
+@when_any(
+    "layer.docker-resource.oci-image.changed", "config.changed", "endpoint.service-mesh.changed"
+)
 def update_image():
     clear_flag("charm.started")
+    clear_flag('layer.docker-resource.oci-image.changed')
+    clear_flag('config.changed')
+    clear_flag('endpoint.service-mesh.changed')
 
 
 @when("layer.docker-resource.oci-image.available")
@@ -36,8 +41,63 @@ def update_image():
 def start_charm():
     layer.status.maintenance("configuring container")
 
-    image = layer.docker_resource.get_info("oci-image")
     namespace = os.environ["JUJU_MODEL_NAME"]
+
+    service_mesh = endpoint_from_name('service-mesh')
+    routes = service_mesh.routes()
+
+    # See https://bugs.launchpad.net/juju/+bug/1900475 for why this isn't inlined below
+    if routes:
+        custom_resources = {
+            'customResources': {
+                'gateways.networking.istio.io': [
+                    {
+                        'apiVersion': 'networking.istio.io/v1beta1',
+                        'kind': 'Gateway',
+                        'metadata': {'name': namespace},
+                        'spec': {
+                            'selector': {'istio': 'ingressgateway'},
+                            'servers': [
+                                {
+                                    'hosts': ['*'],
+                                    'port': {'name': 'http', 'number': 80, 'protocol': 'HTTP'},
+                                }
+                            ],
+                        },
+                    }
+                ],
+                'virtualservices.networking.istio.io': [
+                    {
+                        'apiVersion': 'networking.istio.io/v1alpha3',
+                        'kind': 'VirtualService',
+                        'metadata': {'name': route['service']},
+                        'spec': {
+                            'gateways': [namespace],
+                            'hosts': ['*'],
+                            'http': [
+                                {
+                                    'match': [{'uri': {'prefix': route['prefix']}}],
+                                    'rewrite': {'uri': route['rewrite']},
+                                    'route': [
+                                        {
+                                            'destination': {
+                                                'host': f'{route["service"]}.kubeflow.svc.cluster.local',
+                                                'port': {'number': route['port']},
+                                            }
+                                        }
+                                    ],
+                                }
+                            ],
+                        },
+                    }
+                    for route in service_mesh.routes()
+                ],
+            }
+        }
+    else:
+        custom_resources = {}
+
+    image = layer.docker_resource.get_info("oci-image")
     config = dict(hookenv.config())
     tconfig = {k.replace('-', '_'): v for k, v in config.items()}
     tconfig['service_name'] = hookenv.service_name()
@@ -164,6 +224,7 @@ def start_charm():
                     {"name": crd["metadata"]["name"], "spec": crd["spec"]}
                     for crd in yaml.safe_load_all(Path("files/crds.yaml").read_text())
                 ],
+                **custom_resources,
                 "mutatingWebhookConfigurations": [
                     {
                         "name": "sidecar-injector",
@@ -190,6 +251,15 @@ def start_charm():
                                 "failurePolicy": "Fail",
                                 "namespaceSelector": {
                                     "matchLabels": {"istio-injection": "enabled"}
+                                },
+                                "objectSelector": {
+                                    "matchExpressions": [
+                                        {
+                                            "key": "juju-app",
+                                            "operator": "NotIn",
+                                            "values": ["istio-pilot", "istio-ingressgateway"],
+                                        }
+                                    ]
                                 },
                             }
                         ],
