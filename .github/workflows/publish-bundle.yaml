@@ -26,4 +26,7 @@ jobs:
       run: |
         set -eux
         echo $CHARMSTORE_CREDENTIAL > ~/.go-cookies
-        juju-bundle publish --url cs:~kubeflow-charmers/istio --publish-charms
+        juju-bundle publish \
+            --url cs:~kubeflow-charmers/istio \
+            --publish-charms \
+            --publish-namespace kubeflow-charmers
