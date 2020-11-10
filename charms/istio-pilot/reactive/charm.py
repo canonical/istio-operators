@@ -251,16 +251,13 @@ def start_charm():
                                 "failurePolicy": "Fail",
                                 "namespaceSelector": {"matchLabels": {"juju-model": namespace}},
                                 "objectSelector": {
-                                    "matchLabels": {
-                                        "juju-app": route['service']
-                                        for route in service_mesh.routes()
-                                    },
                                     "matchExpressions": [
                                         {
-                                            "key": "juju-app",
-                                            "operator": "NotIn",
-                                            "values": ["istio-pilot", "istio-ingressgateway"],
-                                        }
+                                            'key': 'juju-app',
+                                            'operator': 'In',
+                                            'values': ['nonexistent']
+                                            + [route['service'] for route in service_mesh.routes()],
+                                        },
                                     ],
                                 },
                             }
