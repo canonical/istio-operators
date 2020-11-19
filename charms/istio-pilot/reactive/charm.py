@@ -46,6 +46,11 @@ def start_charm():
     service_mesh = endpoint_from_name('service-mesh')
     routes = service_mesh.routes()
 
+    try:
+        auth_route = next(r for r in routes if r['auth'])
+    except StopIteration:
+        auth_route = None
+
     # See https://bugs.launchpad.net/juju/+bug/1900475 for why this isn't inlined below
     if routes:
         custom_resources = {
@@ -81,7 +86,7 @@ def start_charm():
                                     'route': [
                                         {
                                             'destination': {
-                                                'host': f'{route["service"]}.kubeflow.svc.cluster.local',
+                                                'host': f'{route["service"]}.{namespace}.svc.cluster.local',
                                                 'port': {'number': route['port']},
                                             }
                                         }
@@ -96,6 +101,60 @@ def start_charm():
         }
     else:
         custom_resources = {}
+
+    if auth_route:
+        request_headers = [{'exact': h} for h in auth_route['auth']['request_headers']]
+        response_headers = [{'exact': h} for h in auth_route['auth']['response_headers']]
+        custom_resources['customResources'] = {
+            'rbacconfigs.rbac.istio.io': [
+                {
+                    'apiVersion': 'rbac.istio.io/v1alpha1',
+                    'kind': 'RbacConfig',
+                    'metadata': {'name': 'default'},
+                    'spec': {'mode': 'OFF'},
+                }
+            ],
+            'envoyfilters.networking.istio.io': [
+                {
+                    'apiVersion': 'networking.istio.io/v1alpha3',
+                    'kind': 'EnvoyFilter',
+                    'metadata': {'name': 'authn-filter'},
+                    'spec': {
+                        'filters': [
+                            {
+                                'filterConfig': {
+                                    'httpService': {
+                                        'authorizationRequest': {
+                                            'allowedHeaders': {
+                                                'patterns': request_headers,
+                                            }
+                                        },
+                                        'authorizationResponse': {
+                                            'allowedUpstreamHeaders': {
+                                                'patterns': response_headers
+                                            },
+                                        },
+                                        'serverUri': {
+                                            'cluster': f'outbound|{auth_route["port"]}||{auth_route["service"]}.{namespace}.svc.cluster.local',
+                                            'failureModeAllow': False,
+                                            'timeout': '10s',
+                                            'uri': f'http://{auth_route["service"]}.{namespace}.svc.cluster.local:{auth_route["port"]}',
+                                        },
+                                    }
+                                },
+                                'filterName': 'envoy.ext_authz',
+                                'filterType': 'HTTP',
+                                'insertPosition': {'index': 'FIRST'},
+                                'listenerMatch': {'listenerType': 'GATEWAY'},
+                            }
+                        ],
+                        'workloadLabels': {
+                            'istio': 'ingressgateway',
+                        },
+                    },
+                }
+            ],
+        }
 
     image = layer.docker_resource.get_info("oci-image")
     config = dict(hookenv.config())
