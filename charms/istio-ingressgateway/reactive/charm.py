@@ -38,7 +38,14 @@ def start_charm():
 
     image_info = layer.docker_resource.get_info("oci-image")
     namespace = os.environ["JUJU_MODEL_NAME"]
-    pilot = endpoint_from_name("istio-pilot").services()[0]
+
+    try:
+        pilot = endpoint_from_name("istio-pilot").services()[0]
+    except IndexError:
+        hookenv.log("Got istio-pilot endpoint without any services")
+        layer.status.maintenance("Waiting for istio-pilot relation")
+        return False
+
     pilot_service = pilot['hosts'][0]['hostname']
     pilot_port = pilot['hosts'][0]['port']
     cfg = dict(hookenv.config())
