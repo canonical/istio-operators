@@ -54,50 +54,48 @@ def start_charm():
     # See https://bugs.launchpad.net/juju/+bug/1900475 for why this isn't inlined below
     if routes:
         custom_resources = {
-            'customResources': {
-                'gateways.networking.istio.io': [
-                    {
-                        'apiVersion': 'networking.istio.io/v1beta1',
-                        'kind': 'Gateway',
-                        'metadata': {'name': namespace},
-                        'spec': {
-                            'selector': {'istio': 'ingressgateway'},
-                            'servers': [
-                                {
-                                    'hosts': ['*'],
-                                    'port': {'name': 'http', 'number': 80, 'protocol': 'HTTP'},
-                                }
-                            ],
-                        },
-                    }
-                ],
-                'virtualservices.networking.istio.io': [
-                    {
-                        'apiVersion': 'networking.istio.io/v1alpha3',
-                        'kind': 'VirtualService',
-                        'metadata': {'name': route['service']},
-                        'spec': {
-                            'gateways': [namespace],
-                            'hosts': ['*'],
-                            'http': [
-                                {
-                                    'match': [{'uri': {'prefix': route['prefix']}}],
-                                    'rewrite': {'uri': route['rewrite']},
-                                    'route': [
-                                        {
-                                            'destination': {
-                                                'host': f'{route["service"]}.{namespace}.svc.cluster.local',
-                                                'port': {'number': route['port']},
-                                            }
+            'gateways.networking.istio.io': [
+                {
+                    'apiVersion': 'networking.istio.io/v1beta1',
+                    'kind': 'Gateway',
+                    'metadata': {'name': namespace},
+                    'spec': {
+                        'selector': {'istio': 'ingressgateway'},
+                        'servers': [
+                            {
+                                'hosts': ['*'],
+                                'port': {'name': 'http', 'number': 80, 'protocol': 'HTTP'},
+                            }
+                        ],
+                    },
+                }
+            ],
+            'virtualservices.networking.istio.io': [
+                {
+                    'apiVersion': 'networking.istio.io/v1alpha3',
+                    'kind': 'VirtualService',
+                    'metadata': {'name': route['service']},
+                    'spec': {
+                        'gateways': [namespace],
+                        'hosts': ['*'],
+                        'http': [
+                            {
+                                'match': [{'uri': {'prefix': route['prefix']}}],
+                                'rewrite': {'uri': route['rewrite']},
+                                'route': [
+                                    {
+                                        'destination': {
+                                            'host': f'{route["service"]}.{namespace}.svc.cluster.local',
+                                            'port': {'number': route['port']},
                                         }
-                                    ],
-                                }
-                            ],
-                        },
-                    }
-                    for route in service_mesh.routes()
-                ],
-            }
+                                    }
+                                ],
+                            }
+                        ],
+                    },
+                }
+                for route in service_mesh.routes()
+            ],
         }
     else:
         custom_resources = {}
@@ -105,56 +103,54 @@ def start_charm():
     if auth_route:
         request_headers = [{'exact': h} for h in auth_route['auth']['request_headers']]
         response_headers = [{'exact': h} for h in auth_route['auth']['response_headers']]
-        custom_resources['customResources'] = {
-            'rbacconfigs.rbac.istio.io': [
-                {
-                    'apiVersion': 'rbac.istio.io/v1alpha1',
-                    'kind': 'RbacConfig',
-                    'metadata': {'name': 'default'},
-                    'spec': {'mode': 'OFF'},
-                }
-            ],
-            'envoyfilters.networking.istio.io': [
-                {
-                    'apiVersion': 'networking.istio.io/v1alpha3',
-                    'kind': 'EnvoyFilter',
-                    'metadata': {'name': 'authn-filter'},
-                    'spec': {
-                        'filters': [
-                            {
-                                'filterConfig': {
-                                    'httpService': {
-                                        'authorizationRequest': {
-                                            'allowedHeaders': {
-                                                'patterns': request_headers,
-                                            }
+        custom_resources['rbacconfigs.rbac.istio.io'] = [
+            {
+                'apiVersion': 'rbac.istio.io/v1alpha1',
+                'kind': 'RbacConfig',
+                'metadata': {'name': 'default'},
+                'spec': {'mode': 'OFF'},
+            }
+        ]
+        custom_resources['envoyfilters.networking.istio.io'] = [
+            {
+                'apiVersion': 'networking.istio.io/v1alpha3',
+                'kind': 'EnvoyFilter',
+                'metadata': {'name': 'authn-filter'},
+                'spec': {
+                    'filters': [
+                        {
+                            'filterConfig': {
+                                'httpService': {
+                                    'authorizationRequest': {
+                                        'allowedHeaders': {
+                                            'patterns': request_headers,
+                                        }
+                                    },
+                                    'authorizationResponse': {
+                                        'allowedUpstreamHeaders': {
+                                            'patterns': response_headers,
                                         },
-                                        'authorizationResponse': {
-                                            'allowedUpstreamHeaders': {
-                                                'patterns': response_headers
-                                            },
-                                        },
-                                        'serverUri': {
-                                            'cluster': f'outbound|{auth_route["port"]}||{auth_route["service"]}.{namespace}.svc.cluster.local',
-                                            'failureModeAllow': False,
-                                            'timeout': '10s',
-                                            'uri': f'http://{auth_route["service"]}.{namespace}.svc.cluster.local:{auth_route["port"]}',
-                                        },
-                                    }
-                                },
-                                'filterName': 'envoy.ext_authz',
-                                'filterType': 'HTTP',
-                                'insertPosition': {'index': 'FIRST'},
-                                'listenerMatch': {'listenerType': 'GATEWAY'},
-                            }
-                        ],
-                        'workloadLabels': {
-                            'istio': 'ingressgateway',
-                        },
+                                    },
+                                    'serverUri': {
+                                        'cluster': f'outbound|{auth_route["port"]}||{auth_route["service"]}.{namespace}.svc.cluster.local',
+                                        'failureModeAllow': False,
+                                        'timeout': '10s',
+                                        'uri': f'http://{auth_route["service"]}.{namespace}.svc.cluster.local:{auth_route["port"]}',
+                                    },
+                                }
+                            },
+                            'filterName': 'envoy.ext_authz',
+                            'filterType': 'HTTP',
+                            'insertPosition': {'index': 'FIRST'},
+                            'listenerMatch': {'listenerType': 'GATEWAY'},
+                        }
+                    ],
+                    'workloadLabels': {
+                        'istio': 'ingressgateway',
                     },
-                }
-            ],
-        }
+                },
+            }
+        ]
 
     image = layer.docker_resource.get_info("oci-image")
     config = dict(hookenv.config())
@@ -283,7 +279,7 @@ def start_charm():
                     {"name": crd["metadata"]["name"], "spec": crd["spec"]}
                     for crd in yaml.safe_load_all(Path("files/crds.yaml").read_text())
                 ],
-                **custom_resources,
+                'customResources': custom_resources,
                 "mutatingWebhookConfigurations": [
                     {
                         "name": "sidecar-injector",
