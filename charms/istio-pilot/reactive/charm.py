@@ -42,6 +42,7 @@ def start_charm():
     layer.status.maintenance("configuring container")
 
     namespace = os.environ["JUJU_MODEL_NAME"]
+    config = dict(hookenv.config())
 
     service_mesh = endpoint_from_name('service-mesh')
     routes = service_mesh.routes()
@@ -58,7 +59,9 @@ def start_charm():
                 {
                     'apiVersion': 'networking.istio.io/v1beta1',
                     'kind': 'Gateway',
-                    'metadata': {'name': namespace},
+                    'metadata': {
+                        'name': config['default-gateway'],
+                    },
                     'spec': {
                         'selector': {'istio': 'ingressgateway'},
                         'servers': [
@@ -76,7 +79,7 @@ def start_charm():
                     'kind': 'VirtualService',
                     'metadata': {'name': route['service']},
                     'spec': {
-                        'gateways': [namespace],
+                        'gateways': [f'{namespace}/{config["default-gateway"]}'],
                         'hosts': ['*'],
                         'http': [
                             {
@@ -153,7 +156,6 @@ def start_charm():
         ]
 
     image = layer.docker_resource.get_info("oci-image")
-    config = dict(hookenv.config())
     tconfig = {k.replace('-', '_'): v for k, v in config.items()}
     tconfig['service_name'] = hookenv.service_name()
     tconfig['namespace'] = namespace
