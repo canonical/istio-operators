@@ -10,64 +10,68 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    # Check out code
     - name: Check out repo
       uses: actions/checkout@v2
+
+    - uses: balchua/microk8s-actions@v0.2.2
+      with:
+        channel: 'latest/stable'
+        addons: '["dns", "storage", "rbac", "metallb:10.64.140.43-10.64.140.49"]'
 
     - name: Install dependencies
       run: |
         set -eux
-        sudo snap install microk8s --classic --channel 1.18
         sudo snap install charm --classic
-        sudo snap install juju --classic --channel 2.8
+        sudo snap install juju --classic
         sudo snap install juju-helpers --classic
         sudo snap install juju-wait --classic
-
-    - name: Set up dependencies
-      run: |
-        set -eux
-        sudo usermod -a -G microk8s runner
-        sudo microk8s.enable dns storage metallb:10.64.140.43-10.64.140.49 rbac
 
     - name: Set up Istio
       run: |
         set -eux
-        sudo juju bootstrap microk8s uk8s
-        sudo juju add-model istio-system microk8s --config update-status-hook-interval=10s
-        sudo juju bundle deploy --build
-        sudo microk8s.kubectl delete mutatingwebhookconfigurations/istio-system-model-admission || true
+        sg microk8s -c 'juju bootstrap microk8s uk8s'
+        juju add-model istio-system microk8s --config update-status-hook-interval=10s
+        juju bundle deploy --build
         sleep 10
-        sudo microk8s.kubectl patch role -n istio-system istio-ingressgateway-operator -p '{"apiVersion":"rbac.authorization.k8s.io/v1","kind":"Role","metadata":{"name":"istio-ingressgateway-operator"},"rules":[{"apiGroups":["*"],"resources":["*"],"verbs":["*"]}]}'
-        sudo juju wait -wvt 300
+        kubectl patch role -n istio-system istio-ingressgateway-operator -p '{"apiVersion":"rbac.authorization.k8s.io/v1","kind":"Role","metadata":{"name":"istio-ingressgateway-operator"},"rules":[{"apiGroups":["*"],"resources":["*"],"verbs":["*"]}]}'
+        juju wait -wvt 300
 
     - name: Deploy bookinfo application
       run: |
         set -eux
-        sudo microk8s.kubectl label namespace default istio-injection=enabled
-        sudo microk8s.kubectl apply -f https://raw.githubusercontent.com/istio/istio/release-1.5/samples/bookinfo/platform/kube/bookinfo.yaml
-        sudo microk8s.kubectl apply -f https://raw.githubusercontent.com/istio/istio/release-1.5/samples/bookinfo/networking/bookinfo-gateway.yaml
-        sudo microk8s.kubectl wait --for=condition=available deployment --all --timeout=5m
+        kubectl label namespace default istio-injection=enabled
+        kubectl apply -f https://raw.githubusercontent.com/istio/istio/release-1.5/samples/bookinfo/platform/kube/bookinfo.yaml
+        kubectl apply -f https://raw.githubusercontent.com/istio/istio/release-1.5/samples/bookinfo/networking/bookinfo-gateway.yaml
+        kubectl wait --for=condition=available deployment --all --timeout=5m
         sleep 15
 
     - name: Ensure bookinfo came up
       run: curl -fv http://10.64.140.43/productpage
 
-    # Debug failures
     - name: Get pod statuses
-      run: sudo microk8s.kubectl get all -A
+      run: kubectl get all -A
       if: failure()
+
     - name: Describe deployments
-      run: sudo microk8s.kubectl describe deployments -A
+      run: kubectl describe deployments -A
       if: failure()
+
     - name: Describe replicasets
-      run: sudo microk8s.kubectl describe replicasets -A
+      run: kubectl describe replicasets -A
       if: failure()
+
     - name: Get istio-pilot logs
-      run: sudo microk8s.kubectl logs -n istio-system --tail 1000 -ljuju-app=istio-pilot
+      run: kubectl logs -n istio-system --tail 1000 -ljuju-app=istio-pilot
       if: failure()
+
+    - name: Get istio-pilot operator logs
+      run: kubectl logs -n istio-system --tail 1000 -ljuju-operator=istio-pilot
+      if: failure()
+
     - name: Get istio-ingressgateway logs
-      run: sudo microk8s.kubectl logs -n istio-system --tail 1000 -ljuju-app=istio-ingressgateway
+      run: kubectl logs -n istio-system --tail 1000 -ljuju-app=istio-ingressgateway
       if: failure()
-    - name: Get snap logs
-      run: sudo snap logs -n 300 microk8s
+
+    - name: Get istio-ingressgateway operator logs
+      run: kubectl logs -n istio-system --tail 1000 -ljuju-operator=istio-ingressgateway
       if: failure()
