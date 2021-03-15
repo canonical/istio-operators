@@ -1,11 +1,48 @@
-name: MicroK8s Test
+name: Continuous Integration
 
 on:
   - push
   - pull_request
 
 jobs:
-  build:
+  lint:
+    name: Lint Code
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out repo
+      uses: actions/checkout@v2
+    - name: Setup Python
+      uses: actions/setup-python@v2
+    - name: Install tox
+      run: |
+        sudo apt-get install tox
+
+    - name: Linting
+      run: |
+        tox
+
+  unit-test:
+    name: Run Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out repo
+      uses: actions/checkout@v2
+    - name: Setup Python
+      uses: actions/setup-python@v2
+    - name: Install tox
+      run: |
+        sudo apt-get install tox
+
+    - name: Unit Tests and Linting
+      run: |
+        cd charms/istio-pilot
+        tox -e unit
+        cd ../istio-ingressgateway
+        tox -e unit
+
+  functional-test:
     name: Deploy to microk8s
     runs-on: ubuntu-latest
 
@@ -21,7 +58,7 @@ jobs:
     - name: Install dependencies
       run: |
         set -eux
-        sudo snap install charm --classic
+        sudo pip3 install charmcraft
         sudo snap install juju --classic
         sudo snap install juju-helpers --classic
         sudo snap install juju-wait --classic

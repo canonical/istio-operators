@@ -1,0 +1,4 @@
+ops==1.1.0
+git+https://github.com/charmed-kubernetes/interface-k8s-service
+oci-image==1.0.0
+kubernetes
