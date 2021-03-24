@@ -35,8 +35,8 @@ deployment:
   service: loadbalancer
 provides:
   istio-ingressgateway:
-    interface: http
+    interface: k8s-service
 requires:
   istio-pilot:
-    interface: http
+    interface: k8s-service
 min-juju-version: 2.8-beta1

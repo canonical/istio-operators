@@ -1,0 +1,3 @@
+*.charm
+*__pycache__
+*.tox
