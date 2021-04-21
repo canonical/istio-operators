@@ -52,22 +52,20 @@ def test_main_service_mesh(harness):
             "password": "",
         },
     )
-    rel_id = harness.add_relation("service-mesh", "app")
-    harness.begin_with_initial_hooks()
+    rel_id = harness.add_relation("ingress", "app")
     harness.add_relation_unit(rel_id, "app/0")
     data = {
         "prefix": "/app",
         "rewrite": "/app",
         "service": "my-service",
         "port": 4242,
-        "ingress": False,
-        "auth": {},
     }
     harness.update_relation_data(
         rel_id,
         "app",
-        {"data": yaml.dump(data)},
+        {"_supported_versions": "- v1", "data": yaml.dump(data)},
     )
+    harness.begin_with_initial_hooks()
     assert isinstance(harness.charm.model.unit.status, ActiveStatus)
     pod_spec = harness.get_pod_spec()
     for virtual_service in pod_spec[1]["kubernetesResources"]["customResources"][

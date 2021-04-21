@@ -2,46 +2,58 @@
 
 import logging
 from pathlib import Path
-import yaml
 
+import yaml
+from jinja2 import Environment, FileSystemLoader
 from ops.charm import CharmBase
 from ops.main import main
-from ops.model import ActiveStatus, MaintenanceStatus, WaitingStatus
-from jinja2 import Environment, FileSystemLoader
+from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
+from serialized_data_interface import NoCompatibleVersions, NoVersionsListed, get_interfaces
 
 from oci_image import OCIImageResource, OCIImageResourceError
-from k8s_service import ProvideK8sService
-from interface_service_mesh import ServiceMeshProvides
 
 
 class Operator(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
+
         if not self.unit.is_leader():
             # We can't do anything useful when not the leader, so do nothing.
             self.model.unit.status = WaitingStatus("Waiting for leadership")
             return
+
+        try:
+            self.interfaces = get_interfaces(self)
+        except NoVersionsListed as err:
+            self.model.unit.status = WaitingStatus(str(err))
+            return
+        except NoCompatibleVersions as err:
+            self.model.unit.status = BlockedStatus(str(err))
+            return
+
         self.log = logging.getLogger(__name__)
-
-        ProvideK8sService(
-            self,
-            "istio-pilot",
-            service_name=f"{self.app.name}.{self.model.name}.svc",
-            service_port=self.model.config["xds-ca-tls-port"],
-        )
-        self.service_mesh = ServiceMeshProvides(self, "service-mesh")
-
         self.image = OCIImageResource(self, "oci-image")
         for event in [
             self.on.install,
             self.on.leader_elected,
             self.on.upgrade_charm,
             self.on.config_changed,
-            self.on.service_mesh_relation_changed,
+            self.on['ingress'].relation_changed,
         ]:
-            self.framework.observe(event, self.main)
+            self.framework.observe(event, self.set_pod_spec)
 
-    def main(self, event):
+        self.framework.observe(self.on["istio-pilot"].relation_changed, self.send_info)
+
+    def send_info(self, event):
+        if self.interfaces["istio-pilot"]:
+            self.interfaces["istio-pilot"].send_data(
+                {
+                    "service-name": f'{self.model.app.name}.{self.model.name}.svc',
+                    "service-port": str(self.model.config['xds-ca-tls-port']),
+                }
+            )
+
+    def set_pod_spec(self, event):
         try:
             image_details = self.image.fetch()
         except OCIImageResourceError as e:
@@ -55,68 +67,72 @@ class Operator(CharmBase):
         namespace = self.model.name
         service_name = self.model.app.name
 
-        routes = self.service_mesh.routes()
-
-        try:
-            auth_route = next(r for r in routes if r['auth'])
-        except StopIteration:
-            auth_route = None
-
-        # See https://bugs.launchpad.net/juju/+bug/1900475 for why this isn't inlined below
+        routes = self.interfaces['ingress']
         if routes:
-            custom_resources = {
-                'gateways.networking.istio.io': [
-                    {
-                        'apiVersion': 'networking.istio.io/v1beta1',
-                        'kind': 'Gateway',
-                        'metadata': {
-                            'name': config['default-gateway'],
-                        },
-                        'spec': {
-                            'selector': {'istio': 'ingressgateway'},
-                            'servers': [
-                                {
-                                    'hosts': ['*'],
-                                    'port': {'name': 'http', 'number': 80, 'protocol': 'HTTP'},
-                                }
-                            ],
-                        },
-                    }
-                ],
-                'virtualservices.networking.istio.io': [
-                    {
-                        'apiVersion': 'networking.istio.io/v1alpha3',
-                        'kind': 'VirtualService',
-                        'metadata': {'name': route['service']},
-                        'spec': {
-                            'gateways': [f'{namespace}/{config["default-gateway"]}'],
-                            'hosts': ['*'],
-                            'http': [
-                                {
-                                    'match': [{'uri': {'prefix': route['prefix']}}],
-                                    'rewrite': {'uri': route['rewrite']},
-                                    'route': [
-                                        {
-                                            'destination': {
-                                                'host': f'{route["service"]}.{namespace}.svc.cluster.local',
-                                                'port': {'number': route['port']},
-                                            }
-                                        }
-                                    ],
-                                }
-                            ],
-                        },
-                    }
-                    for route in self.service_mesh.routes()
-                ],
-            }
+            routes = list(routes.get_data().values())
         else:
-            custom_resources = {}
+            routes = []
 
-        if auth_route:
-            request_headers = [{'exact': h} for h in auth_route['auth']['request_headers']]
-            response_headers = [{'exact': h} for h in auth_route['auth']['response_headers']]
-            custom_resources['rbacconfigs.rbac.istio.io'] = [
+        if not all(r.get("service") for r in routes):
+            self.model.unit.status = WaitingStatus("Waiting for ingress connection information.")
+            return
+
+        virtual_services = [
+            {
+                'apiVersion': 'networking.istio.io/v1alpha3',
+                'kind': 'VirtualService',
+                'metadata': {'name': route['service']},
+                'spec': {
+                    'gateways': [f'{namespace}/{config["default-gateway"]}'],
+                    'hosts': ['*'],
+                    'http': [
+                        {
+                            'match': [{'uri': {'prefix': route['prefix']}}],
+                            'rewrite': {'uri': route['rewrite']},
+                            'route': [
+                                {
+                                    'destination': {
+                                        'host': f'{route["service"]}.{namespace}.svc.cluster.local',
+                                        'port': {'number': route['port']},
+                                    }
+                                }
+                            ],
+                        }
+                    ],
+                },
+            }
+            for route in routes
+        ]
+
+        gateway = {
+            'apiVersion': 'networking.istio.io/v1beta1',
+            'kind': 'Gateway',
+            'metadata': {
+                'name': config['default-gateway'],
+            },
+            'spec': {
+                'selector': {'istio': 'ingressgateway'},
+                'servers': [
+                    {
+                        'hosts': ['*'],
+                        'port': {'name': 'http', 'number': 80, 'protocol': 'HTTP'},
+                    }
+                ],
+            },
+        }
+
+        auth_routes = self.interfaces['ingress-auth']
+        if auth_routes:
+            auth_routes = list(auth_routes.get_data().values())
+        else:
+            auth_routes = []
+
+        if not all(ar.get("service") for ar in auth_routes):
+            self.model.unit.status = WaitingStatus("Waiting for auth route connection information.")
+            return
+
+        if auth_routes:
+            rbacs = [
                 {
                     'apiVersion': 'rbac.istio.io/v1alpha1',
                     'kind': 'RbacConfig',
@@ -124,46 +140,54 @@ class Operator(CharmBase):
                     'spec': {'mode': 'OFF'},
                 }
             ]
-            custom_resources['envoyfilters.networking.istio.io'] = [
-                {
-                    'apiVersion': 'networking.istio.io/v1alpha3',
-                    'kind': 'EnvoyFilter',
-                    'metadata': {'name': 'authn-filter'},
-                    'spec': {
-                        'filters': [
-                            {
-                                'filterConfig': {
-                                    'httpService': {
-                                        'authorizationRequest': {
-                                            'allowedHeaders': {
-                                                'patterns': request_headers,
-                                            }
+        else:
+            rbacs = []
+
+        auth_filters = [
+            {
+                'apiVersion': 'networking.istio.io/v1alpha3',
+                'kind': 'EnvoyFilter',
+                'metadata': {'name': 'authn-filter'},
+                'spec': {
+                    'filters': [
+                        {
+                            'filterConfig': {
+                                'httpService': {
+                                    'authorizationRequest': {
+                                        'allowedHeaders': {
+                                            'patterns': [
+                                                {'exact': h} for h in route['request_headers']
+                                            ],
+                                        }
+                                    },
+                                    'authorizationResponse': {
+                                        'allowedUpstreamHeaders': {
+                                            'patterns': [
+                                                {'exact': h} for h in route['response_headers']
+                                            ],
                                         },
-                                        'authorizationResponse': {
-                                            'allowedUpstreamHeaders': {
-                                                'patterns': response_headers,
-                                            },
-                                        },
-                                        'serverUri': {
-                                            'cluster': f'outbound|{auth_route["port"]}||{auth_route["service"]}.{namespace}.svc.cluster.local',
-                                            'failureModeAllow': False,
-                                            'timeout': '10s',
-                                            'uri': f'http://{auth_route["service"]}.{namespace}.svc.cluster.local:{auth_route["port"]}',
-                                        },
-                                    }
-                                },
-                                'filterName': 'envoy.ext_authz',
-                                'filterType': 'HTTP',
-                                'insertPosition': {'index': 'FIRST'},
-                                'listenerMatch': {'listenerType': 'GATEWAY'},
-                            }
-                        ],
-                        'workloadLabels': {
-                            'istio': 'ingressgateway',
-                        },
+                                    },
+                                    'serverUri': {
+                                        'cluster': f'outbound|{route["port"]}||{route["service"]}.{namespace}.svc.cluster.local',
+                                        'failureModeAllow': False,
+                                        'timeout': '10s',
+                                        'uri': f'http://{route["service"]}.{namespace}.svc.cluster.local:{route["port"]}',
+                                    },
+                                }
+                            },
+                            'filterName': 'envoy.ext_authz',
+                            'filterType': 'HTTP',
+                            'insertPosition': {'index': 'FIRST'},
+                            'listenerMatch': {'listenerType': 'GATEWAY'},
+                        }
+                    ],
+                    'workloadLabels': {
+                        'istio': 'ingressgateway',
                     },
-                }
-            ]
+                },
+            }
+            for route in auth_routes
+        ]
 
         tconfig = {k.replace('-', '_'): v for k, v in config.items()}
         tconfig['service_name'] = service_name
@@ -195,12 +219,10 @@ class Operator(CharmBase):
                             "discovery",
                             f"--monitoringAddr={config.get('monitoring-address')}",
                             "--log_output_level=all:debug",
-                            "--domain",
-                            "cluster.local",
+                            "--domain=cluster.local",
                             f"--secureGrpcAddr={config.get('secure-grpc-address')}",
                             "--trust-domain=cluster.local",
-                            "--keepaliveMaxServerConnectionAge",
-                            "30m",
+                            "--keepaliveMaxServerConnectionAge=30m",
                             "--disable-install-crds=true",
                         ],
                         "imageDetails": image_details,
@@ -288,7 +310,12 @@ class Operator(CharmBase):
                         {"name": crd["metadata"]["name"], "spec": crd["spec"]}
                         for crd in yaml.safe_load_all(Path("files/crds.yaml").read_text())
                     ],
-                    'customResources': custom_resources,
+                    'customResources': {
+                        'gateways.networking.istio.io': [gateway],
+                        'virtualservices.networking.istio.io': virtual_services,
+                        'rbacconfigs.rbac.istio.io': rbacs,
+                        'envoyfilters.networking.istio.io': auth_filters,
+                    },
                     "mutatingWebhookConfigurations": [
                         {
                             "name": "sidecar-injector",
@@ -319,10 +346,7 @@ class Operator(CharmBase):
                                                 'key': 'juju-app',
                                                 'operator': 'In',
                                                 'values': ['nonexistent']
-                                                + [
-                                                    route['service']
-                                                    for route in self.service_mesh.routes()
-                                                ],
+                                                + [route['service'] for route in routes],
                                             },
                                         ],
                                     },

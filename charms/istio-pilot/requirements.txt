@@ -2,4 +2,4 @@ ops==1.1.0
 git+https://github.com/charmed-kubernetes/interface-k8s-service
 oci-image==1.0.0
 jinja2==2.11.3
-git+https://github.com/canonical/interface-service-mesh
+serialized-data-interface==0.2.0

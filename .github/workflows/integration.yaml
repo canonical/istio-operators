@@ -85,6 +85,9 @@ jobs:
     - name: Ensure bookinfo came up
       run: curl -fv http://10.64.140.43/productpage
 
+    - run: juju status
+      if: failure()
+
     - name: Get pod statuses
       run: kubectl get all -A
       if: failure()

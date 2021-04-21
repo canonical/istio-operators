@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 
 import logging
-from pathlib import Path
 import os
-from kubernetes import client, config
+from pathlib import Path
 
+from kubernetes import client, config
 from ops.charm import CharmBase
 from ops.main import main
-from ops.model import ActiveStatus, MaintenanceStatus, WaitingStatus, BlockedStatus
+from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
+from serialized_data_interface import NoCompatibleVersions, NoVersionsListed, get_interfaces
 
 from oci_image import OCIImageResource, OCIImageResourceError
-from k8s_service import RequireK8sService
 
 
 class Operator(CharmBase):
@@ -20,8 +20,17 @@ class Operator(CharmBase):
             # We can't do anything useful when not the leader, so do nothing.
             self.model.unit.status = WaitingStatus("Waiting for leadership")
             return
+
+        try:
+            self.interfaces = get_interfaces(self)
+        except NoVersionsListed as err:
+            self.model.unit.status = WaitingStatus(str(err))
+            return
+        except NoCompatibleVersions as err:
+            self.model.unit.status = BlockedStatus(str(err))
+            return
+
         self.log = logging.getLogger(__name__)
-        self.istio_pilot = RequireK8sService(self, "istio-pilot")
         self.image = OCIImageResource(self, "oci-image")
         for event in [
             self.on.install,
@@ -29,7 +38,7 @@ class Operator(CharmBase):
             self.on.upgrade_charm,
             self.on.update_status,
             self.on.config_changed,
-            self.istio_pilot.on.k8s_services_changed,
+            self.on['istio-pilot'].relation_changed,
         ]:
             self.framework.observe(event, self.main)
 
@@ -41,11 +50,13 @@ class Operator(CharmBase):
             self.log.info(e)
             return
 
-        self.model.unit.status = MaintenanceStatus("Setting pod spec")
-
-        if not self.istio_pilot.is_created:
-            self.model.unit.status = BlockedStatus("Istio Pilot relation not found")
+        if not ((pilot := self.interfaces["istio-pilot"]) and pilot.get_data()):
+            self.model.unit.status = WaitingStatus("Waiting for istio-pilot relation data")
             return
+        pilot = list(pilot.get_data().values())[0]
+        pilot_url = "{service-name}:{service-port}".format(**pilot)
+
+        self.model.unit.status = MaintenanceStatus("Setting pod spec")
 
         cfg = self.model.config
         namespace = self.model.name
@@ -53,11 +64,9 @@ class Operator(CharmBase):
 
         config_map = self.check_ca_root_cert(namespace)
 
-        if not self.istio_pilot.is_available or not config_map:
+        if not config_map:
             self.model.unit.status = WaitingStatus("Waiting for Istio Pilot information")
             return
-
-        pilot_service, pilot_port = self.istio_pilot.services[0]
 
         self.model.pod.set_spec(
             {
@@ -99,7 +108,7 @@ class Operator(CharmBase):
                             "--controlPlaneAuthPolicy",
                             "NONE",
                             "--discoveryAddress",
-                            f"{pilot_service}:{pilot_port}",
+                            pilot_url,
                             "--trust-domain=cluster.local",
                         ],
                         "imageDetails": image_details,
@@ -107,7 +116,7 @@ class Operator(CharmBase):
                             "JWT_POLICY": "first-party-jwt",
                             "PILOT_CERT_PROVIDER": "istiod",
                             "ISTIO_META_USER_SDS": "true",
-                            "CA_ADDR": f"{pilot_service}:{pilot_port}",
+                            "CA_ADDR": pilot_url,
                             "NODE_NAME": {"field": {"path": "spec.nodeName", "api-version": "v1"}},
                             "POD_NAME": {"field": {"path": "metadata.name", "api-version": "v1"}},
                             "POD_NAMESPACE": service_name,
@@ -213,15 +222,11 @@ class Operator(CharmBase):
             )
             if not config_map.data.get("root-cert.pem"):
                 self.log.info("Got empty certificate, waiting for real one")
-                return {}
+                return None
         except client.rest.ApiException as err:
             self.log.info(err)
-            self.log.info(err.status)
-            self.log.info(err.reason)
-            self.log.info(err.body)
-            self.log.info(err.headers)
             self.model.unit.status = BlockedStatus("istio-ca-root-cert certificate not found.")
-            return {}
+            return None
         return config_map
 
 
