@@ -88,7 +88,7 @@ class Operator(CharmBase):
                     'http': [
                         {
                             'match': [{'uri': {'prefix': route['prefix']}}],
-                            'rewrite': {'uri': route['rewrite']},
+                            'rewrite': {'uri': route.get('rewrite', route['prefix'])},
                             'route': [
                                 {
                                     'destination': {
