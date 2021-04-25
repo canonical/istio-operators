@@ -156,14 +156,16 @@ class Operator(CharmBase):
                                     'authorizationRequest': {
                                         'allowedHeaders': {
                                             'patterns': [
-                                                {'exact': h} for h in route['request_headers']
+                                                {'exact': h}
+                                                for h in route.get('allowed-request-headers', [])
                                             ],
                                         }
                                     },
                                     'authorizationResponse': {
                                         'allowedUpstreamHeaders': {
                                             'patterns': [
-                                                {'exact': h} for h in route['response_headers']
+                                                {'exact': h}
+                                                for h in route.get('allowed-response-headers', [])
                                             ],
                                         },
                                     },
