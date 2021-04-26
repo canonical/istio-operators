@@ -29,6 +29,8 @@ class Operator(CharmBase):
         except NoCompatibleVersions as err:
             self.model.unit.status = BlockedStatus(str(err))
             return
+        else:
+            self.model.unit.status = ActiveStatus()
 
         self.log = logging.getLogger(__name__)
         self.image = OCIImageResource(self, "oci-image")
