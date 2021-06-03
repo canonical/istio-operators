@@ -5,45 +5,20 @@ on:
   - pull_request
 
 jobs:
-  lint:
-    name: Lint Code
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Check out repo
-      uses: actions/checkout@v2
-    - name: Setup Python
-      uses: actions/setup-python@v2
-    - name: Install tox
-      run: |
-        sudo apt-get install tox
-
-    - name: Linting
-      run: |
-        tox
-
   unit-test:
-    name: Run Unit Tests
+    name: Unit Test
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        charm: [pilot, ingressgateway]
 
     steps:
-    - name: Check out repo
-      uses: actions/checkout@v2
-    - name: Setup Python
-      uses: actions/setup-python@v2
-    - name: Install tox
-      run: |
-        sudo apt-get install tox
+    - uses: actions/checkout@v2
+    - run: sudo apt install tox
+    - run: tox -e ${{ matrix.charm }}
 
-    - name: Unit Tests and Linting
-      run: |
-        cd charms/istio-pilot
-        tox -e unit
-        cd ../istio-ingressgateway
-        tox -e unit
-
-  functional-test:
-    name: Deploy to microk8s
+  integration-test:
+    name: Integration Test
     runs-on: ubuntu-latest
 
     steps:
