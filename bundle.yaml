@@ -5,8 +5,8 @@ applications:
     source: ./charms/istio-ingressgateway
     scale: 1
   istio-pilot:
-    charm: cs:~kubeflow-charmers/istio-pilot
-    source: ./charms/istio-pilot
+    charm: ch:istio-pilot
     scale: 1
+    trust: true
 relations:
   - [istio-ingressgateway:istio-pilot, istio-pilot:istio-pilot]

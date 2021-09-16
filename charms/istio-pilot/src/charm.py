@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 
 import logging
+import subprocess
 from pathlib import Path
 
 import yaml
 from jinja2 import Environment, FileSystemLoader
 from ops.charm import CharmBase
 from ops.main import main
-from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
+from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from serialized_data_interface import NoCompatibleVersions, NoVersionsListed, get_interfaces
-
-from oci_image import OCIImageResource, OCIImageResourceError
 
 
 class Operator(CharmBase):
@@ -34,40 +33,66 @@ class Operator(CharmBase):
             self.model.unit.status = ActiveStatus()
 
         self.log = logging.getLogger(__name__)
-        self.image = OCIImageResource(self, "oci-image")
-        for event in [
-            self.on.install,
-            self.on.leader_elected,
-            self.on.upgrade_charm,
-            self.on.config_changed,
-            self.on['ingress'].relation_changed,
-        ]:
-            self.framework.observe(event, self.set_pod_spec)
+
+        self.env = Environment(loader=FileSystemLoader('src'))
+
+        self.framework.observe(self.on.noop_pebble_ready, self.install)
+        self.framework.observe(self.on.remove, self.remove)
 
         self.framework.observe(self.on["istio-pilot"].relation_changed, self.send_info)
+
+        self.framework.observe(self.on['ingress'].relation_changed, self.handle_ingress)
+        self.framework.observe(self.on['ingress-auth'].relation_changed, self.handle_ingress_auth)
+
+    def install(self, event):
+        """Install charm."""
+
+        subprocess.check_call(
+            [
+                "./istioctl",
+                "install",
+                "-s",
+                "profile=minimal",
+                "-y",
+                "-s",
+                f"values.global.istioNamespace={self.model.name}",
+            ]
+        )
+
+        self.unit.status = ActiveStatus()
+
+    def remove(self, event):
+        """Remove charm."""
+
+        # Can't remove stuff yet: https://bugs.launchpad.net/juju/+bug/1941655
+
+        # manifests = subprocess.check_output(
+        #     [
+        #         "./istioctl",
+        #         "manifest",
+        #         "generate",
+        #         "-s",
+        #         "profile=minimal",
+        #     ]
+        # )
+
+        # subprocess.run(
+        #     ["./kubectl", "delete", "-f-", "--ignore-not-found"],
+        #     input=manifests,
+        #     check=True,
+        # )
 
     def send_info(self, event):
         if self.interfaces["istio-pilot"]:
             self.interfaces["istio-pilot"].send_data(
                 {
-                    "service-name": f'{self.model.app.name}.{self.model.name}.svc',
-                    "service-port": str(self.model.config['xds-ca-tls-port']),
+                    "service-name": f'istiod.{self.model.name}.svc',
+                    "service-port": '15012',
                 }
             )
 
-    def set_pod_spec(self, event):
-        try:
-            image_details = self.image.fetch()
-        except OCIImageResourceError as e:
-            self.model.unit.status = e.status
-            self.log.info(e)
-            return
-
-        self.model.unit.status = MaintenanceStatus("Setting pod spec")
-
-        config = self.model.config
+    def handle_ingress(self, event):
         namespace = self.model.name
-        service_name = self.model.app.name
 
         routes = self.interfaces['ingress']
         if routes:
@@ -75,54 +100,31 @@ class Operator(CharmBase):
         else:
             routes = []
 
-        if not all(r.get("service") for r in routes):
-            self.model.unit.status = WaitingStatus("Waiting for ingress connection information.")
-            return
+        t = self.env.get_template('virtual_service.yaml.j2')
+        gateway = self.model.config['default-gateways'].split(',')[0]
+        virtual_services = ''.join(
+            t.render(
+                namespace=r.get('namespace', namespace),
+                gateway=gateway,
+                **r,
+            )
+            for r in routes
+        )
 
-        virtual_services = [
-            {
-                'apiVersion': 'networking.istio.io/v1alpha3',
-                'kind': 'VirtualService',
-                'metadata': {'name': route['service']},
-                'spec': {
-                    'gateways': [f'{namespace}/{config["default-gateway"]}'],
-                    'hosts': ['*'],
-                    'http': [
-                        {
-                            'match': [{'uri': {'prefix': route['prefix']}}],
-                            'rewrite': {'uri': route.get('rewrite', route['prefix'])},
-                            'route': [
-                                {
-                                    'destination': {
-                                        'host': f'{route["service"]}.{namespace}.svc.cluster.local',
-                                        'port': {'number': route['port']},
-                                    }
-                                }
-                            ],
-                        }
-                    ],
-                },
-            }
-            for route in routes
-        ]
+        t = self.env.get_template('gateway.yaml.j2')
+        gateways = self.model.config['default-gateways'].split(',')
+        gateways = ''.join(t.render(name=g) for g in gateways)
 
-        gateway = {
-            'apiVersion': 'networking.istio.io/v1beta1',
-            'kind': 'Gateway',
-            'metadata': {
-                'name': config['default-gateway'],
-            },
-            'spec': {
-                'selector': {'istio': 'ingressgateway'},
-                'servers': [
-                    {
-                        'hosts': ['*'],
-                        'port': {'name': 'http', 'number': 80, 'protocol': 'HTTP'},
-                    }
-                ],
-            },
-        }
+        manifests = [virtual_services, gateways]
+        manifests = '\n'.join([m for m in manifests if m])
 
+        subprocess.run(
+            ["./kubectl", "apply", "-f-"],
+            input=manifests.encode('utf-8'),
+            check=True,
+        )
+
+    def handle_ingress_auth(self, event):
         auth_routes = self.interfaces['ingress-auth']
         if auth_routes:
             auth_routes = list(auth_routes.get_data().values())
@@ -133,236 +135,36 @@ class Operator(CharmBase):
             self.model.unit.status = WaitingStatus("Waiting for auth route connection information.")
             return
 
-        if auth_routes:
-            rbacs = [
-                {
-                    'apiVersion': 'rbac.istio.io/v1alpha1',
-                    'kind': 'RbacConfig',
-                    'metadata': {'name': 'default'},
-                    'spec': {'mode': 'OFF'},
-                }
-            ]
-        else:
-            rbacs = []
+        rbac_configs = Path('src/rbac_config.yaml').read_text() if auth_routes else None
 
-        auth_filters = [
-            {
-                'apiVersion': 'networking.istio.io/v1alpha3',
-                'kind': 'EnvoyFilter',
-                'metadata': {'name': 'authn-filter'},
-                'spec': {
-                    'filters': [
-                        {
-                            'filterConfig': {
-                                'httpService': {
-                                    'authorizationRequest': {
-                                        'allowedHeaders': {
-                                            'patterns': [
-                                                {'exact': h}
-                                                for h in route.get('allowed-request-headers', [])
-                                            ],
-                                        }
-                                    },
-                                    'authorizationResponse': {
-                                        'allowedUpstreamHeaders': {
-                                            'patterns': [
-                                                {'exact': h}
-                                                for h in route.get('allowed-response-headers', [])
-                                            ],
-                                        },
-                                    },
-                                    'serverUri': {
-                                        'cluster': f'outbound|{route["port"]}||{route["service"]}.{namespace}.svc.cluster.local',
-                                        'failureModeAllow': False,
-                                        'timeout': '10s',
-                                        'uri': f'http://{route["service"]}.{namespace}.svc.cluster.local:{route["port"]}',
-                                    },
-                                }
-                            },
-                            'filterName': 'envoy.ext_authz',
-                            'filterType': 'HTTP',
-                            'insertPosition': {'index': 'FIRST'},
-                            'listenerMatch': {'listenerType': 'GATEWAY'},
-                        }
-                    ],
-                    'workloadLabels': {
-                        'istio': 'ingressgateway',
-                    },
+        t = self.env.get_template('auth_filter.yaml.j2')
+        auth_filters = ''.join(
+            t.render(
+                namespace=self.model.name,
+                **{
+                    'request_headers': yaml.safe_dump(
+                        [{'exact': h} for h in r.get('allowed-request-headers', [])],
+                        default_flow_style=True,
+                    ),
+                    'response_headers': yaml.safe_dump(
+                        [{'exact': h} for h in r.get('allowed-response-headers', [])],
+                        default_flow_style=True,
+                    ),
+                    'port': r['port'],
+                    'service': r['service'],
                 },
-            }
-            for route in auth_routes
-        ]
-
-        tconfig = {k.replace('-', '_'): v for k, v in config.items()}
-        tconfig['service_name'] = service_name
-        tconfig['namespace'] = namespace
-        env = Environment(
-            loader=FileSystemLoader('templates'),
-            variable_start_string='[[',
-            variable_end_string=']]',
+            )
+            for r in auth_routes
         )
 
-        self.model.pod.set_spec(
-            {
-                "version": 3,
-                "serviceAccount": {
-                    "roles": [
-                        {
-                            "global": True,
-                            "rules": [
-                                {"apiGroups": ["*"], "resources": ["*"], "verbs": ["*"]},
-                                {"nonResourceURLs": ["*"], "verbs": ["*"]},
-                            ],
-                        }
-                    ]
-                },
-                "containers": [
-                    {
-                        "name": "discovery",
-                        "args": [
-                            "discovery",
-                            f"--monitoringAddr={config.get('monitoring-address')}",
-                            "--log_output_level=all:debug",
-                            "--domain=cluster.local",
-                            f"--secureGrpcAddr={config.get('secure-grpc-address')}",
-                            "--trust-domain=cluster.local",
-                            "--keepaliveMaxServerConnectionAge=30m",
-                            "--disable-install-crds=true",
-                        ],
-                        "imageDetails": image_details,
-                        "envConfig": {
-                            "JWT_POLICY": "first-party-jwt",
-                            "PILOT_CERT_PROVIDER": "istiod",
-                            "POD_NAME": {"field": {"path": "metadata.name", "api-version": "v1"}},
-                            "POD_NAMESPACE": namespace,
-                            "SERVICE_ACCOUNT": {
-                                "field": {"path": "spec.serviceAccountName", "api-version": "v1"}
-                            },
-                            "PILOT_TRACE_SAMPLING": "1",
-                            "CONFIG_NAMESPACE": "istio-config",
-                            "PILOT_ENABLE_PROTOCOL_SNIFFING_FOR_OUTBOUND": "true",
-                            "PILOT_ENABLE_PROTOCOL_SNIFFING_FOR_INBOUND": "false",
-                            "INJECTION_WEBHOOK_CONFIG_NAME": f"{namespace}-sidecar-injector",
-                            "ISTIOD_ADDR": f"{service_name}.{namespace}.svc:{config.get('xds-ca-tls-port')}",
-                            "PILOT_EXTERNAL_GALLEY": "false",
-                        },
-                        "ports": [
-                            {"name": "debug", "containerPort": config.get('debug-port')},
-                            {"name": "grpc-xds", "containerPort": config.get('xds-ca-port')},
-                            {"name": "xds", "containerPort": config.get("xds-ca-tls-port")},
-                            {"name": "webhook", "containerPort": config.get('webhook-port')},
-                        ],
-                        "kubernetes": {
-                            "readinessProbe": {
-                                "failureThreshold": 3,
-                                "httpGet": {
-                                    "path": "/ready",
-                                    "port": config.get('debug-port'),
-                                    "scheme": "HTTP",
-                                },
-                                "initialDelaySeconds": 5,
-                                "periodSeconds": 5,
-                                "successThreshold": 1,
-                                "timeoutSeconds": 5,
-                            },
-                        },
-                        "volumeConfig": [
-                            {
-                                "name": "config-volume",
-                                "mountPath": "/etc/istio/config",
-                                "files": [
-                                    {
-                                        "path": "mesh",
-                                        "content": env.get_template('mesh').render(tconfig),
-                                    },
-                                    {
-                                        "path": "meshNetworks",
-                                        "content": env.get_template('meshNetworks').render(tconfig),
-                                    },
-                                    {
-                                        "path": "values.yaml",
-                                        "content": env.get_template('values.yaml').render(tconfig),
-                                    },
-                                ],
-                            },
-                            {
-                                "name": "local-certs",
-                                "mountPath": "/var/run/secrets/istio-dns",
-                                "emptyDir": {"medium": "Memory"},
-                            },
-                            {
-                                "name": "inject",
-                                "mountPath": "/var/lib/istio/inject",
-                                "files": [
-                                    {
-                                        "path": "config",
-                                        "content": env.get_template('config').render(tconfig),
-                                    },
-                                    {
-                                        "path": "values",
-                                        "content": env.get_template('values').render(tconfig),
-                                    },
-                                ],
-                            },
-                        ],
-                    },
-                ],
-            },
-            k8s_resources={
-                "kubernetesResources": {
-                    "customResourceDefinitions": [
-                        {"name": crd["metadata"]["name"], "spec": crd["spec"]}
-                        for crd in yaml.safe_load_all(Path("files/crds.yaml").read_text())
-                    ],
-                    'customResources': {
-                        'gateways.networking.istio.io': [gateway],
-                        'virtualservices.networking.istio.io': virtual_services,
-                        'rbacconfigs.rbac.istio.io': rbacs,
-                        'envoyfilters.networking.istio.io': auth_filters,
-                    },
-                    "mutatingWebhookConfigurations": [
-                        {
-                            "name": "sidecar-injector",
-                            "webhooks": [
-                                {
-                                    "name": "sidecar-injector.istio.io",
-                                    "clientConfig": {
-                                        "service": {
-                                            "name": service_name,
-                                            "namespace": namespace,
-                                            "path": "/inject",
-                                            "port": config.get('webhook-port'),
-                                        },
-                                    },
-                                    "rules": [
-                                        {
-                                            "operations": ["CREATE"],
-                                            "apiGroups": [""],
-                                            "apiVersions": ["v1"],
-                                            "resources": ["pods"],
-                                        }
-                                    ],
-                                    "failurePolicy": "Fail",
-                                    "namespaceSelector": {"matchLabels": {"juju-model": namespace}},
-                                    "objectSelector": {
-                                        "matchExpressions": [
-                                            {
-                                                'key': 'juju-app',
-                                                'operator': 'In',
-                                                'values': ['nonexistent']
-                                                + [route['service'] for route in routes],
-                                            },
-                                        ],
-                                    },
-                                }
-                            ],
-                        }
-                    ],
-                }
-            },
-        )
+        manifests = [rbac_configs, auth_filters]
+        manifests = '\n'.join([m for m in manifests if m])
 
-        self.model.unit.status = ActiveStatus()
+        subprocess.run(
+            ["./kubectl", "apply", "-f-"],
+            input=manifests.encode('utf-8'),
+            check=True,
+        )
 
 
 if __name__ == "__main__":

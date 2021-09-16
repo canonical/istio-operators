@@ -1,29 +1,5 @@
 options:
-  monitoring-address:
+  default-gateways:
+    default: istio-gateway
+    description: Comma-separated list of gateways to create by default
     type: string
-    default: ":15014"
-    description: Monitoring address
-  secure-grpc-address:
-    type: string
-    default: ":15011"
-    description: Secure GRPC address
-  debug-port:
-    type: int
-    default: 8080
-    description: Debug interface
-  xds-ca-port:
-    type: int
-    default: 15010
-    description: xDS (various discovery services) and CA services (plaintext)
-  xds-ca-tls-port:
-    type: int
-    default: 15012
-    description: xDS (various discovery services) and CA services (TLS)
-  webhook-port:
-    type: int
-    default: 15017
-    description: Injection and validation webhook port
-  default-gateway:
-    type: string
-    default: "default"
-    description: Name to use as a default gateway
