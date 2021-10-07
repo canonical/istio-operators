@@ -1,0 +1,5 @@
+options:
+  kind:
+    default: ''
+    description: Kind of Istio gateway. Must be set to one of `ingress`, `egress`
+    type: string

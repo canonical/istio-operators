@@ -1,4 +1,0 @@
-kubernetes
-oci-image==1.0.0
-ops==1.1.0
-serialized-data-interface<0.4

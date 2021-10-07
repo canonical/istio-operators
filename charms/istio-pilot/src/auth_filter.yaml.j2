@@ -1,0 +1,28 @@
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: authn-filter
+spec:
+  filters:
+  - filterConfig:
+      httpService:
+        authorizationRequest:
+          allowedHeaders:
+            patterns: {{ request_headers }}
+        authorizationResponse:
+          allowedUpstreamHeaders:
+            patterns: {{ response_headers }}
+        serverUri:
+          cluster: outbound|{{ port }}||{{ service }}.{{ namespace }}.svc.cluster.local
+          failureModeAllow: false
+          timeout: 10s
+          uri: http://{{ service }}.{{ namespace }}.svc.cluster.local:{{ port }}
+    filterName: envoy.ext_authz
+    filterType: HTTP
+    insertPosition:
+      index: FIRST
+    listenerMatch:
+      listenerType: GATEWAY
+  workloadLabels:
+    istio: ingressgateway

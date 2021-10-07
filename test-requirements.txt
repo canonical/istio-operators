@@ -1,0 +1,5 @@
+# pytest-operator<0.9
+git+git://github.com/charmed-kubernetes/pytest-operator.git@3bb258f
+aiohttp<3.8
+asyncio<3.5
+beautifulsoup4<4.11
