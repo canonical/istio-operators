@@ -79,7 +79,12 @@ class Operator(CharmBase):
             pilot_port='foo',
         )
 
-        subprocess.run(["./kubectl", "delete", "-f-"], input=rendered.encode('utf-8'), check=True)
+        subprocess.run(
+            ["./kubectl", "delete", "-f-"],
+            input=rendered.encode('utf-8'),
+            # Can't remove stuff yet: https://bugs.launchpad.net/juju/+bug/1941655
+            # check=True
+        )
 
 
 if __name__ == "__main__":

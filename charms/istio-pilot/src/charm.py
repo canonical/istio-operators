@@ -81,7 +81,8 @@ class Operator(CharmBase):
         subprocess.run(
             ["./kubectl", "delete", "-f-", "--ignore-not-found"],
             input=manifests,
-            check=True,
+            # Can't remove stuff yet: https://bugs.launchpad.net/juju/+bug/1941655
+            # check=True,
         )
 
     def send_info(self, event):
