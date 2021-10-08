@@ -63,7 +63,6 @@ class Operator(CharmBase):
             pilot_port=pilot['service-port'],
         )
 
-        self.log.info(rendered)
         subprocess.run(["./kubectl", "apply", "-f-"], input=rendered.encode('utf-8'), check=True)
 
         self.unit.status = ActiveStatus()
@@ -71,7 +70,16 @@ class Operator(CharmBase):
     def remove(self, event):
         """Remove charm."""
 
-        # Can't remove stuff yet: https://bugs.launchpad.net/juju/+bug/1941655
+        env = Environment(loader=FileSystemLoader('src'))
+        template = env.get_template('manifest.yaml')
+        rendered = template.render(
+            kind=self.model.config['kind'],
+            namespace=self.model.name,
+            pilot_host='foo',
+            pilot_port='foo',
+        )
+
+        subprocess.run(["./kubectl", "delete", "-f-"], input=rendered.encode('utf-8'), check=True)
 
 
 if __name__ == "__main__":
