@@ -25,9 +25,9 @@ def test_basic(harness, mocker):
     expected_args = [
         './istioctl',
         'install',
+        '-y',
         '-s',
         'profile=minimal',
-        '-y',
         '-s',
         'values.global.istioNamespace=None',
     ]
@@ -97,9 +97,20 @@ def test_with_ingress_relation(harness, mocker):
             },
         },
     ]
-    assert len(run.call_args_list) == 2
+    assert len(run.call_args_list) == 4
 
-    for call in run.call_args_list:
+    for call in run.call_args_list[::2]:
+        args = [
+            './kubectl',
+            'delete',
+            'virtualservices,gateways',
+            '-lapp.juju.is/created-by=istio-pilot',
+            '-n',
+            None,
+        ]
+        assert call.args == (args,)
+
+    for call in run.call_args_list[1::2]:
         expected_input = list(yaml.safe_load_all(call.kwargs['input']))
         assert call.args == (['./kubectl', 'apply', '-f-'],)
         assert expected_input == expected
@@ -175,9 +186,20 @@ def test_with_ingress_auth_relation(harness, mocker):
         },
     ]
 
-    assert len(run.call_args_list) == 2
+    assert len(run.call_args_list) == 4
 
-    for call in run.call_args_list:
+    for call in run.call_args_list[::2]:
+        args = [
+            './kubectl',
+            'delete',
+            'envoyfilters,rbacconfigs',
+            '-lapp.juju.is/created-by=istio-pilot',
+            '-n',
+            None,
+        ]
+        assert call.args == (args,)
+
+    for call in run.call_args_list[1::2]:
         expected_input = list(yaml.safe_load_all(call.kwargs['input']))
         assert call.args == (['./kubectl', 'apply', '-f-'],)
         assert expected_input == expected

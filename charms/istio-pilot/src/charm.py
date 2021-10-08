@@ -42,7 +42,9 @@ class Operator(CharmBase):
         self.framework.observe(self.on["istio-pilot"].relation_changed, self.send_info)
 
         self.framework.observe(self.on['ingress'].relation_changed, self.handle_ingress)
+        self.framework.observe(self.on['ingress'].relation_departed, self.handle_ingress)
         self.framework.observe(self.on['ingress-auth'].relation_changed, self.handle_ingress_auth)
+        self.framework.observe(self.on['ingress-auth'].relation_departed, self.handle_ingress_auth)
 
     def install(self, event):
         """Install charm."""
@@ -51,9 +53,9 @@ class Operator(CharmBase):
             [
                 "./istioctl",
                 "install",
+                "-y",
                 "-s",
                 "profile=minimal",
-                "-y",
                 "-s",
                 f"values.global.istioNamespace={self.model.name}",
             ]
@@ -64,23 +66,23 @@ class Operator(CharmBase):
     def remove(self, event):
         """Remove charm."""
 
-        # Can't remove stuff yet: https://bugs.launchpad.net/juju/+bug/1941655
+        manifests = subprocess.check_output(
+            [
+                "./istioctl",
+                "manifest",
+                "generate",
+                "-s",
+                "profile=minimal",
+                "-s",
+                f"values.global.istioNamespace={self.model.name}",
+            ]
+        )
 
-        # manifests = subprocess.check_output(
-        #     [
-        #         "./istioctl",
-        #         "manifest",
-        #         "generate",
-        #         "-s",
-        #         "profile=minimal",
-        #     ]
-        # )
-
-        # subprocess.run(
-        #     ["./kubectl", "delete", "-f-", "--ignore-not-found"],
-        #     input=manifests,
-        #     check=True,
-        # )
+        subprocess.run(
+            ["./kubectl", "delete", "-f-", "--ignore-not-found"],
+            input=manifests,
+            check=True,
+        )
 
     def send_info(self, event):
         if self.interfaces["istio-pilot"]:
@@ -92,23 +94,31 @@ class Operator(CharmBase):
             )
 
     def handle_ingress(self, event):
-        namespace = self.model.name
+        ingress = self.interfaces['ingress']
 
-        routes = self.interfaces['ingress']
-        if routes:
-            routes = list(routes.get_data().values())
+        if ingress:
+            routes = ingress.get_data().items()
         else:
             routes = []
 
         t = self.env.get_template('virtual_service.yaml.j2')
         gateway = self.model.config['default-gateways'].split(',')[0]
+
+        def get_kwargs(version, route):
+            """Handles both v1 and v2 ingress relations.
+
+            v1 ingress schema doesn't allow sending over a namespace.
+            """
+            kwargs = {'gateway': gateway, **route}
+
+            if 'namespace' not in kwargs:
+                kwargs['namespace'] = self.model.name
+
+            return kwargs
+
         virtual_services = ''.join(
-            t.render(
-                namespace=r.get('namespace', namespace),
-                gateway=gateway,
-                **r,
-            )
-            for r in routes
+            t.render(**get_kwargs(ingress.versions[app.name], route))
+            for ((_, app), route) in routes
         )
 
         t = self.env.get_template('gateway.yaml.j2')
@@ -118,6 +128,17 @@ class Operator(CharmBase):
         manifests = [virtual_services, gateways]
         manifests = '\n'.join([m for m in manifests if m])
 
+        subprocess.run(
+            [
+                './kubectl',
+                'delete',
+                'virtualservices,gateways',
+                f'-lapp.juju.is/created-by={self.model.app.name}',
+                '-n',
+                self.model.name,
+            ],
+            check=True,
+        )
         subprocess.run(
             ["./kubectl", "apply", "-f-"],
             input=manifests.encode('utf-8'),
@@ -159,6 +180,17 @@ class Operator(CharmBase):
 
         manifests = [rbac_configs, auth_filters]
         manifests = '\n'.join([m for m in manifests if m])
+        subprocess.run(
+            [
+                './kubectl',
+                'delete',
+                'envoyfilters,rbacconfigs',
+                f'-lapp.juju.is/created-by={self.model.app.name}',
+                '-n',
+                self.model.name,
+            ],
+            check=True,
+        )
 
         subprocess.run(
             ["./kubectl", "apply", "-f-"],
