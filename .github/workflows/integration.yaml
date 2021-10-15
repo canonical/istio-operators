@@ -60,7 +60,7 @@ jobs:
 
     - run: sg microk8s -c 'juju bootstrap microk8s uk8s'
 
-    - run: sg microk8s -c 'tox -e integration -- --keep-models'
+    - run: sg microk8s -c 'KUBECONIFG=$HOME/.kube/config tox -e integration -- --keep-models'
       timeout-minutes: 15
 
     - run: juju status
