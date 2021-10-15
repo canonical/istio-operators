@@ -95,7 +95,7 @@ jobs:
       #if: failure()
       run: |
         kubectl logs -n istio-system --tail 1000 -lapp.kubernetes.io/name=istio-pilot -c charm | tee tmp/istio-pilot.log
-        kubectl logs -n istio-system --tail 1000 -lapp.kubernetes.io/name=istio-ingressgateway-operator -c charm | tmp/istio-ingressgateway-operator.log
+        kubectl logs -n istio-system --tail 1000 -lapp.kubernetes.io/name=istio-ingressgateway-operator -c charm | tee tmp/istio-ingressgateway-operator.log
 
     - name: Upload debug artifacts
       #if: failure()
