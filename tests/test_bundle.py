@@ -23,11 +23,11 @@ async def test_deploy_bundle(ops_test: OpsTest):
         '--all',
         '--all-namespaces',
         '--timeout=5m',
+        check=True,
     )
 
     root_url = 'https://raw.githubusercontent.com/istio/istio/release-1.11/samples/bookinfo'
     await ops_test.run(
-        'microk8s',
         'kubectl',
         'label',
         'namespace',
@@ -36,7 +36,6 @@ async def test_deploy_bundle(ops_test: OpsTest):
         check=True,
     )
     await ops_test.run(
-        'microk8s',
         'kubectl',
         'apply',
         '-f',
@@ -46,7 +45,6 @@ async def test_deploy_bundle(ops_test: OpsTest):
         check=True,
     )
     await ops_test.run(
-        'microk8s',
         'kubectl',
         'wait',
         '--for=condition=available',
@@ -54,10 +52,10 @@ async def test_deploy_bundle(ops_test: OpsTest):
         '--all',
         '--all-namespaces',
         '--timeout=5m',
+        check=True,
     )
 
     gateway_json = await ops_test.run(
-        'microk8s',
         'kubectl',
         'get',
         'services/istio-ingressgateway',

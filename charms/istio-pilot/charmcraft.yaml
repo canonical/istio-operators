@@ -8,7 +8,7 @@ bases:
       channel: "20.04"
 parts:
   charm:
-    charm-python-packages: [setuptools]
+    charm-python-packages: [setuptools, pip]
   kubectl:
     plugin: dump
     source: .
