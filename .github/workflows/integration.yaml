@@ -58,9 +58,12 @@ jobs:
         sg microk8s -c 'microk8s status --wait-ready'
         kubectl wait --for=condition=available --timeout=5m -nkube-system deployment/coredns deployment/hostpath-provisioner
 
-    - run: sg microk8s -c 'juju bootstrap microk8s uk8s'
+    - name: Bootstrap
+      run: |
+        sg microk8s -c 'juju bootstrap microk8s uk8s'
+        sg microk8s -c 'juju add-model istio-system'
 
-    - run: sg microk8s -c 'KUBECONFIG=/home/runner/.kube/config tox -e integration -- --keep-models'
+    - run: sg microk8s -c 'KUBECONFIG=/home/runner/.kube/config tox -e integration -- --model istio-system'
       timeout-minutes: 15
 
     - name: Setup Debug Artifact Collection
