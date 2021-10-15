@@ -68,22 +68,17 @@ jobs:
 
     - name: Setup Debug Artifact Collection
       run: mkdir tmp
-      #if: failure()
 
     - name: Collect charmcraft logs
-      #if: failure()
       run: cat /home/runner/snap/charmcraft/common/charmcraft-log-* | tee tmp/charmcraft.log
 
     - name: Collect Juju status
-      #if: failure()
       run: juju status | tee tmp/juju-status.txt
 
     - name: Collect Juju log
-      #if: failure()
       run: juju debug-log --replay --no-tail | tee tmp/juju-status.txt
 
     - name: Collect Kube status
-      #if: failure()
       run: |
         kubectl get all -A | tee tmp/kube-summary.txt
         kubectl describe virtualservices -A | tee tmp/kube-virtualservices.txt
@@ -92,13 +87,11 @@ jobs:
         kubectl describe replicasets -A | tee tmp/kubectl-replicasets.txt
 
     - name: Collect Kube logs
-      #if: failure()
       run: |
         kubectl logs -n istio-system --tail 1000 -lapp.kubernetes.io/name=istio-pilot -c charm | tee tmp/istio-pilot.log
         kubectl logs -n istio-system --tail 1000 -lapp.kubernetes.io/name=istio-ingressgateway-operator -c charm | tee tmp/istio-ingressgateway-operator.log
 
     - name: Upload debug artifacts
-      #if: failure()
       uses: actions/upload-artifact@v2
       with:
         name: test-run-artifacts
