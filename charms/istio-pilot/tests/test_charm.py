@@ -1,3 +1,5 @@
+from unittest.mock import call as Call
+
 import pytest
 import yaml
 from charm import Operator
@@ -41,6 +43,8 @@ def test_basic(harness, mocker):
 
 def test_with_ingress_relation(harness, mocker):
     run = mocker.patch('subprocess.run')
+    check_call = mocker.patch('subprocess.check_call')
+
     harness.set_leader(True)
     harness.add_oci_resource(
         "noop",
@@ -97,6 +101,21 @@ def test_with_ingress_relation(harness, mocker):
             },
         },
     ]
+
+    assert check_call.call_args_list == [
+        Call(
+            [
+                './istioctl',
+                'install',
+                '-y',
+                '-s',
+                'profile=minimal',
+                '-s',
+                'values.global.istioNamespace=None',
+            ]
+        )
+    ]
+
     assert len(run.call_args_list) == 4
 
     for call in run.call_args_list[::2]:
@@ -120,6 +139,8 @@ def test_with_ingress_relation(harness, mocker):
 
 def test_with_ingress_auth_relation(harness, mocker):
     run = mocker.patch('subprocess.run')
+    check_call = mocker.patch('subprocess.check_call')
+
     harness.set_leader(True)
     harness.add_oci_resource(
         "noop",
@@ -184,6 +205,20 @@ def test_with_ingress_auth_relation(harness, mocker):
                 'workloadLabels': {'istio': 'ingressgateway'},
             },
         },
+    ]
+
+    assert check_call.call_args_list == [
+        Call(
+            [
+                './istioctl',
+                'install',
+                '-y',
+                '-s',
+                'profile=minimal',
+                '-s',
+                'values.global.istioNamespace=None',
+            ]
+        )
     ]
 
     assert len(run.call_args_list) == 4

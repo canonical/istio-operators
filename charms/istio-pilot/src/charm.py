@@ -36,7 +36,7 @@ class Operator(CharmBase):
 
         self.env = Environment(loader=FileSystemLoader('src'))
 
-        self.framework.observe(self.on.noop_pebble_ready, self.install)
+        self.framework.observe(self.on.install, self.install)
         self.framework.observe(self.on.remove, self.remove)
 
         self.framework.observe(self.on["istio-pilot"].relation_changed, self.send_info)
