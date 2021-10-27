@@ -1,3 +1,4 @@
+name: istio
 bundle: kubernetes
 applications:
   istio-ingressgateway-operator:
