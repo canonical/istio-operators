@@ -8,7 +8,7 @@ import yaml
 from jinja2 import Environment, FileSystemLoader
 from ops.charm import CharmBase
 from ops.main import main
-from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
+from ops.model import ActiveStatus, BlockedStatus, WaitingStatus, StatusBase, ErrorStatus
 from serialized_data_interface import NoCompatibleVersions, NoVersionsListed, get_interfaces
 
 
@@ -16,21 +16,13 @@ class Operator(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
 
-        if not self.unit.is_leader():
-            # We can't do anything useful when not the leader, so do nothing.
-            self.model.unit.status = WaitingStatus("Waiting for leadership")
-            return
-
-        try:
-            self.interfaces = get_interfaces(self)
-        except NoVersionsListed as err:
-            self.model.unit.status = WaitingStatus(str(err))
-            return
-        except NoCompatibleVersions as err:
-            self.model.unit.status = BlockedStatus(str(err))
-            return
-        else:
-            self.model.unit.status = ActiveStatus()
+        # This comes out cleaner if we update the serialized_data_interface.get_interfaces() to
+        # return interfaces regardless of whether any interface raised an error.  Maybe it returns:
+        # {'working_interface_A': SDI_instance, 'broken_interface_B': NoCompatibleVersions, ...}
+        # This way we can interrogate interfaces independently
+        # (This might be a breaking change, so maybe we'd want to add a second get_interfaces
+        # method, bump the package to 0.4, or add an arg to the existing one)
+        self.interfaces = get_interfaces(self)
 
         self.log = logging.getLogger(__name__)
 
@@ -49,6 +41,10 @@ class Operator(CharmBase):
     def install(self, event):
         """Install charm."""
 
+        if not isinstance(is_leader := self._check_is_leader(), ActiveStatus):
+            self.model.unit.status = is_leader
+            return
+
         subprocess.check_call(
             [
                 "./istioctl",
@@ -61,7 +57,23 @@ class Operator(CharmBase):
             ]
         )
 
-        self.unit.status = ActiveStatus()
+        # Check that we are actually working
+        self.update_status(event)
+
+    def update_status(self, event):
+        # This method should always result in a status being set to something as it follows things
+        # like install's MaintenanceStatus
+
+        ingress_status = self._get_ingress_status()
+        ingress_auth_status = self._get_ingress_auth_status()
+        # Do something to report these statuses in logs.  Maybe loop through and for any that
+        # !=Active, we report in logs?  Could also use this to define an ActiveStatus message
+        # eg ActiveStatus('Running with 1 ingress and 2 ingress_auth relations broken.'
+        #                 'See `juju debug-log` for details')
+
+        self.model.unit.status = self._get_application_status()
+        # This could also try to fix a broken application if status != Active, and could fix broken
+        # relations
 
     def remove(self, event):
         """Remove charm."""
@@ -86,6 +98,7 @@ class Operator(CharmBase):
         )
 
     def send_info(self, event):
+        # TODO: This probably needs a check to ensure this interface exists
         if self.interfaces["istio-pilot"]:
             self.interfaces["istio-pilot"].send_data(
                 {
@@ -95,6 +108,16 @@ class Operator(CharmBase):
             )
 
     def handle_ingress(self, event):
+        if not isinstance(
+                interface_status := validate_interface(
+                    self.interfaces["ingress"]
+                ),
+                ActiveStatus,
+        ):
+            # Could raise status here, or just log
+            self.model.unit.status = interface_status
+            return
+
         ingress = self.interfaces['ingress']
 
         if ingress:
@@ -145,6 +168,35 @@ class Operator(CharmBase):
             input=manifests.encode('utf-8'),
             check=True,
         )
+
+        self.update_status(event)
+
+    def _get_ingress_status(self):
+        # TODO: Loop through ingress relations, reporting their individual statuses
+        #       Lots of this is common with `handle_ingress` and could be combined in a helper
+
+        ingress = self.interfaces['ingress']
+
+        if ingress:
+            routes = ingress.get_data().items()
+        else:
+            routes = []
+
+        route_status = {}
+
+        for route in routes:
+            # TODO: Check that k8s objects expected to exist actually exist for this route
+            # Not real syntax:
+            if route is ok:
+                route_status[route.name] = ActiveStatus()
+            else:
+                # (or something appropriate)
+                route_status[route.name] = BlockedStatus()
+        return route_status
+
+    def _get_ingress_auth_status(self):
+        # TODO: Similar to _get_ingress_status
+        raise NotImplementedError()
 
     def handle_ingress_auth(self, event):
         auth_routes = self.interfaces['ingress-auth']
@@ -198,6 +250,34 @@ class Operator(CharmBase):
             input=manifests.encode('utf-8'),
             check=True,
         )
+
+        self.update_status(event)
+
+    def _check_is_leader(self) -> StatusBase:
+        if not self.unit.is_leader():
+            return WaitingStatus("Waiting for leadership")
+        else:
+            # Or we could return None. It felt odd that this function would return a status or None
+            return ActiveStatus()
+
+    def _get_application_status(self) -> StatusBase:
+        # TODO: Do whatever checks are needed to confirm we are actually working correctly
+        #       Maybe check for key deployments, etc?
+
+        # Until we have a real check - cheat :)  Note that this needs to be fleshed out if actually
+        # used by a relation hook
+        return ActiveStatus()
+
+
+def validate_interface(interface):
+    if is_instance(interface, NoVersionsListed):
+        return WaitingStatus(str(interface))
+    elif is_instance(interface, NoCompatibleVersions):
+        return BlockedStatus(str(interface))
+    elif is_instance(interface, Exception):
+        return ErrorStatus(f"Unexpected error: {str(interface)}")
+
+    return ActiveStatus()
 
 
 if __name__ == "__main__":
