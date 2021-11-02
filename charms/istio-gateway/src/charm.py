@@ -6,29 +6,13 @@ import subprocess
 from jinja2 import Environment, FileSystemLoader
 from ops.charm import CharmBase
 from ops.main import main
-from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
-from serialized_data_interface import NoCompatibleVersions, NoVersionsListed, get_interfaces
+from ops.model import BlockedStatus, WaitingStatus
+from serialized_data_interface import NoVersionsListed, get_interfaces
 
 
 class Operator(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
-
-        if not self.unit.is_leader():
-            # We can't do anything useful when not the leader, so do nothing.
-            self.model.unit.status = WaitingStatus("Waiting for leadership")
-            return
-
-        try:
-            self.interfaces = get_interfaces(self)
-        except NoVersionsListed as err:
-            self.model.unit.status = WaitingStatus(str(err))
-            return
-        except NoCompatibleVersions as err:
-            self.model.unit.status = BlockedStatus(str(err))
-            return
-        else:
-            self.model.unit.status = ActiveStatus()
 
         self.log = logging.getLogger(__name__)
 
@@ -40,17 +24,22 @@ class Operator(CharmBase):
     def install(self, event):
         """Install charm."""
 
+        if not self.unit.is_leader():
+            return self.unit, WaitingStatus("Waiting for leadership")
+
+        try:
+            self.interfaces = get_interfaces(self)
+        except NoVersionsListed as err:
+            return self.app, WaitingStatus(str(err))
+
         if self.model.config['kind'] not in ('ingress', 'egress'):
-            self.model.unit.status = BlockedStatus('Config item `kind` must be set')
-            return
+            return self.app, BlockedStatus('Config item `kind` must be set')
 
         if not self.model.relations['istio-pilot']:
-            self.model.unit.status = BlockedStatus("Waiting for istio-pilot relation")
-            return
+            return self.app, BlockedStatus("Waiting for istio-pilot relation")
 
         if not ((pilot := self.interfaces["istio-pilot"]) and pilot.get_data()):
-            self.model.unit.status = WaitingStatus("Waiting for istio-pilot relation data")
-            return
+            return self.app, BlockedStatus("Waiting for istio-pilot relation data")
 
         pilot = list(pilot.get_data().values())[0]
 
@@ -64,8 +53,6 @@ class Operator(CharmBase):
         )
 
         subprocess.run(["./kubectl", "apply", "-f-"], input=rendered.encode('utf-8'), check=True)
-
-        self.unit.status = ActiveStatus()
 
     def remove(self, event):
         """Remove charm."""

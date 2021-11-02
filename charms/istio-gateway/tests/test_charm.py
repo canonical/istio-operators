@@ -11,14 +11,14 @@ def harness():
 
 
 def test_not_leader(harness):
-    harness.begin()
+    harness.begin_with_initial_hooks()
     assert harness.charm.model.unit.status == WaitingStatus('Waiting for leadership')
 
 
 def test_no_kind(harness):
     harness.set_leader(True)
     harness.begin_with_initial_hooks()
-    assert harness.charm.model.unit.status == BlockedStatus('Config item `kind` must be set')
+    assert harness.charm.model.app.status == BlockedStatus('Config item `kind` must be set')
 
 
 def test_kind_no_rel(harness, mocker):
@@ -30,7 +30,7 @@ def test_kind_no_rel(harness, mocker):
     container = harness.model.unit.get_container('noop')
     harness.charm.on['noop'].pebble_ready.emit(container)
 
-    assert harness.charm.model.unit.status == BlockedStatus('Waiting for istio-pilot relation')
+    assert harness.charm.model.app.status == BlockedStatus('Waiting for istio-pilot relation')
 
 
 def test_kind_ingress(harness, mocker):
@@ -71,7 +71,7 @@ def test_kind_ingress(harness, mocker):
         assert call.args == expected_args
         assert expected_input == actual_input
 
-    assert harness.charm.model.unit.status == ActiveStatus('')
+    assert harness.charm.model.app.status == ActiveStatus('')
 
 
 def test_kind_egress(harness, mocker):
@@ -112,4 +112,4 @@ def test_kind_egress(harness, mocker):
         assert call.args == expected_args
         assert expected_input == actual_input
 
-    assert harness.charm.model.unit.status == ActiveStatus('')
+    assert harness.charm.model.app.status == ActiveStatus('')
