@@ -9,13 +9,43 @@ spec:
   hosts:
   - '*'
   http:
-  - match:
+  - name: app-route
+    match:
     - uri:
-        prefix: '{{ prefix }}'
+        prefix: '/{{ prefix }}/'
     rewrite:
-      uri: '{{ rewrite or prefix }}'
+      uri: '{{ rewrite }}'
     route:
     - destination:
         host: '{{ service }}.{{ namespace }}.svc.cluster.local'
         port:
           number: {{ port }}
+{%- if per_unit_routes and units %}
+{%- for unit in units %}
+  - name: unit-{{ unit.name.split("/")[-1] }}-route
+    match:
+    - uri:
+        prefix: '/{{ prefix }}-unit-{{ unit.name.split("/")[-1] }}/'
+    rewrite:
+      uri: '{{ rewrite }}'
+    route:
+    - destination:
+        host: '{{ service }}.{{ namespace }}.svc.cluster.local'
+        port:
+          number: {{ port }}
+        subset: {{ unit.name.replace("/", "-") }}
+{%- endfor %}
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: DestinationRule
+metadata:
+  name: {{ service }}
+spec:
+  host: '{{ service }}.{{ namespace }}.svc.cluster.local'
+  subsets:
+{%- for unit in units %}
+  - name: {{ unit.name.replace("/", "-") }}
+    labels:
+      statefulset.kubernetes.io/pod-name: {{ unit.name.replace("/", "-") }}
+{%- endfor %}
+{%- endif %}

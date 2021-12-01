@@ -79,12 +79,21 @@ class Operator(CharmBase):
             pilot_port='foo',
         )
 
-        subprocess.run(
-            ["./kubectl", "delete", "-f-"],
-            input=rendered.encode('utf-8'),
-            # Can't remove stuff yet: https://bugs.launchpad.net/juju/+bug/1941655
-            # check=True
-        )
+        try:
+            subprocess.run(
+                ["./kubectl", "delete", "-f-"],
+                input=rendered.encode('utf-8'),
+                capture_output=True,
+                check=True,
+            )
+        except subprocess.CalledProcessError as e:
+            if "(Unauthorized)" in e.stderr.decode("utf-8"):
+                # Ignore error from https://bugs.launchpad.net/juju/+bug/1941655
+                pass
+            else:
+                # But surface any other errors
+                self.log.error(e.stderr)
+                raise
 
 
 if __name__ == "__main__":

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import yaml
 from jinja2 import Environment, FileSystemLoader
-from ops.charm import CharmBase
+from ops.charm import CharmBase, RelationBrokenEvent
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from serialized_data_interface import NoCompatibleVersions, NoVersionsListed, get_interfaces
@@ -39,10 +39,13 @@ class Operator(CharmBase):
         self.framework.observe(self.on.install, self.install)
         self.framework.observe(self.on.remove, self.remove)
 
+        self.framework.observe(self.on.config_changed, self.handle_default_gateways)
+
         self.framework.observe(self.on["istio-pilot"].relation_changed, self.send_info)
 
         self.framework.observe(self.on['ingress'].relation_changed, self.handle_ingress)
         self.framework.observe(self.on['ingress'].relation_departed, self.handle_ingress)
+        self.framework.observe(self.on['ingress'].relation_broken, self.handle_ingress)
         self.framework.observe(self.on['ingress-auth'].relation_changed, self.handle_ingress_auth)
         self.framework.observe(self.on['ingress-auth'].relation_departed, self.handle_ingress_auth)
 
@@ -78,12 +81,38 @@ class Operator(CharmBase):
             ]
         )
 
-        subprocess.run(
-            ["./kubectl", "delete", "-f-", "--ignore-not-found"],
-            input=manifests,
-            # Can't remove stuff yet: https://bugs.launchpad.net/juju/+bug/1941655
-            # check=True,
+        try:
+            self._kubectl(
+                "delete",
+                "virtualservices,destinationrule,gateways,envoyfilters,rbacconfigs",
+                f"-lapp.juju.is/created-by={self.app.name}",
+                capture_output=True,
+            )
+            self._kubectl(
+                'delete',
+                "--ignore-not-found",
+                "-f-",
+                input=manifests,
+                capture_output=True,
+            )
+        except subprocess.CalledProcessError as e:
+            if "(Unauthorized)" in e.stderr.decode("utf-8"):
+                # Ignore error from https://bugs.launchpad.net/juju/+bug/1941655
+                pass
+            else:
+                self.log.error(e.stderr)
+                raise
+
+    def handle_default_gateways(self, event):
+        t = self.env.get_template('gateway.yaml.j2')
+        gateways = self.model.config['default-gateways'].split(',')
+        manifest = ''.join(t.render(name=g) for g in gateways)
+        self._kubectl(
+            'delete',
+            'gateways',
+            f'-lapp.juju.is/created-by={self.app.name}',
         )
+        self._kubectl("apply", "-f-", input=manifest)
 
     def send_info(self, event):
         if self.interfaces["istio-pilot"]:
@@ -95,12 +124,27 @@ class Operator(CharmBase):
             )
 
     def handle_ingress(self, event):
-        ingress = self.interfaces['ingress']
-
-        if ingress:
-            routes = ingress.get_data().items()
+        gateway_address = self._get_gateway_address()
+        if not gateway_address:
+            self.unit.status = WaitingStatus("Waiting for gateway address")
+            event.defer()
+            return
         else:
-            routes = []
+            self.unit.status = ActiveStatus()
+
+        ingress = self.interfaces['ingress']
+        if ingress:
+            # Filter out data we sent back.
+            routes = {(rel, app): route
+                      for (rel, app), route in ingress.get_data().items()
+                      if app != self.app}
+        else:
+            routes = {}
+
+        if isinstance(event, RelationBrokenEvent):
+            # The app-level data is still visible on a broken relation, but we
+            # shouldn't be keeping the VirtualService for that related app.
+            del routes[(event.relation, event.app)]
 
         t = self.env.get_template('virtual_service.yaml.j2')
         gateway = self.model.config['default-gateways'].split(',')[0]
@@ -115,36 +159,40 @@ class Operator(CharmBase):
             if 'namespace' not in kwargs:
                 kwargs['namespace'] = self.model.name
 
+            kwargs["prefix"] = kwargs["prefix"].strip("/")
+            if "rewrite" not in kwargs:
+                kwargs["rewrite"] = f"/{kwargs['prefix']}/"
+
+            kwargs["units"] = rel.units
+
             return kwargs
 
         virtual_services = ''.join(
             t.render(**get_kwargs(ingress.versions[app.name], route))
-            for ((_, app), route) in routes
+            for ((_, app), route) in routes.items()
         )
 
-        t = self.env.get_template('gateway.yaml.j2')
-        gateways = self.model.config['default-gateways'].split(',')
-        gateways = ''.join(t.render(name=g) for g in gateways)
-
-        manifests = [virtual_services, gateways]
-        manifests = '\n'.join([m for m in manifests if m])
-
-        subprocess.run(
-            [
-                './kubectl',
-                'delete',
-                'virtualservices,gateways',
-                f'-lapp.juju.is/created-by={self.model.app.name}',
-                '-n',
-                self.model.name,
-            ],
-            check=True,
+        self._kubectl(
+            'delete',
+            'virtualservices,destinationrules',
+            f'-lapp.juju.is/created-by={self.app.name}',
         )
-        subprocess.run(
-            ["./kubectl", "apply", "-f-"],
-            input=manifests.encode('utf-8'),
-            check=True,
-        )
+        if routes:
+            self._kubectl("apply", "-f-", input=virtual_services)
+
+        # Send URL(s) back
+        for (rel, app), route in routes.items():
+            prefix = route["prefix"].strip("/")
+            response_data = {
+                "url": f"http://{gateway_address}/{prefix}/",
+            }
+            if route.get("per_unit_routes", False):
+                unit_urls = response_data["unit_urls"] = {}
+                for unit in rel.units:
+                    unit_num = unit.name.split("/")[-1]
+                    unit_path = f"{prefix}-unit-{unit_num}"
+                    unit_urls[unit.name] = f"http://{gateway_address}/{unit_path}/"
+            ingress.send_data(response_data, app_name=app.name)
 
     def handle_ingress_auth(self, event):
         auth_routes = self.interfaces['ingress-auth']
@@ -181,23 +229,53 @@ class Operator(CharmBase):
 
         manifests = [rbac_configs, auth_filters]
         manifests = '\n'.join([m for m in manifests if m])
-        subprocess.run(
-            [
-                './kubectl',
-                'delete',
-                'envoyfilters,rbacconfigs',
-                f'-lapp.juju.is/created-by={self.model.app.name}',
-                '-n',
-                self.model.name,
-            ],
-            check=True,
+        self._kubectl(
+            'delete',
+            'envoyfilters,rbacconfigs',
+            f'-lapp.juju.is/created-by={self.app.name}',
         )
 
-        subprocess.run(
-            ["./kubectl", "apply", "-f-"],
-            input=manifests.encode('utf-8'),
+        self._kubectl("apply", "-f-", input=manifests)
+
+    def _kubectl(self, *args, namespace=None, input=None, capture_output=False):
+        """Helper for running kubectl."""
+        if isinstance(input, str):
+            input = input.encode("utf-8")
+        res = subprocess.run(
+            [
+                './kubectl',
+                '-n',
+                namespace or self.model.name,
+                *args,
+            ],
+            input=input,
+            capture_output=capture_output,
             check=True,
         )
+        if capture_output:
+            return res.stdout.decode("utf-8")
+
+    def _get_gateway_address(self):
+        """Look up the load balancer address for the ingress gateway.
+
+        If the gateway isn't available or doesn't have a load balancer address yet,
+        returns None.
+        """
+        svcs = yaml.safe_load(self._kubectl(
+            "get",
+            "svc",
+            "-l",
+            "istio=ingressgateway",
+            "-oyaml",
+            namespace=self.model.name,
+            capture_output=True,
+        ))
+        if not svcs["items"]:
+            return None
+        addrs = svcs["items"][0]["status"].get("loadBalancer", {}).get("ingress", [])
+        if not addrs:
+            return None
+        return addrs[0].get("hostname", addrs[0].get("ip"))
 
 
 if __name__ == "__main__":

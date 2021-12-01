@@ -13,8 +13,8 @@ log = logging.getLogger(__name__)
 @pytest.mark.abort_on_fail
 async def test_deploy_bundle(ops_test: OpsTest):
     await ops_test.deploy_bundle(destructive_mode=True, serial=True, extra_args=['--trust'])
-
     await ops_test.model.wait_for_idle(timeout=60 * 10)
+
     await ops_test.run(
         'kubectl',
         'wait',
@@ -25,6 +25,21 @@ async def test_deploy_bundle(ops_test: OpsTest):
         '--timeout=5m',
         check=True,
     )
+    for attempt in range(60):
+        try:
+            await ops_test.run(
+                'kubectl',
+                'get',
+                'crd',
+                'gateways.networking.istio.io',
+                check=True,
+            )
+        except Exception:
+            await sleep(1)
+        else:
+            break
+    else:
+        pytest.fail("Timed out waiting for Gateway CRD")
 
     root_url = 'https://raw.githubusercontent.com/istio/istio/release-1.11/samples/bookinfo'
     await ops_test.run(
@@ -33,6 +48,7 @@ async def test_deploy_bundle(ops_test: OpsTest):
         'namespace',
         'default',
         'istio-injection=enabled',
+        '--overwrite=true',
         check=True,
     )
     await ops_test.run(
