@@ -135,9 +135,11 @@ class Operator(CharmBase):
         ingress = self.interfaces['ingress']
         if ingress:
             # Filter out data we sent back.
-            routes = {(rel, app): route
-                      for (rel, app), route in ingress.get_data().items()
-                      if app != self.app}
+            routes = {
+                (rel, app): route
+                for (rel, app), route in ingress.get_data().items()
+                if app != self.app
+            }
         else:
             routes = {}
 
@@ -261,15 +263,17 @@ class Operator(CharmBase):
         If the gateway isn't available or doesn't have a load balancer address yet,
         returns None.
         """
-        svcs = yaml.safe_load(self._kubectl(
-            "get",
-            "svc",
-            "-l",
-            "istio=ingressgateway",
-            "-oyaml",
-            namespace=self.model.name,
-            capture_output=True,
-        ))
+        svcs = yaml.safe_load(
+            self._kubectl(
+                "get",
+                "svc",
+                "-l",
+                "istio=ingressgateway",
+                "-oyaml",
+                namespace=self.model.name,
+                capture_output=True,
+            )
+        )
         if not svcs["items"]:
             return None
         addrs = svcs["items"][0]["status"].get("loadBalancer", {}).get("ingress", [])
