@@ -12,7 +12,7 @@ spec:
   - name: app-route
     match:
     - uri:
-        prefix: '/{{ prefix }}/'
+        prefix: '{{ prefix }}'
     rewrite:
       uri: '{{ rewrite }}'
     route:
@@ -25,7 +25,7 @@ spec:
   - name: unit-{{ unit.name.split("/")[-1] }}-route
     match:
     - uri:
-        prefix: '/{{ prefix }}-unit-{{ unit.name.split("/")[-1] }}/'
+        prefix: '{{ unit_prefix.format(unit.name.split("/")[-1]) }}'
     rewrite:
       uri: '{{ rewrite }}'
     route:

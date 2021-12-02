@@ -151,7 +151,7 @@ class Operator(CharmBase):
         t = self.env.get_template('virtual_service.yaml.j2')
         gateway = self.model.config['default-gateways'].split(',')[0]
 
-        def get_kwargs(version, route):
+        def get_kwargs(rel, version, route):
             """Handles both v1 and v2 ingress relations.
 
             v1 ingress schema doesn't allow sending over a namespace.
@@ -161,17 +161,22 @@ class Operator(CharmBase):
             if 'namespace' not in kwargs:
                 kwargs['namespace'] = self.model.name
 
-            kwargs["prefix"] = kwargs["prefix"].strip("/")
-            if "rewrite" not in kwargs:
-                kwargs["rewrite"] = f"/{kwargs['prefix']}/"
+            prefix = kwargs["prefix"]
+            kwargs.setdefault("rewrite", prefix)
+            if prefix == "/":
+                kwargs["unit_prefix"] = "/unit-{}/"
+            elif prefix.endswith("/"):
+                kwargs["unit_prefix"] = prefix[:-1] + "-unit-{}/"
+            else:
+                kwargs["unit_prefix"] = prefix + "-unit-{}"
 
             kwargs["units"] = rel.units
 
             return kwargs
 
         virtual_services = ''.join(
-            t.render(**get_kwargs(ingress.versions[app.name], route))
-            for ((_, app), route) in routes.items()
+            t.render(**get_kwargs(rel, ingress.versions[app.name], route))
+            for ((rel, app), route) in routes.items()
         )
 
         self._kubectl(
@@ -184,6 +189,9 @@ class Operator(CharmBase):
 
         # Send URL(s) back
         for (rel, app), route in routes.items():
+            if int(ingress.versions[app.name][1:]) < 3:
+                # only version 3+ supports response data
+                continue
             prefix = route["prefix"].strip("/")
             response_data = {
                 "url": f"http://{gateway_address}/{prefix}/",
