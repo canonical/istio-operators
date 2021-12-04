@@ -1,0 +1,2 @@
+get-urls:
+  description: Get the ingress URLs.
