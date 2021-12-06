@@ -14,7 +14,7 @@ log = logging.getLogger(__name__)
 
 @pytest.mark.abort_on_fail
 async def test_deploy_bundle(ops_test: OpsTest):
-    await ops_test.deploy_bundle(destructive_mode=True, serial=True, extra_args=['--trust'])
+    await ops_test.deploy_bundle(serial=True, extra_args=['--trust'])
     await ops_test.model.wait_for_idle(timeout=60 * 10)
 
     await ops_test.run(
