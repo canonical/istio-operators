@@ -51,6 +51,7 @@ jobs:
         sudo snap install juju-wait --classic
         sudo apt update
         sudo apt install tox
+        sudo usermod -a -G lxd $USER
 
     - name: Wait before bootstrap
       run: |

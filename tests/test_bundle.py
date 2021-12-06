@@ -122,7 +122,11 @@ async def test_ingress(ops_test: OpsTest):
     )
     ingress_charm = await ops_test.build_charm(ingress_charm_path)
 
-    ingress_app = await ops_test.model.deploy(ingress_charm, num_units=3)
+    ingress_app = await ops_test.model.deploy(
+        ingress_charm,
+        num_units=3,
+        resources={"httpbin-image": "kennethreitz/httpbin"},
+    )
     await ops_test.model.wait_for_idle(raise_on_blocked=False)
 
     # finding the leader should not be this difficult
