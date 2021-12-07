@@ -115,9 +115,10 @@ async def test_ingress(ops_test: OpsTest):
     base_path = Path(__file__).parent.parent
     ingress_lib_path = base_path / "charms/istio-pilot/lib/charms/istio_pilot/v0/ingress.py"
     ingress_charm_path = base_path / "tests/data/ingress-test"
+    lib_rel_path = Path("lib/charms/istio_pilot/v0/ingress.py")
     ingress_charm_path = ops_test.render_charm(
         ingress_charm_path,
-        include=["lib/charms/istio_pilot/v0/ingress.py"],
+        include=[*lib_rel_path.parts[:-1], lib_rel_path],
         context={"ingress_lib": ingress_lib_path.read_text()},
     )
     ingress_charm = await ops_test.build_charm(ingress_charm_path)
