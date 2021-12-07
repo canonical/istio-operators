@@ -65,7 +65,7 @@ jobs:
         sg microk8s -c 'juju add-model istio-system'
 
     - run: sg microk8s -c 'KUBECONFIG=/home/runner/.kube/config tox -e integration -- --model istio-system --destructive-mode'
-      timeout-minutes: 15
+      timeout-minutes: 30
 
     - name: Setup Debug Artifact Collection
       run: mkdir tmp
