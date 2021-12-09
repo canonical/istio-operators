@@ -8,7 +8,7 @@ import logging
 from functools import cached_property
 
 from ops.charm import CharmBase
-from ops.framework import Object
+from ops.framework import EventBase, EventSource, Object, ObjectEvents
 from ops.model import BlockedStatus, WaitingStatus
 from serialized_data_interface import get_interface, NoCompatibleVersions, NoVersionsListed
 
@@ -25,7 +25,27 @@ LIBAPI = 0
 LIBPATCH = 1
 
 
+class IngressProviderAvailableEvent(EventBase):
+    """Event triggered when the ingress provider is ready for requests."""
+
+
+class IngressReadyEvent(EventBase):
+    """Event triggered when the ingress provider has returned the requested URL(s)."""
+
+
+class IngressFailedEvent(EventBase):
+    """Event triggered when something went wrong with the ingress relation."""
+
+
+class IngressRequirerEvents(ObjectEvents):
+    available = EventSource(IngressProviderAvailableEvent)
+    ready = EventSource(IngressReadyEvent)
+    failed = EventSource(IngressFailedEvent)
+
+
 class IngressRequirer(Object):
+    on = IngressRequirerEvents()
+
     def __init__(self, charm: CharmBase, relation_endpoint: str):
         """Constructor for IngressRequirer.
 
@@ -37,6 +57,46 @@ class IngressRequirer(Object):
         super().__init__(charm, f"ingress-requirer-{relation_endpoint}")
         self.charm = charm
         self.relation_endpoint = relation_endpoint
+        self.status = self._get_status()
+
+        if charm.unit.is_leader():
+            self.framework.observe(
+                charm.on[relation_endpoint].relation_created, self._check_provider
+            )
+            self.framework.observe(
+                charm.on[relation_endpoint].relation_changed, self._check_provider
+            )
+            self.framework.observe(charm.on.leader_elected, self._check_provider)
+
+    def _get_status(self):
+        if not self.charm.unit.is_leader():
+            return None
+        try:
+            ingress = get_interface(self.charm, self.relation_endpoint)
+            if not ingress:
+                return BlockedStatus(f"Missing relation: {self.relation_endpoint}")
+        except NoCompatibleVersions:
+            return BlockedStatus(f"Relation version not compatible: {self.relation_endpoint}")
+        except NoVersionsListed:
+            return WaitingStatus(f"Waiting on relation: {self.relation_endpoint}")
+        else:
+            return None
+
+    @property
+    def is_available(self):
+        return self.charm.unit.is_leader() and self.status is None
+
+    @property
+    def is_ready(self):
+        return self.is_available and self.url
+
+    def _check_provider(self, event):
+        if self.is_ready:
+            self.on.ready.emit()
+        elif self.is_available:
+            self.on.available.emit()
+        elif isinstance(self.status, BlockedStatus):
+            self.on.failed.emit()
 
     def request(
         self,
@@ -67,22 +127,15 @@ class IngressRequirer(Object):
             raise RequestFailed(
                 WaitingStatus(f"Only leader can request ingress: {self.relation_endpoint}")
             )
-        try:
-            ingress = get_interface(self.charm, self.relation_endpoint)
-            if not ingress:
-                raise RequestFailed(BlockedStatus(f"Missing relation: {self.relation_endpoint}"))
-        except NoCompatibleVersions:
-            raise RequestFailed(
-                BlockedStatus(f"Relation version not compatible: {self.relation_endpoint}")
-            )
-        except NoVersionsListed:
-            raise RequestFailed(WaitingStatus(f"Waiting on relation: {self.relation_endpoint}"))
+        if self.status is not None:
+            raise RequestFailed(self.status)
+        ingress = get_interface(self.charm, self.relation_endpoint)
         ingress.send_data(
             {
                 "namespace": namespace or self.model.name,
                 "prefix": prefix or f"/{self.charm.app.name}/",
                 "rewrite": rewrite or "/",
-                "service": service or self.app.name,
+                "service": service or self.charm.app.name,
                 "port": port,
                 "per_unit_routes": per_unit_routes,
             },
@@ -132,4 +185,5 @@ class IngressRequirer(Object):
 
 class RequestFailed(Exception):
     def __init__(self, status):
+        super().__init__(status.message)
         self.status = status

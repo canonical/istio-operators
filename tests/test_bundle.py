@@ -126,7 +126,7 @@ async def test_ingress(ops_test: OpsTest):
         num_units=3,
         resources={"httpbin-image": "kennethreitz/httpbin"},
     )
-    await ops_test.model.wait_for_idle(raise_on_blocked=False)
+    await ops_test.model.wait_for_idle(status="blocked", raise_on_blocked=False)
 
     # finding the leader should not be this difficult
     status = await ops_test.model.get_status()

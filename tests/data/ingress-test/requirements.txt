@@ -1,4 +1,6 @@
-ops >= 1.2.0
+#ops >= 1.2.0
+# use specific commit until PR #605 is released with Container.can_connect()
+https://github.com/canonical/operator/archive/3f20f80.zip#egg=ops
 serialized-data-interface<0.4
 lightkube
 lightkube-models
