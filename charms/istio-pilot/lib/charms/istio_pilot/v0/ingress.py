@@ -113,10 +113,11 @@ class IngressRequirer(Object):
     def _get_status(self):
         if not self.charm.unit.is_leader():
             return None
+        if not self.charm.model.relations[self.relation_name]:
+            # the key will always exist but may be an empty list
+            return BlockedStatus(f"Missing relation: {self.relation_name}")
         try:
-            ingress = get_interface(self.charm, self.relation_name)
-            if not ingress:
-                return BlockedStatus(f"Missing relation: {self.relation_name}")
+            get_interface(self.charm, self.relation_name)
         except NoCompatibleVersions:
             return BlockedStatus(f"Relation version not compatible: {self.relation_name}")
         except NoVersionsListed:
