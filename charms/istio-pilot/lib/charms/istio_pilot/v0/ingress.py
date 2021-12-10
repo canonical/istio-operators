@@ -25,6 +25,9 @@ LIBAPI = 0
 LIBPATCH = 1
 
 
+DEFAULT_RELATION_NAME = "ingress"
+
+
 class IngressProviderAvailableEvent(EventBase):
     """Event triggered when the ingress provider is ready for requests."""
 
@@ -46,39 +49,78 @@ class IngressRequirerEvents(ObjectEvents):
 class IngressRequirer(Object):
     on = IngressRequirerEvents()
 
-    def __init__(self, charm: CharmBase, relation_endpoint: str):
+    def __init__(
+        self,
+        charm: CharmBase,
+        relation_name: str = DEFAULT_RELATION_NAME,
+        *,
+        port: int = None,
+        service: str = None,
+        prefix: str = None,
+        rewrite: str = None,
+        namespace: str = None,
+        per_unit_routes: bool = False,
+    ):
         """Constructor for IngressRequirer.
+
+        The request args can be used to specify the ingress properties when the
+        instance is created. If any are set, at least `port` is required, and
+        they will be sent to the ingress provider as soon as it is available.
+        All request args must be given as keyword args.
 
         Args:
             charm: the charm that is instantiating the library.
-            relation_endpoint: the name of the relation endpoint to bind to
-                (must be of interface type "ingress")
+            relation_name: the name of the relation endpoint to bind to
+                (defaults to "ingress"; relation must be of interface type
+                "ingress" and have "limit: 1")
+        Request Args:
+            service: the name of the target K8s service to route to; defaults to the
+                charm's automatically created service (i.e., the application name)
+            port: the port of the service (required)
+            prefix: the path used to match this service for requests to the gateway;
+                must not conflict with other services; defaults to f"/{service}/"
+            rewrite: the path on the target service to map the request to; defaults
+                to "/"
+            namespace: the namespace the service is in; default to the current model
+            per_unit_routes: whether or not to create URLs which map to specific units;
+                the URLs will have their own prefix of f"{prefix}-unit-{unit_num}" (with
+                tailing slashes handled appropriately)
         """
-        super().__init__(charm, f"ingress-requirer-{relation_endpoint}")
+        super().__init__(charm, f"ingress-requirer-{relation_name}")
         self.charm = charm
-        self.relation_endpoint = relation_endpoint
+        self.relation_name = relation_name
+
+        self._validate_relation_meta()
+
         self.status = self._get_status()
 
+        self._request_args = {
+            "port": port,
+            "service": service,
+            "prefix": prefix,
+            "rewrite": rewrite,
+            "namespace": namespace,
+            "per_unit_routes": per_unit_routes,
+        }
+        if any(self._request_args.values()) and not self._request_args["port"]:
+            raise TypeError("Missing required argument: 'port'")
+
         if charm.unit.is_leader():
-            self.framework.observe(
-                charm.on[relation_endpoint].relation_created, self._check_provider
-            )
-            self.framework.observe(
-                charm.on[relation_endpoint].relation_changed, self._check_provider
-            )
+            self.framework.observe(charm.on[relation_name].relation_created, self._check_provider)
+            self.framework.observe(charm.on[relation_name].relation_changed, self._check_provider)
             self.framework.observe(charm.on.leader_elected, self._check_provider)
 
     def _get_status(self):
         if not self.charm.unit.is_leader():
             return None
         try:
-            ingress = get_interface(self.charm, self.relation_endpoint)
+            ingress = get_interface(self.charm, self.relation_name)
             if not ingress:
-                return BlockedStatus(f"Missing relation: {self.relation_endpoint}")
+                return BlockedStatus(f"Missing relation: {self.relation_name}")
         except NoCompatibleVersions:
-            return BlockedStatus(f"Relation version not compatible: {self.relation_endpoint}")
+            return BlockedStatus(f"Relation version not compatible: {self.relation_name}")
         except NoVersionsListed:
-            return WaitingStatus(f"Waiting on relation: {self.relation_endpoint}")
+            return WaitingStatus(f"Waiting on relation: {self.relation_name}")
         else:
             return None
 
@@ -94,6 +136,8 @@ class IngressRequirer(Object):
         if self.is_ready:
             self.on.ready.emit()
         elif self.is_available:
+            if any(self._request_args.values()):
+                self.request(**self._request_args)
             self.on.available.emit()
         elif isinstance(self.status, BlockedStatus):
             self.on.failed.emit()
@@ -125,11 +169,11 @@ class IngressRequirer(Object):
         """
         if not self.charm.unit.is_leader():
             raise RequestFailed(
-                WaitingStatus(f"Only leader can request ingress: {self.relation_endpoint}")
+                WaitingStatus(f"Only leader can request ingress: {self.relation_name}")
             )
         if self.status is not None:
             raise RequestFailed(self.status)
-        ingress = get_interface(self.charm, self.relation_endpoint)
+        ingress = get_interface(self.charm, self.relation_name)
         ingress.send_data(
             {
                 "namespace": namespace or self.model.name,
@@ -148,7 +192,7 @@ class IngressRequirer(Object):
         May return None if the URL isn't available yet.
         """
         try:
-            ingress = get_interface(self.charm, self.relation_endpoint)
+            ingress = get_interface(self.charm, self.relation_name)
             if not ingress:
                 return None
         except (NoCompatibleVersions, NoVersionsListed):
@@ -169,7 +213,7 @@ class IngressRequirer(Object):
         was not requested. Otherwise, returns a map of unit name to URL.
         """
         try:
-            ingress = get_interface(self.charm, self.relation_endpoint)
+            ingress = get_interface(self.charm, self.relation_name)
             if not ingress:
                 return None
         except (NoCompatibleVersions, NoVersionsListed):
@@ -181,6 +225,18 @@ class IngressRequirer(Object):
             return data.get("unit_urls")
         else:
             return None
+
+    def _validate_relation_meta(self):
+        """Validate that the relation is setup properly in the metadata."""
+        # This should really be done as a build-time hook, if that were possible.
+        assert (
+            self.relation_name in self.charm.meta.requires
+        ), "IngressRequirer must be used on a 'requires' relation"
+        rel_meta = self.charm.meta.relations[self.relation_name]
+        assert (
+            rel_meta.interface_name == "ingress"
+        ), "IngressRequirer must be used on an 'ingress' relation'"
+        assert rel_meta.limit == 1, "IngressRequirer must be used on a 'limit: 1' relation"
 
 
 class RequestFailed(Exception):

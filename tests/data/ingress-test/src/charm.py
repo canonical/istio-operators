@@ -16,7 +16,7 @@ class IngressTestCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
         self.service_patcher = KubernetesServicePatch(self, [(self.app.name, 80)])
-        self.ingress = IngressRequirer(self, "ingress")
+        self.ingress = IngressRequirer(self)
 
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.httpbin_pebble_ready, self._on_httpbin_pebble_ready)
