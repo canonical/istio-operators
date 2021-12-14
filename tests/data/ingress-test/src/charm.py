@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 
+import json
 import logging
 
 from ops.charm import CharmBase
@@ -85,7 +86,7 @@ class IngressTestCharm(CharmBase):
             return
         action.set_results({
             "url": self.ingress.url,
-            "unit-urls": self.ingress.unit_urls,
+            "unit-urls": json.dumps(self.ingress.unit_urls),
         })
 
 

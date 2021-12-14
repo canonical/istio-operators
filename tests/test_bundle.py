@@ -2,7 +2,6 @@ import json
 import logging
 from asyncio import sleep
 from pathlib import Path
-from unittest.mock import ANY
 
 import aiohttp
 import pytest
@@ -126,31 +125,38 @@ async def test_ingress(ops_test: OpsTest):
         num_units=3,
         resources={"httpbin-image": "kennethreitz/httpbin"},
     )
-    await ops_test.model.wait_for_idle(status="blocked", raise_on_blocked=False)
+    await ops_test.model.block_until(lambda: len(ingress_app.units) == 3)
+    await ops_test.model.wait_for_idle(raise_on_blocked=False)
 
     # finding the leader should not be this difficult
     status = await ops_test.model.get_status()
     units_status = status.applications["ingress-test"]["units"]
     ingress_leader = None
     for ingress_unit in ingress_app.units:
-        assert ingress_unit.workload_status == "blocked"
-        assert ingress_unit.workload_status_message == "Missing relation: ingress"
         if units_status[ingress_unit.name].get("leader", False):
+            assert ingress_unit.workload_status == "blocked"
+            assert ingress_unit.workload_status_message == "Missing relation: ingress"
             ingress_leader = ingress_unit
+        else:
+            assert ingress_unit.workload_status == "active"
+
     assert ingress_leader is not None
 
     await ingress_app.add_relation("ingress", "istio-pilot:ingress")
     await ops_test.model.wait_for_idle(status="active", timeout=60)
     action = await ingress_leader.run_action("get-urls")
     output = await action.wait()
-    assert output == {"status": "completed", "results": ANY}
-    results = output.data["results"]
-    assert results["url"] == f"http://{ops_test.gateway_addr}/ingress-test/"
+    assert output.status == "completed"
+    action_result = output.results
+    assert action_result["url"] == f"http://{ops_test.gateway_addr}/ingress-test/"
     async with aiohttp.ClientSession(raise_for_status=True) as client:
-        results = await client.get(results["url"] + "uuid")
-        assert "uuid" in results.text()
-        for unit_name, unit_url in results["unit_urls"].items():
+        response = await client.get(action_result["url"] + "uuid")
+        page_text = await response.text()
+        assert "uuid" in page_text
+        unit_urls = json.loads(action_result["unit-urls"])
+        for unit_name, unit_url in unit_urls.items():
             unit_num = unit_name.split("/")[-1]
             assert unit_url == f"http://{ops_test.gateway_addr}/ingress-test-unit-{unit_num}/"
-            results = await client.get(unit_url + "uuid")
-            assert "uuid" in results.text()
+            response = await client.get(unit_url + "uuid")
+            page_text = await response.text()
+            assert "uuid" in page_text
