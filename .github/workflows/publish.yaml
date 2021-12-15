@@ -1,33 +1,31 @@
-name: Publish bundle to charm store
-
+name: Publish
 on:
   push:
     branches:
       - master
-
+      - main
+      - track/**
+  pull_request:
+    branches:
+      - master
+      - main
+      - track/**
 jobs:
-  build:
-    name: Publish bundle
+  publish-charm:
+    name: Publish Charm
     runs-on: ubuntu-latest
-
+    # Only publish to charmhub if we are pushing to a special branch or running PRs from something named `branch/*`
+    if: (github.event_name == 'push') ||  (startsWith( github.head_ref, 'branch/' ))
+    strategy:
+      fail-fast: false
+      matrix:
+        charm-path:
+          - istio-pilot
+            istio-gateway
     steps:
-    - name: Check out code
-      uses: actions/checkout@v2
-
-    - name: Install dependencies
-      run: |
-        set -eux
-        sudo snap install juju-bundle --classic
-        sudo snap install charmcraft --classic --channel=latest/candidate
-        sudo snap install charm --classic
-
-    - name: Publish bundle
-      env:
-        CHARMSTORE_CREDENTIAL: ${{ secrets.CHARMSTORE_CREDENTIAL }}
-        CHARMCRAFT_CREDENTIALS: ${{ secrets.CHARMCRAFT_CREDENTIALS }}
-      run: |
-        set -eux
-        echo $CHARMSTORE_CREDENTIAL > ~/.go-cookies
-        mkdir -p ~/snap/charmcraft/common/config/
-        echo "$CHARMCRAFT_CREDENTIALS" > ~/snap/charmcraft/common/config/charmcraft.credentials
-        juju-bundle publish --destructive-mode --serial
+      - uses: actions/checkout@v2
+      - uses: canonical/charmhub-upload-action@0.2.0
+        with:
+          credentials: ${{ secrets.CHARMCRAFT_CREDENTIALS }}
+          charm-path: ${{ matrix.charm-path }}
+          charmcraft-channel: latest/edge
