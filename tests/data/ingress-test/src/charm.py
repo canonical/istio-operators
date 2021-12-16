@@ -24,6 +24,7 @@ class IngressTestCharm(CharmBase):
         self.framework.observe(self.ingress.on.available, self._on_ingress_available)
         self.framework.observe(self.ingress.on.ready, self._on_ingress_ready)
         self.framework.observe(self.ingress.on.failed, self._on_ingress_failed)
+        self.framework.observe(self.ingress.on.removed, self._on_ingress_removed)
         self.framework.observe(self.on.get_urls_action, self._on_get_urls_action)
 
     @property
@@ -74,6 +75,9 @@ class IngressTestCharm(CharmBase):
         self.unit.status = ActiveStatus()
 
     def _on_ingress_failed(self, event):
+        self.unit.status = self.ingress.status
+
+    def _on_ingress_removed(self, event):
         self.unit.status = self.ingress.status
 
     def _on_get_urls_action(self, action):

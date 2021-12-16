@@ -40,10 +40,15 @@ class IngressFailedEvent(EventBase):
     """Event triggered when something went wrong with the ingress relation."""
 
 
+class IngressRemovedEvent(EventBase):
+    """Event triggered when the ingress relation is removed."""
+
+
 class IngressRequirerEvents(ObjectEvents):
     available = EventSource(IngressProviderAvailableEvent)
     ready = EventSource(IngressReadyEvent)
     failed = EventSource(IngressFailedEvent)
+    removed = EventSource(IngressRemovedEvent)
 
 
 class IngressRequirer(Object):
@@ -108,6 +113,7 @@ class IngressRequirer(Object):
         if charm.unit.is_leader():
             self.framework.observe(charm.on[relation_name].relation_created, self._check_provider)
             self.framework.observe(charm.on[relation_name].relation_changed, self._check_provider)
+            self.framework.observe(charm.on[relation_name].relation_broken, self._lost_provider)
             self.framework.observe(charm.on.leader_elected, self._check_provider)
 
     def _get_status(self):
@@ -142,6 +148,12 @@ class IngressRequirer(Object):
             self.on.available.emit()
         elif isinstance(self.status, BlockedStatus):
             self.on.failed.emit()
+
+    def _lost_provider(self, event):
+        # The relation technically still exists during the -broken hook, but we want
+        # the status to reflect that it has gone away.
+        self.status = BlockedStatus(f"Missing relation: {self.relation_name}")
+        self.on.removed.emit()
 
     def request(
         self,
@@ -223,7 +235,17 @@ class IngressRequirer(Object):
         for (rel, app), data in all_data.items():
             if app is self.charm.app:
                 continue
-            return data.get("unit_urls")
+            cmr_unit_urls = data.get("unit_urls")
+            if cmr_unit_urls is None:
+                return None
+            # Workaround the fact that the other side of a CMR relation can't know
+            # our proper unit name, by using the fact that the unit numbers will be
+            # consistent, at least.
+            unit_urls = {}
+            for unit_name, unit_url in cmr_unit_urls.items():
+                unit_name = f"{self.app.name}/{unit_name.split('/')[-1]}"
+                unit_urls[unit_name] = unit_url
+            return unit_urls
         else:
             return None
 
