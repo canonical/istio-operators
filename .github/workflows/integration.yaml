@@ -51,7 +51,7 @@ jobs:
         juju bundle deploy --build
         sleep 10
         kubectl patch role -n istio-system istio-ingressgateway-operator -p '{"apiVersion":"rbac.authorization.k8s.io/v1","kind":"Role","metadata":{"name":"istio-ingressgateway-operator"},"rules":[{"apiGroups":["*"],"resources":["*"],"verbs":["*"]}]}'
-        juju wait -wvt 300
+        juju wait -wvt 300 --retry_errors 20
 
     - name: Deploy bookinfo application
       run: |
