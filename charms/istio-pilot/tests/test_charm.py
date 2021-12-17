@@ -177,8 +177,8 @@ def test_with_ingress_relation_v3(harness, subprocess):
             "password": "",
         },
     )
-    rel_id = harness.add_relation("ingress", "app")
 
+    rel_id = harness.add_relation("ingress", "app")
     harness.add_relation_unit(rel_id, "app/0")
     harness.add_relation_unit(rel_id, "app/1")
     data = {
@@ -193,6 +193,23 @@ def test_with_ingress_relation_v3(harness, subprocess):
         rel_id,
         "app",
         {"_supported_versions": "- v3", "data": yaml.dump(data)},
+    )
+
+    rel_id2 = harness.add_relation("ingress", "app2")
+    harness.add_relation_unit(rel_id2, "app2/0")
+    harness.add_relation_unit(rel_id2, "app2/1")
+    data2 = {
+        "service": "app2",
+        "port": 6666,
+        "prefix": "/app2/",
+        "rewrite": "/",
+        "namespace": "ns",
+        "per_unit_routes": False,
+    }
+    harness.update_relation_data(
+        rel_id2,
+        "app2",
+        {"_supported_versions": "- v3", "data": yaml.dump(data2)},
     )
 
     run.return_value.stdout = yaml.safe_dump(
@@ -267,6 +284,30 @@ def test_with_ingress_relation_v3(harness, subprocess):
                 'subsets': [
                     {'labels': {'statefulset.kubernetes.io/pod-name': 'app-0'}, 'name': 'app-0'},
                     {'labels': {'statefulset.kubernetes.io/pod-name': 'app-1'}, 'name': 'app-1'},
+                ],
+            },
+        },
+        {
+            'apiVersion': 'networking.istio.io/v1alpha3',
+            'kind': 'VirtualService',
+            'metadata': {'name': 'app2'},
+            'spec': {
+                'gateways': ['ns/istio-gateway'],
+                'hosts': ['*'],
+                'http': [
+                    {
+                        'name': 'app-route',
+                        'match': [{'uri': {'prefix': '/app2/'}}],
+                        'rewrite': {'uri': '/'},
+                        'route': [
+                            {
+                                'destination': {
+                                    'host': 'app2.ns.svc.cluster.local',
+                                    'port': {'number': 6666},
+                                }
+                            }
+                        ],
+                    },
                 ],
             },
         },

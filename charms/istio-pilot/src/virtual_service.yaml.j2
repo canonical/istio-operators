@@ -48,4 +48,4 @@ spec:
     labels:
       statefulset.kubernetes.io/pod-name: {{ unit.name.replace("/", "-") }}
 {%- endfor %}
-{%- endif %}
+{% endif %}

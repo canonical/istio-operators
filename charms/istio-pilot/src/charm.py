@@ -137,7 +137,9 @@ class Operator(CharmBase):
             # Filter out data we sent back.
             routes = {
                 (rel, app): route
-                for (rel, app), route in ingress.get_data().items()
+                for (rel, app), route in sorted(
+                    ingress.get_data().items(), key=lambda tup: tup[0][0].id
+                )
                 if app != self.app
             }
         else:
@@ -174,10 +176,11 @@ class Operator(CharmBase):
 
             return kwargs
 
-        virtual_services = ''.join(
+        vses = [
             t.render(**get_kwargs(rel, ingress.versions[app.name], route))
             for ((rel, app), route) in routes.items()
-        )
+        ]
+        virtual_services = ''.join(vses)
 
         self._kubectl(
             'delete',
