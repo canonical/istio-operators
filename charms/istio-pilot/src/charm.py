@@ -176,11 +176,10 @@ class Operator(CharmBase):
 
             return kwargs
 
-        vses = [
+        virtual_services = ''.join(
             t.render(**get_kwargs(rel, ingress.versions[app.name], route))
             for ((rel, app), route) in routes.items()
-        ]
-        virtual_services = ''.join(vses)
+        )
 
         self._kubectl(
             'delete',
