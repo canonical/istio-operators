@@ -65,10 +65,10 @@ async def test_deploy_bundle(ops_test: OpsTest):
     await ops_test.run(
         'kubectl',
         'wait',
-        '--for=condition=available',
-        'deployment',
+        '--for=condition=ready',
+        'pod',
         '--all',
-        '--all-namespaces',
+        '-n=default',
         '--timeout=5m',
         check=True,
     )
