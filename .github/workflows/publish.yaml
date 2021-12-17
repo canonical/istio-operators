@@ -20,8 +20,8 @@ jobs:
       fail-fast: false
       matrix:
         charm-path:
-          - istio-pilot
-            istio-gateway
+          - charms/istio-pilot
+            charms/istio-gateway
     steps:
       - uses: actions/checkout@v2
       - uses: canonical/charmhub-upload-action@0.2.0
