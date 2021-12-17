@@ -156,7 +156,7 @@ async def test_ingress(ops_test: OpsTest, client_model):
         await client_model.wait_for_idle(status="active", timeout=60)
         action = await ingress_leader.run_action("get-urls")
         output = await action.wait()
-        assert output.status == "completed"
+        assert output.status == "completed", output
         action_result = output.results
         assert action_result["url"] == f"http://{ops_test.gateway_addr}/ingress-test/"
         async with aiohttp.ClientSession(raise_for_status=True) as client:
@@ -173,10 +173,13 @@ async def test_ingress(ops_test: OpsTest, client_model):
                 page_text = await response.text()
                 assert "uuid" in page_text
     finally:
-        if relation:
-            await ingress_app.remove_relation("ingress", "istio-pilot:ingress")
-            await client_model.wait_for_idle(timeout=60)
-        if saas:
-            await client_model.remove_saas("istio-pilot")
-        if offer:
-            await ops_test.model.remove_offer("istio-pilot")
+        try:
+            if relation:
+                await ingress_app.remove_relation("ingress", "istio-pilot:ingress")
+                await client_model.wait_for_idle(timeout=60)
+            if saas:
+                await client_model.remove_saas("istio-pilot")
+            if offer:
+                await ops_test.model.remove_offer("istio-pilot")
+        except Exception as e:
+            log.warning(f"Exception during cleanup: {e}")
