@@ -173,7 +173,6 @@ async def test_ingress(ops_test: OpsTest, client_model):
                 page_text = await response.text()
                 assert "uuid" in page_text
     finally:
-        breakpoint()
         if relation:
             await ingress_app.remove_relation("ingress", "istio-pilot:ingress")
             await client_model.wait_for_idle(timeout=60)
