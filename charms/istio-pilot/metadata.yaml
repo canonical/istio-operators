@@ -13,7 +13,7 @@ resources:
   noop:
     type: oci-image
     description: ''
-    upstream-source: alpine
+    upstream-source: alpine:latest
 
 provides:
   istio-pilot:
