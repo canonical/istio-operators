@@ -172,7 +172,7 @@ class Operator(CharmBase):
             else:
                 kwargs["unit_prefix"] = prefix + "-unit-{}"
 
-            kwargs["units"] = sorted(rel.units, key=lambda u: u.name)
+            kwargs["unit_nums"] = sorted(unit.name.split("/")[-1] for unit in rel.units)
 
             return kwargs
 
