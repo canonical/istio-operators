@@ -41,5 +41,6 @@ async def client_model(ops_test, request):
         if cleanup:
             await asyncio.gather(*(app.remove() for app in model.applications))
             await model.wait_for_idle()
-            await model.disconnect()
+        await model.disconnect()
+        if cleanup:
             await ops_test._controller.destroy_model(model_name)
