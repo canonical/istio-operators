@@ -76,7 +76,8 @@ def test_default_gateways(harness, subprocess):
 
     # Check deletion calls
 
-    expected_delete_call = Call([
+    expected_delete_call = Call(
+        [
             './kubectl',
             '-n',
             None,
@@ -86,7 +87,7 @@ def test_default_gateways(harness, subprocess):
         ],
         input=None,
         capture_output=False,
-        check=True
+        check=True,
     )
     assert expected_delete_call == run.call_args_list[0]
 
@@ -106,10 +107,13 @@ def test_default_gateways(harness, subprocess):
                     {'hosts': ['*'], 'port': {'name': 'http', 'number': 80, 'protocol': 'HTTP'}}
                 ],
             },
-        } for this_gateway_name in gateway_names
+        }
+        for this_gateway_name in gateway_names
     ]
 
-    actual_manifest = list(yaml.safe_load_all(run.call_args_list[1].kwargs['input'].decode("utf-8")))
+    actual_manifest = list(
+        yaml.safe_load_all(run.call_args_list[1].kwargs['input'].decode("utf-8"))
+    )
     assert actual_manifest == expected_manifest
 
     expected_create_call_args = (
