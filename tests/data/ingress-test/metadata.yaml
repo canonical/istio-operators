@@ -7,9 +7,6 @@ requires:
   ingress:
     interface: ingress
     limit: 1
-    #schema: https://raw.githubusercontent.com/canonical/operator-schemas/master/ingress.yaml
-    schema: https://raw.githubusercontent.com/canonical/operator-schemas/1ed74c640bc289b71f261cda67177ee5209a1562/ingress.yaml
-    versions: [v3]
 
 containers:
   httpbin:

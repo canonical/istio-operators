@@ -6,11 +6,19 @@
 
 import logging
 from functools import cached_property
+from pathlib import Path
+
+import yaml
 
 from ops.charm import CharmBase
 from ops.framework import EventBase, EventSource, Object, ObjectEvents
 from ops.model import BlockedStatus, WaitingStatus
-from serialized_data_interface import get_interface, NoCompatibleVersions, NoVersionsListed
+from serialized_data_interface import (
+    get_schema,
+    SerializedDataInterface,
+    NoCompatibleVersions,
+    NoVersionsListed,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +32,11 @@ LIBAPI = 0
 # to 0 if you are raising the major API version
 LIBPATCH = 1
 
+
+SCHEMA_URL_BASE = "https://raw.githubusercontent.com/canonical/operator-schemas"
+# SCHEMA_URL = f"{SCHEMA_URL_BASE}/master/ingress.yaml"
+SCHEMA_URL = f"{SCHEMA_URL_BASE}/1ed74c640bc289b71f261cda67177ee5209a1562/ingress.yaml"
+SCHEMA_VERSIONS = {"v3"}
 
 DEFAULT_RELATION_NAME = "ingress"
 
@@ -123,13 +136,37 @@ class IngressRequirer(Object):
             # the key will always exist but may be an empty list
             return BlockedStatus(f"Missing relation: {self.relation_name}")
         try:
-            get_interface(self.charm, self.relation_name)
+            self._get_interface()
         except NoCompatibleVersions:
             return BlockedStatus(f"Relation version not compatible: {self.relation_name}")
         except NoVersionsListed:
             return WaitingStatus(f"Waiting on relation: {self.relation_name}")
         else:
             return None
+
+    def _get_interface(self):
+        """Get the SDI instance for the relation.
+
+        This provides defaults for the schema URL and supported versions so that
+        every client charm doesn't need to specify it, since they're already using
+        the versioned library which is inherently tied to a schema & version. It
+        still defers to what's in the metadata.yaml, however, so that local_sdi.py
+        can be used to inline the schema into the charm to avoid runtime network
+        access, if desired.
+        """
+        # Can't use self.charm.meta, unfortunately, because it doesn't preserve
+        # the schema or versions fields.
+        meta = yaml.safe_load(Path("metadata.yaml").read_text())
+        endpoint_spec = meta["requires"][self.relation_name]
+        schema = get_schema(endpoint_spec.get("schema", SCHEMA_URL))
+        versions = endpoint_spec.get("versions", SCHEMA_VERSIONS)
+        return SerializedDataInterface(
+            self.charm,
+            self.relation_name,
+            schema,
+            versions,
+            "requires",
+        )
 
     @property
     def is_available(self):
@@ -186,7 +223,7 @@ class IngressRequirer(Object):
             )
         if self.status is not None:
             raise RequestFailed(self.status)
-        ingress = get_interface(self.charm, self.relation_name)
+        ingress = self._get_interface()
         ingress.send_data(
             {
                 "namespace": namespace or self.model.name,
@@ -205,7 +242,7 @@ class IngressRequirer(Object):
         May return None if the URL isn't available yet.
         """
         try:
-            ingress = get_interface(self.charm, self.relation_name)
+            ingress = self._get_interface()
             if not ingress:
                 return None
         except (NoCompatibleVersions, NoVersionsListed):
@@ -226,7 +263,7 @@ class IngressRequirer(Object):
         was not requested. Otherwise, returns a map of unit name to URL.
         """
         try:
-            ingress = get_interface(self.charm, self.relation_name)
+            ingress = self._get_interface()
             if not ingress:
                 return None
         except (NoCompatibleVersions, NoVersionsListed):
@@ -243,7 +280,7 @@ class IngressRequirer(Object):
             # consistent, at least.
             unit_urls = {}
             for unit_name, unit_url in cmr_unit_urls.items():
-                unit_name = f"{self.app.name}/{unit_name.split('/')[-1]}"
+                unit_name = f"{self.charm.app.name}/{unit_name.split('/')[-1]}"
                 unit_urls[unit_name] = unit_url
             return unit_urls
         else:
