@@ -2,11 +2,10 @@
 
 import logging
 import subprocess
-from pathlib import Path
 
 import yaml
 from jinja2 import Environment, FileSystemLoader
-from ops.charm import CharmBase
+from ops.charm import CharmBase, RelationBrokenEvent
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from serialized_data_interface import NoCompatibleVersions, NoVersionsListed, get_interfaces
@@ -78,10 +77,13 @@ class Operator(CharmBase):
         self.framework.observe(self.on.install, self.install)
         self.framework.observe(self.on.remove, self.remove)
 
+        self.framework.observe(self.on.config_changed, self.handle_default_gateways)
+
         self.framework.observe(self.on["istio-pilot"].relation_changed, self.send_info)
 
         self.framework.observe(self.on['ingress'].relation_changed, self.handle_ingress)
         self.framework.observe(self.on['ingress'].relation_departed, self.handle_ingress)
+        self.framework.observe(self.on['ingress'].relation_broken, self.handle_ingress)
         self.framework.observe(self.on['ingress-auth'].relation_changed, self.handle_ingress_auth)
         self.framework.observe(self.on['ingress-auth'].relation_departed, self.handle_ingress_auth)
 
@@ -127,25 +129,45 @@ class Operator(CharmBase):
                 resource, namespace=self.model.name, ignore_unauthorized=True
             )
         self._delete_manifest(
-            manifests, namespace=self.model.name, ignore_not_found=True, ignore_unauthorized=True
-        )
+            manifests, namespace=self.model.name, ignore_not_found=True, ignore_unauthorized=True)
+
+    def handle_default_gateways(self, event):
+        t = self.env.get_template('gateway.yaml.j2')
+        gateways = self.model.config['default-gateways'].split(',')
+        manifest = ''.join(t.render(name=g, app_name=self.app.name) for g in gateways)
+        self._kubectl(
+            'delete',
+            'gateways',
+            f"-lapp.juju.is/created-by={self.app.name},"
+            f"app.{self.app.name}.io/is-workload-entity=true",
+        self._kubectl("apply", "-f-", input=manifest)
 
     def send_info(self, event):
         if self.interfaces["istio-pilot"]:
             self.interfaces["istio-pilot"].send_data(
-                {
-                    "service-name": f'istiod.{self.model.name}.svc',
-                    "service-port": '15012',
-                }
+                {"service-name": f'istiod.{self.model.name}.svc', "service-port": '15012'}
             )
 
     def handle_ingress(self, event):
+        gateway_address = self._get_gateway_address()
+        if not gateway_address:
+            self.unit.status = WaitingStatus("Waiting for gateway address")
+            event.defer()
+            return
+        else:
+            self.unit.status = ActiveStatus()
+
         ingress = self.interfaces['ingress']
 
         if ingress:
             routes = ingress.get_data().items()
         else:
-            routes = []
+            routes = {}
+
+        if isinstance(event, RelationBrokenEvent):
+            # The app-level data is still visible on a broken relation, but we
+            # shouldn't be keeping the VirtualService for that related app.
+            del routes[(event.relation, event.app)]
 
         t = self.env.get_template('virtual_service.yaml.j2')
         gateway = self.model.config['default-gateways'].split(',')[0]
@@ -155,15 +177,15 @@ class Operator(CharmBase):
 
             v1 ingress schema doesn't allow sending over a namespace.
             """
-            kwargs = {'gateway': gateway, **route}
+            kwargs = {'gateway': gateway, 'app_name': self.app.name, **route}
 
             if 'namespace' not in kwargs:
                 kwargs['namespace'] = self.model.name
 
             return kwargs
 
-        virtual_services = ''.join(
-            t.render(**get_kwargs(ingress.versions[app.name], route))
+        virtual_services = '\n---'.join(
+            t.render(**get_kwargs(ingress.versions[app.name], route)).strip().strip("---")
             for ((_, app), route) in routes
         )
 
@@ -186,16 +208,21 @@ class Operator(CharmBase):
         else:
             auth_routes = []
 
-        if not all(ar.get("service") for ar in auth_routes):
-            self.model.unit.status = WaitingStatus("Waiting for auth route connection information.")
+        if not auth_routes:
+            self.log.info("Skipping auth route creation due to empty list")
             return
 
-        rbac_configs = Path('src/rbac_config.yaml').read_text() if auth_routes else None
+        if not all(ar.get("service") for ar in auth_routes):
+            self.model.unit.status = WaitingStatus(
+                "Waiting for auth route connection information."
+            )
+            return
 
         t = self.env.get_template('auth_filter.yaml.j2')
         auth_filters = ''.join(
             t.render(
                 namespace=self.model.name,
+                app_name=self.app.name,
                 **{
                     'request_headers': yaml.safe_dump(
                         [{'exact': h} for h in r.get('allowed-request-headers', [])],
@@ -212,7 +239,7 @@ class Operator(CharmBase):
             for r in auth_routes
         )
 
-        manifests = [rbac_configs, auth_filters]
+        manifests = [auth_filters]
         manifests = '\n'.join([m for m in manifests if m])
 
         for resource in [self.envoy_filter_resource, self.rbac_config_resource]:
