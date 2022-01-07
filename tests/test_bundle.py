@@ -91,7 +91,6 @@ async def test_deploy_bundle(ops_test: OpsTest):
         'kubectl',
         'apply',
         '-f',
-        '-f',
         f'{root_url}/networking/bookinfo-gateway.yaml',
         check=True,
     )
