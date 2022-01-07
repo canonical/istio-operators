@@ -32,8 +32,12 @@ def test_not_leader(harness):
     assert harness.charm.model.unit.status == WaitingStatus('Waiting for leadership')
 
 
-def test_basic(harness, subprocess):
+def test_basic(harness, subprocess, mocker):
     check_call = subprocess.check_call
+
+    # Mock away gateway address to simulate no gateway address yet available
+    mocker.patch("charm.Operator._get_gateway_address")
+
     harness.set_leader(True)
     harness.begin_with_initial_hooks()
     container = harness.model.unit.get_container('noop')
@@ -56,9 +60,13 @@ def test_basic(harness, subprocess):
     assert harness.charm.model.unit.status == ActiveStatus('')
 
 
-def test_default_gateways(harness, subprocess):
+def test_default_gateways(harness, subprocess, mocker):
     run = subprocess.run
     check_call = subprocess.check_call
+
+    # Mock get_gateway_address to return a gateway address
+    mock_get_gateway_address = mocker.patch("charm.Operator._get_gateway_address")
+    mock_get_gateway_address.return_value = "127.0.0.1"
 
     harness.set_leader(True)
     harness.add_oci_resource(
@@ -129,9 +137,8 @@ def test_default_gateways(harness, subprocess):
     assert run.call_args_list[1].args == expected_create_call_args
 
 
-def test_with_ingress_relation(harness, subprocess):
+def test_with_ingress_relation(harness, subprocess, mocker):
     run = subprocess.run
-    check_call = subprocess.check_call
 
     harness.set_leader(True)
     harness.add_oci_resource(
@@ -148,18 +155,11 @@ def test_with_ingress_relation(harness, subprocess):
         {"_supported_versions": "- v1", "data": yaml.dump(data)},
     )
 
-    # To mock `kubectl get svc` call's return of no objs
-    run.return_value.stdout = b"{'items': []}"
+    # Mock get_gateway_address to simulate when gateway address is not available
+    mock_get_gateway_address = mocker.patch("charm.Operator._get_gateway_address")
+    mock_get_gateway_address.return_value = "127.0.0.1"
+
     harness.begin_with_initial_hooks()
-
-    assert run.call_count == 4
-    run.reset_mock()
-
-    # To mock `kubectl get svc` call's return with a loadBalancer ingress ip
-    run.return_value.stdout = yaml.safe_dump(
-        {"items": [{"status": {"loadBalancer": {"ingress": [{"ip": "127.0.0.1"}]}}}]}
-    ).encode("utf-8")
-    harness.framework.reemit()
 
     expected = [
         {
@@ -190,23 +190,9 @@ def test_with_ingress_relation(harness, subprocess):
         },
     ]
 
-    assert check_call.call_args_list == [
-        Call(
-            [
-                './istioctl',
-                'install',
-                '-y',
-                '-s',
-                'profile=minimal',
-                '-s',
-                'values.global.istioNamespace=None',
-            ]
-        )
-    ]
+    assert len(run.call_args_list) == 8
 
-    assert len(run.call_args_list) == 6
-
-    for call in run.call_args_list[1::3]:
+    for call in run.call_args_list[2::2]:
         args = [
             './kubectl',
             '-n',
@@ -217,7 +203,7 @@ def test_with_ingress_relation(harness, subprocess):
         ]
         assert call.args == (args,)
 
-    for call in run.call_args_list[2::3]:
+    for call in run.call_args_list[3::2]:
         expected_input = list(yaml.safe_load_all(call.kwargs['input']))
         assert call.args == (['./kubectl', '-n', None, 'apply', '-f-'],)
         assert expected_input == expected
@@ -225,7 +211,7 @@ def test_with_ingress_relation(harness, subprocess):
     assert isinstance(harness.charm.model.unit.status, ActiveStatus)
 
 
-def test_with_multiple_ingress_relations(harness, subprocess):
+def test_with_multiple_ingress_relations(harness, subprocess, mocker):
     run = subprocess.run
     check_call = subprocess.check_call
 
@@ -247,15 +233,11 @@ def test_with_multiple_ingress_relations(harness, subprocess):
             {"_supported_versions": "- v1", "data": yaml.dump(data)},
         )
 
-    run.return_value.stdout = b"{'items': []}"
-    harness.begin_with_initial_hooks()
+    # Mock get_gateway_address to simulate when gateway address is not available
+    mock_get_gateway_address = mocker.patch("charm.Operator._get_gateway_address")
+    mock_get_gateway_address.return_value = "127.0.0.1"
 
-    assert run.call_count == 6
-    run.reset_mock()
-    run.return_value.stdout = yaml.safe_dump(
-        {"items": [{"status": {"loadBalancer": {"ingress": [{"ip": "127.0.0.1"}]}}}]}
-    ).encode("utf-8")
-    harness.framework.reemit()
+    harness.begin_with_initial_hooks()
 
     expected = [
         {
@@ -303,7 +285,7 @@ def test_with_multiple_ingress_relations(harness, subprocess):
 
     assert len(run.call_args_list) == 12
 
-    for call in run.call_args_list[1::3]:
+    for call in run.call_args_list[2::2]:
         args = [
             './kubectl',
             '-n',
@@ -314,7 +296,7 @@ def test_with_multiple_ingress_relations(harness, subprocess):
         ]
         assert call.args == (args,)
 
-    for call in run.call_args_list[2::3]:
+    for call in run.call_args_list[3::2]:
         expected_input = list(yaml.safe_load_all(call.kwargs['input']))
         assert call.args == (['./kubectl', '-n', None, 'apply', '-f-'],)
         assert expected_input == expected
@@ -322,7 +304,7 @@ def test_with_multiple_ingress_relations(harness, subprocess):
     assert isinstance(harness.charm.model.unit.status, ActiveStatus)
 
 
-def test_with_ingress_relation_broken(harness, subprocess):
+def test_with_ingress_relation_broken(harness, subprocess, mocker):
     run = subprocess.run
 
     harness.set_leader(True)
@@ -340,10 +322,10 @@ def test_with_ingress_relation_broken(harness, subprocess):
         {"_supported_versions": "- v1", "data": yaml.dump(data)},
     )
 
-    # To mock `kubectl get svc` call's return with a loadBalancer ingress ip
-    run.return_value.stdout = yaml.safe_dump(
-        {"items": [{"status": {"loadBalancer": {"ingress": [{"ip": "127.0.0.1"}]}}}]}
-    ).encode("utf-8")
+    # Mock get_gateway_address to simulate when gateway address is not available
+    mock_get_gateway_address = mocker.patch("charm.Operator._get_gateway_address")
+    mock_get_gateway_address.return_value = "127.0.0.1"
+
     harness.begin_with_initial_hooks()
     assert run.call_count == 8
     run.reset_mock()
@@ -351,7 +333,7 @@ def test_with_ingress_relation_broken(harness, subprocess):
     harness.remove_relation(rel_id)
 
     # There are no routes in ingress, so we should only call run once to delete old items
-    assert run.call_count == 2
+    assert run.call_count == 1
 
     expected_delete_call = Call(
         [
@@ -366,12 +348,15 @@ def test_with_ingress_relation_broken(harness, subprocess):
         capture_output=False,
         check=True,
     )
-    assert expected_delete_call == run.call_args_list[1]
+    assert expected_delete_call == run.call_args_list[0]
 
 
-def test_with_ingress_auth_relation(harness, subprocess):
+def test_with_ingress_auth_relation(harness, subprocess, mocker):
     run = subprocess.run
     check_call = subprocess.check_call
+    # Mock get_gateway_address to simulate when gateway address is not available
+    mock_get_gateway_address = mocker.patch("charm.Operator._get_gateway_address")
+    mock_get_gateway_address.return_value = "127.0.0.1"
 
     harness.set_leader(True)
     harness.add_oci_resource(
@@ -463,9 +448,9 @@ def test_with_ingress_auth_relation(harness, subprocess):
         )
     ]
 
-    assert len(run.call_args_list) == 6
+    assert len(run.call_args_list) == 7
 
-    for call in run.call_args_list[2::2]:
+    for call in run.call_args_list[3::2]:
         args = [
             './kubectl',
             '-n',
@@ -476,7 +461,7 @@ def test_with_ingress_auth_relation(harness, subprocess):
         ]
         assert call.args == (args,)
 
-    for call in run.call_args_list[5::2]:
+    for call in run.call_args_list[4::2]:
         expected_input = list(yaml.safe_load_all(call.kwargs['input']))
         assert call.args == (['./kubectl', '-n', None, 'apply', '-f-'],)
         assert expected_input == expected

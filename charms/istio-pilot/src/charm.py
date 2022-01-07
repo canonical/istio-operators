@@ -131,6 +131,11 @@ class Operator(CharmBase):
             manifests, namespace=self.model.name, ignore_not_found=True, ignore_unauthorized=True)
 
     def handle_default_gateways(self, event):
+        """Handles creating gateways from charm config
+
+        Side effect: self.handle_ingress() is also invoked by this handler as ingress objects
+        depend on the default_gateway
+        """
         t = self.env.get_template('gateway.yaml.j2')
         gateways = self.model.config['default-gateways'].split(',')
         manifest = ''.join(t.render(name=g, app_name=self.app.name) for g in gateways)
@@ -140,6 +145,9 @@ class Operator(CharmBase):
             f"-lapp.juju.is/created-by={self.app.name},"
             f"app.{self.app.name}.io/is-workload-entity=true",
         self._kubectl("apply", "-f-", input=manifest)
+
+        # Update the ingress objects as they rely on the default_gateway
+        self.handle_ingress(event)
 
     def send_info(self, event):
         if self.interfaces["istio-pilot"]:
