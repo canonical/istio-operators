@@ -29,6 +29,9 @@ async def client_model(ops_test, request):
         module_name = request.module.__name__.rpartition(".")[-1]
         suffix = "".join(choices(ascii_lowercase + digits, k=4))
         model_name = f"{module_name.replace('_', '-')}-client-{suffix}"
+        if not ops_test._controller:
+            ops_test._controller = juju.model.Controller()
+            await ops_test._controller.connect(ops_test.controller_name)
         model = await ops_test._controller.add_model(model_name, cloud_name=ops_test.cloud_name)
         # NB: This call to `juju models` is needed because libjuju's
         # `add_model` doesn't update the models.yaml cache that the Juju
