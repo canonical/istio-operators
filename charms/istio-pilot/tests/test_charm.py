@@ -109,7 +109,7 @@ def test_with_ingress_relation(harness, subprocess):
             'kind': 'VirtualService',
             'metadata': {'name': 'service-name'},
             'spec': {
-                'gateways': ['None/istio-gateway'],
+                'gateways': ['istio-gateway'],
                 'hosts': ['*'],
                 'http': [
                     {
@@ -228,7 +228,7 @@ def test_with_ingress_relation_v3(harness, subprocess):
             'kind': 'VirtualService',
             'metadata': {'name': 'service-name'},
             'spec': {
-                'gateways': ['ns/istio-gateway'],
+                'gateways': ['istio-gateway'],
                 'hosts': ['*'],
                 'http': [
                     {
@@ -253,7 +253,7 @@ def test_with_ingress_relation_v3(harness, subprocess):
                                 'destination': {
                                     'host': 'service-name.ns.svc.cluster.local',
                                     'port': {'number': 6666},
-                                    'subset': 'app-0',
+                                    'subset': 'service-name-0',
                                 }
                             }
                         ],
@@ -267,7 +267,7 @@ def test_with_ingress_relation_v3(harness, subprocess):
                                 'destination': {
                                     'host': 'service-name.ns.svc.cluster.local',
                                     'port': {'number': 6666},
-                                    'subset': 'app-1',
+                                    'subset': 'service-name-1',
                                 }
                             }
                         ],
@@ -282,8 +282,14 @@ def test_with_ingress_relation_v3(harness, subprocess):
             'spec': {
                 'host': 'service-name.ns.svc.cluster.local',
                 'subsets': [
-                    {'labels': {'statefulset.kubernetes.io/pod-name': 'app-0'}, 'name': 'app-0'},
-                    {'labels': {'statefulset.kubernetes.io/pod-name': 'app-1'}, 'name': 'app-1'},
+                    {
+                        'labels': {'statefulset.kubernetes.io/pod-name': 'service-name-0'},
+                        'name': 'service-name-0',
+                    },
+                    {
+                        'labels': {'statefulset.kubernetes.io/pod-name': 'service-name-1'},
+                        'name': 'service-name-1',
+                    },
                 ],
             },
         },
@@ -292,7 +298,7 @@ def test_with_ingress_relation_v3(harness, subprocess):
             'kind': 'VirtualService',
             'metadata': {'name': 'app2'},
             'spec': {
-                'gateways': ['ns/istio-gateway'],
+                'gateways': ['istio-gateway'],
                 'hosts': ['*'],
                 'http': [
                     {
