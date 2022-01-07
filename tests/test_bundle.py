@@ -53,13 +53,12 @@ async def test_deploy_bundle(ops_test: OpsTest):
         '--overwrite=true',
         check=True,
     )
+
     await ops_test.run(
         'kubectl',
         'apply',
         '-f',
         f'{root_url}/platform/kube/bookinfo.yaml',
-        '-f',
-        f'{root_url}/networking/bookinfo-gateway.yaml',
         check=True,
     )
     for attempt in range(2):
@@ -83,6 +82,19 @@ async def test_deploy_bundle(ops_test: OpsTest):
             await sleep(2)
         else:
             break
+
+    # Wait to create the VirtualService until we know the pods are ready,
+    # otherwise there's a race condition where Istio can cache the "not ready"
+    # state and requests will always fail with 503 (service unavailable) even
+    # after the pods do come up.
+    await ops_test.run(
+        'kubectl',
+        'apply',
+        '-f',
+        '-f',
+        f'{root_url}/networking/bookinfo-gateway.yaml',
+        check=True,
+    )
 
     gateway_addr = await get_gateway_addr(ops_test)
 
