@@ -212,7 +212,7 @@ def test_with_ingress_relation(harness, subprocess):
             '-n',
             None,
             'delete',
-            'virtualservices,destinationrules',
+            'virtualservices',
             '-lapp.juju.is/created-by=istio-pilot,app.istio-pilot.io/is-workload-entity=true',
         ]
         assert call.args == (args,)
@@ -309,7 +309,7 @@ def test_with_multiple_ingress_relations(harness, subprocess):
             '-n',
             None,
             'delete',
-            'virtualservices,destinationrules',
+            'virtualservices',
             '-lapp.juju.is/created-by=istio-pilot,app.istio-pilot.io/is-workload-entity=true',
         ]
         assert call.args == (args,)
