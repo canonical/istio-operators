@@ -13,14 +13,19 @@ def pytest_addoption(parser):
         help="Name of client model to use; if not provided, will "
         "create one and clean it up after.",
     )
+    parser.addoption(
+        "--keep-client-model",
+        action="store_true",
+        help="Flag to keep the client model, if automatically created.",
+    )
 
 
 @pytest.fixture
 async def client_model(ops_test, request):
     # TODO: fold this into pytest-operator
     model_name = request.config.option.client_model
-    if not client_model:
-        cleanup = True
+    if not model_name:
+        ops_test.keep_client_model = request.config.option.keep_client_model
         module_name = request.module.__name__.rpartition(".")[-1]
         suffix = "".join(choices(ascii_lowercase + digits, k=4))
         model_name = f"{module_name.replace('_', '-')}-client-{suffix}"
@@ -32,15 +37,15 @@ async def client_model(ops_test, request):
         # update the cache from the controller.
         await ops_test.juju("models")
     else:
-        cleanup = False
+        ops_test.keep_client_model = True
         model = juju.model.Model()
         await model.connect(model_name)
     try:
         yield model
     finally:
-        if cleanup:
+        if not ops_test.keep_client_model:
             await asyncio.gather(*(app.remove() for app in model.applications))
             await model.wait_for_idle()
         await model.disconnect()
-        if cleanup:
+        if not ops_test.keep_client_model:
             await ops_test._controller.destroy_model(model_name)

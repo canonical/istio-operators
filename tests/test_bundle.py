@@ -161,16 +161,14 @@ async def test_ingress(ops_test: OpsTest, client_model):
                 assert "uuid" in page_text
     finally:
         if not ops_test.keep_model:
-            try:
-                if relation:
-                    await ingress_app.remove_relation("ingress", "istio-pilot:ingress")
-                    await client_model.wait_for_idle(timeout=60)
-                if saas:
-                    await client_model.remove_saas("istio-pilot")
-                if offer:
-                    await ops_test.model.remove_offer("istio-pilot")
-            except Exception as e:
-                log.warning(f"Exception during cleanup: {e}")
+            if relation:
+                await ingress_app.remove_relation("ingress", "istio-pilot:ingress")
+                await client_model.wait_for_idle(timeout=60)
+                await ops_test.model.wait_for_idle(timeout=60)
+            if saas:
+                await client_model.remove_saas("istio-pilot")
+            if offer:
+                await ops_test.model.remove_offer("istio-pilot")
 
 
 async def get_gateway_addr(ops_test):

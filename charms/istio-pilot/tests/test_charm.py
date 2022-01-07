@@ -164,6 +164,9 @@ def test_with_ingress_relation(harness, subprocess):
 
     assert isinstance(harness.charm.model.unit.status, ActiveStatus)
 
+    harness.remove_relation(rel_id)
+    assert isinstance(harness.charm.model.unit.status, ActiveStatus)
+
 
 def test_with_ingress_relation_v3(harness, subprocess):
     run = subprocess.run
