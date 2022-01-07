@@ -47,7 +47,7 @@ async def client_model(ops_test, request):
         yield model
     finally:
         if not ops_test.keep_client_model:
-            await asyncio.gather(*(app.remove() for app in model.applications))
+            await asyncio.gather(*(app.remove() for app in model.applications.values()))
             await model.wait_for_idle()
         await model.disconnect()
         if not ops_test.keep_client_model:
