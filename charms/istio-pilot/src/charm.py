@@ -82,7 +82,6 @@ class Operator(CharmBase):
         self.framework.observe(self.on["istio-pilot"].relation_changed, self.send_info)
 
         self.framework.observe(self.on['ingress'].relation_changed, self.handle_ingress)
-        self.framework.observe(self.on['ingress'].relation_departed, self.handle_ingress)
         self.framework.observe(self.on['ingress'].relation_broken, self.handle_ingress)
         self.framework.observe(self.on['ingress-auth'].relation_changed, self.handle_ingress_auth)
         self.framework.observe(self.on['ingress-auth'].relation_departed, self.handle_ingress_auth)
@@ -160,11 +159,18 @@ class Operator(CharmBase):
         ingress = self.interfaces['ingress']
 
         if ingress:
-            routes = ingress.get_data().items()
+            # Filter out data we sent back.
+            routes = {
+                (rel, app): route
+                for (rel, app), route in sorted(
+                    ingress.get_data().items(), key=lambda tup: tup[0][0].id
+                )
+                if app != self.app
+            }
         else:
             routes = {}
 
-        if isinstance(event, RelationBrokenEvent):
+        if isinstance(event, (RelationBrokenEvent)):
             # The app-level data is still visible on a broken relation, but we
             # shouldn't be keeping the VirtualService for that related app.
             del routes[(event.relation, event.app)]
@@ -186,7 +192,7 @@ class Operator(CharmBase):
 
         virtual_services = '\n---'.join(
             t.render(**get_kwargs(ingress.versions[app.name], route)).strip().strip("---")
-            for ((_, app), route) in routes
+            for ((_, app), route) in routes.items()
         )
 
         t = self.env.get_template('gateway.yaml.j2')

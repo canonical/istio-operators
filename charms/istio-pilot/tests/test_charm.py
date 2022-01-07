@@ -322,6 +322,53 @@ def test_with_multiple_ingress_relations(harness, subprocess):
     assert isinstance(harness.charm.model.unit.status, ActiveStatus)
 
 
+def test_with_ingress_relation_broken(harness, subprocess):
+    run = subprocess.run
+
+    harness.set_leader(True)
+    harness.add_oci_resource(
+        "noop",
+        {"registrypath": "", "username": "", "password": ""},
+    )
+    rel_id = harness.add_relation("ingress", "app")
+
+    harness.add_relation_unit(rel_id, "app/0")
+    data = {"service": "service-name", "port": 6666, "prefix": "/"}
+    harness.update_relation_data(
+        rel_id,
+        "app",
+        {"_supported_versions": "- v1", "data": yaml.dump(data)},
+    )
+
+    # To mock `kubectl get svc` call's return with a loadBalancer ingress ip
+    run.return_value.stdout = yaml.safe_dump(
+        {"items": [{"status": {"loadBalancer": {"ingress": [{"ip": "127.0.0.1"}]}}}]}
+    ).encode("utf-8")
+    harness.begin_with_initial_hooks()
+    assert run.call_count == 8
+    run.reset_mock()
+
+    harness.remove_relation(rel_id)
+
+    # There are no routes in ingress, so we should only call run once to delete old items
+    assert run.call_count == 2
+
+    expected_delete_call = Call(
+        [
+            './kubectl',
+            '-n',
+            None,
+            'delete',
+            'virtualservices',
+            '-lapp.juju.is/created-by=istio-pilot,app.istio-pilot.io/is-workload-entity=true',
+        ],
+        input=None,
+        capture_output=False,
+        check=True,
+    )
+    assert expected_delete_call == run.call_args_list[1]
+
+
 def test_with_ingress_auth_relation(harness, subprocess):
     run = subprocess.run
     check_call = subprocess.check_call
