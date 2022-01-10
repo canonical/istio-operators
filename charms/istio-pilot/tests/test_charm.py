@@ -60,7 +60,7 @@ def test_basic(harness, subprocess, mocker):
     assert harness.charm.model.unit.status == ActiveStatus('')
 
 
-def test_default_gateways(harness, subprocess, mocker):
+def test_default_gateway(harness, subprocess, mocker):
     run = subprocess.run
     check_call = subprocess.check_call
 
@@ -78,9 +78,9 @@ def test_default_gateways(harness, subprocess, mocker):
     run.reset_mock()
     check_call.reset_mock()
 
-    default_gateways = "myGateway"
-    harness.update_config({"default-gateways": default_gateways})
-    gateway_names = default_gateways.split(',')
+    default_gateway = "myGateway"
+    harness.update_config({"default-gateway": default_gateway})
+    gateway_names = default_gateway.split(',')
 
     # Check deletion calls
 

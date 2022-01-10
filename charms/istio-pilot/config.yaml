@@ -1,5 +1,5 @@
 options:
-  default-gateways:
-    default: istio-gateway
-    description: Comma-separated list of gateways to create by default
+  default-gateway:
     type: string
+    default: istio-gateway
+    description: Name to use as a default gateway
