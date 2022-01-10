@@ -81,10 +81,6 @@ class IngressTestCharm(CharmBase):
         self.unit.status = self.ingress.status
 
     def _on_get_urls_action(self, action):
-        if not self.unit.is_leader():
-            # https://github.com/canonical/serialized-data-interface/issues/27
-            action.fail("Must be called on leader")
-            return
         if not self.ingress.url:
             action.fail("Ingress URLs not available")
             return

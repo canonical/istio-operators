@@ -123,15 +123,12 @@ class IngressRequirer(Object):
         if any(self._request_args.values()) and not self._request_args["port"]:
             raise TypeError("Missing required argument: 'port'")
 
-        if charm.unit.is_leader():
-            self.framework.observe(charm.on[relation_name].relation_created, self._check_provider)
-            self.framework.observe(charm.on[relation_name].relation_changed, self._check_provider)
-            self.framework.observe(charm.on[relation_name].relation_broken, self._lost_provider)
-            self.framework.observe(charm.on.leader_elected, self._check_provider)
+        self.framework.observe(charm.on[relation_name].relation_created, self._check_provider)
+        self.framework.observe(charm.on[relation_name].relation_changed, self._check_provider)
+        self.framework.observe(charm.on[relation_name].relation_broken, self._lost_provider)
+        self.framework.observe(charm.on.leader_elected, self._check_provider)
 
     def _get_status(self):
-        if not self.charm.unit.is_leader():
-            return None
         if not self.charm.model.relations[self.relation_name]:
             # the key will always exist but may be an empty list
             return BlockedStatus(f"Missing relation: {self.relation_name}")
@@ -174,7 +171,7 @@ class IngressRequirer(Object):
 
     @property
     def is_ready(self):
-        return self.is_available and self.url
+        return self.status is None and self.url
 
     def _check_provider(self, event):
         if self.is_ready:
@@ -203,6 +200,8 @@ class IngressRequirer(Object):
         per_unit_routes: bool = False,
     ):
         """Request ingress to a service.
+
+        Note: only the leader unit can send the request.
 
         Args:
             service: the name of the target K8s service to route to; defaults to the
@@ -285,6 +284,15 @@ class IngressRequirer(Object):
             return unit_urls
         else:
             return None
+
+    @cached_property
+    def unit_url(self):
+        """The full ingress URL which map to the current unit.
+
+        May return None if the URLs aren't available yet, or if per-unit routing
+        was not requested. Otherwise, returns a URL string.
+        """
+        return self.unit_urls[self.charm.unit.name]
 
     def _validate_relation_meta(self):
         """Validate that the relation is setup properly in the metadata."""

@@ -61,7 +61,8 @@ async def test_deploy_bundle(ops_test: OpsTest):
         f'{root_url}/platform/kube/bookinfo.yaml',
         check=True,
     )
-    for attempt in range(2):
+    err = None
+    for attempt in range(5):
         try:
             await ops_test.run(
                 'kubectl',
@@ -73,15 +74,16 @@ async def test_deploy_bundle(ops_test: OpsTest):
                 '--timeout=5m',
                 check=True,
             )
-        except AssertionError:
-            if attempt > 0:
-                raise
+        except AssertionError as e:
             # This means the command failed; there's a race condition of no
             # pods existing yet so just sleep a moment and try again.
             # See: https://github.com/kubernetes/kubernetes/issues/83242
             await sleep(2)
+            err = e  # save for later in case we run out of attempts
         else:
             break
+    else:
+        raise TimeoutError("Timed out waiting for pods") from err
 
     # Wait to create the VirtualService until we know the pods are ready,
     # otherwise there's a race condition where Istio can cache the "not ready"
@@ -120,28 +122,7 @@ async def test_ingress(ops_test: OpsTest, client_model):
         resources={"httpbin-image": "kennethreitz/httpbin"},
     )
     await client_model.block_until(lambda: len(ingress_app.units) == 3, timeout=10 * 60)
-    # would be nice if wait_for_idle accepted multiple statuses
-    await client_model.block_until(
-        lambda: all(
-            unit.workload_status in {"blocked", "active", "error"} for unit in ingress_app.units
-        ),
-        timeout=10 * 60,
-    )
-    await client_model.wait_for_idle(raise_on_blocked=False)
-
-    # finding the leader should not be this difficult
-    status = await client_model.get_status()
-    units_status = status.applications["ingress-test"]["units"]
-    ingress_leader = None
-    for ingress_unit in ingress_app.units:
-        if units_status[ingress_unit.name].get("leader", False):
-            assert ingress_unit.workload_status == "blocked"
-            assert ingress_unit.workload_status_message == "Missing relation: ingress"
-            ingress_leader = ingress_unit
-        else:
-            assert ingress_unit.workload_status == "active"
-
-    assert ingress_leader is not None
+    await client_model.wait_for_idle(status="blocked", raise_on_blocked=False)
 
     gateway_addr = await get_gateway_addr(ops_test)
 
@@ -152,11 +133,26 @@ async def test_ingress(ops_test: OpsTest, client_model):
         saas = await client_model.consume(f"{model_owner}/{ops_test.model_name}.istio-pilot")
         relation = await ingress_app.add_relation("ingress", "istio-pilot:ingress")
         await client_model.wait_for_idle(status="active", timeout=60)
-        action = await ingress_leader.run_action("get-urls")
-        output = await action.wait()
-        assert output.status == "completed", dict(output)
-        action_result = output.results
-        assert action_result["url"] == f"http://{gateway_addr}/ingress-test/"
+
+        # all units should be able to read the URLs, and should all have the same info
+        for unit in ingress_app.units:
+            action = await unit.run_action("get-urls")
+            output = await action.wait()
+            assert output.status == "completed", dict(output)
+            action_result = output.results
+            assert action_result == {
+                "Code": "0",
+                "url": f"http://{gateway_addr}/ingress-test/",
+                "unit-urls": json.dumps(
+                    {
+                        unit.name: (
+                            f"http://{gateway_addr}/ingress-test-unit-{unit.name.split('/')[-1]}/"
+                        )
+                        for unit in ingress_app.units
+                    }
+                ),
+            }
+
         async with aiohttp.ClientSession(raise_for_status=True) as client:
             response = await client.get(action_result["url"] + "uuid")
             page_text = await response.text()
@@ -165,8 +161,6 @@ async def test_ingress(ops_test: OpsTest, client_model):
             for unit in ingress_app.units:
                 assert unit.name in unit_urls
             for unit_name, unit_url in unit_urls.items():
-                unit_num = unit_name.split("/")[-1]
-                assert unit_url == f"http://{gateway_addr}/ingress-test-unit-{unit_num}/"
                 response = await client.get(unit_url + "uuid")
                 page_text = await response.text()
                 assert "uuid" in page_text
