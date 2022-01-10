@@ -61,34 +61,31 @@ async def test_deploy_bundle(ops_test: OpsTest):
         f'{root_url}/platform/kube/bookinfo.yaml',
         check=True,
     )
-    err = None
-    for attempt in range(5):
-        try:
-            await ops_test.run(
-                'kubectl',
-                'wait',
-                '--for=condition=ready',
-                'pod',
-                '--all',
-                '-n=default',
-                '--timeout=5m',
-                check=True,
-            )
-        except AssertionError as e:
-            # This means the command failed; there's a race condition of no
-            # pods existing yet so just sleep a moment and try again.
-            # See: https://github.com/kubernetes/kubernetes/issues/83242
-            await sleep(2)
-            err = e  # save for later in case we run out of attempts
-        else:
-            break
-    else:
-        raise TimeoutError("Timed out waiting for pods") from err
-
+    await ops_test.run(
+        'kubectl',
+        'wait',
+        '--for=condition=available',
+        'deployment',
+        '--all',
+        '-n=default',
+        '--timeout=5m',
+        check=True,
+    )
+    # Wait for the pods as well, since the Deployment can be considered
+    # "complete" while the pods are still starting.
+    await ops_test.run(
+        'kubectl',
+        'wait',
+        '--for=condition=ready',
+        'pod',
+        '--all',
+        '-n=default',
+        '--timeout=5m',
+        check=True,
+    )
     # Wait to create the VirtualService until we know the pods are ready,
-    # otherwise there's a race condition where Istio can cache the "not ready"
-    # state and requests will always fail with 503 (service unavailable) even
-    # after the pods do come up.
+    # otherwise Istio can cache the "not ready" state and requests will always
+    # fail with 503 (service unavailable) even after the pods do come up.
     await ops_test.run(
         'kubectl',
         'apply',
