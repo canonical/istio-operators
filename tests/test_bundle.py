@@ -125,12 +125,16 @@ async def test_ingress(ops_test: OpsTest, client_model):
 
     offer, saas, relation = None, None, None
     try:
+        log.info("Creating CMR offer")
         offer = await ops_test.model.create_offer("istio-pilot:ingress")
         model_owner = untag("user-", ops_test.model.info.owner_tag)
+        log.info("Consuming CMR offer")
         saas = await client_model.consume(f"{model_owner}/{ops_test.model_name}.istio-pilot")
+        log.info("Relating to CMR offer")
         relation = await ingress_app.add_relation("ingress", "istio-pilot:ingress")
         await client_model.wait_for_idle(status="active", timeout=60)
 
+        log.info("Checking URLs")
         # all units should be able to read the URLs, and should all have the same info
         for unit in ingress_app.units:
             action = await unit.run_action("get-urls")
@@ -150,6 +154,7 @@ async def test_ingress(ops_test: OpsTest, client_model):
                 ),
             }
 
+        log.info("Verifying URLs are working")
         async with aiohttp.ClientSession(raise_for_status=True) as client:
             response = await client.get(action_result["url"] + "uuid")
             page_text = await response.text()
@@ -164,12 +169,15 @@ async def test_ingress(ops_test: OpsTest, client_model):
     finally:
         if not ops_test.keep_client_model:
             if relation:
+                log.info("Cleaning up client relation")
                 await ingress_app.remove_relation("ingress", "istio-pilot:ingress")
-                await client_model.wait_for_idle(timeout=60)
+                await client_model.wait_for_idle(raise_on_blocked=False, timeout=60)
                 await ops_test.model.wait_for_idle(timeout=60)
             if saas:
+                log.info("Removing CMR consumer")
                 await client_model.remove_saas("istio-pilot")
             if offer:
+                log.info("Removing CMR offer")
                 await ops_test.model.remove_offer("istio-pilot")
 
 
