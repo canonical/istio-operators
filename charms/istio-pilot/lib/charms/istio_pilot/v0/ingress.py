@@ -292,7 +292,7 @@ class IngressRequirer(Object):
         May return None if the URLs aren't available yet, or if per-unit routing
         was not requested. Otherwise, returns a URL string.
         """
-        return self.unit_urls[self.charm.unit.name]
+        return (self.unit_urls or {}).get(self.charm.unit.name)
 
     def _validate_relation_meta(self):
         """Validate that the relation is setup properly in the metadata."""
