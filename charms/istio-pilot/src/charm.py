@@ -268,11 +268,16 @@ class Operator(CharmBase):
             return res.stdout.decode("utf-8")
 
     def _get_gateway_address(self):
-        """Look up the load balancer address for the ingress gateway.
+        """Determine the external address for the ingress gateway.
+
+        It will prefer the `external-hostname` config if that is set, otherwise
+        it will look up the load balancer address for the ingress gateway.
 
         If the gateway isn't available or doesn't have a load balancer address yet,
         returns None.
         """
+        if self.model.config["external-hostname"]:
+            return self.model.config["external-hostname"]
         svcs = yaml.safe_load(
             self._kubectl(
                 "get",

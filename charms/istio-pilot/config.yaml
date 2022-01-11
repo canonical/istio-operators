@@ -3,3 +3,11 @@ options:
     default: istio-gateway
     description: Comma-separated list of gateways to create by default
     type: string
+  external-hostname:
+    default: ""
+    description: |
+      Externally managed hostname or address to advertise for the gateway
+      instead of its LoadBalancer's external address. If given, the hostname
+      or address will need to be set up outside of Kubernetes and route to
+      the gateway's service.
+    type: string
