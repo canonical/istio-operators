@@ -87,9 +87,9 @@ class Operator(CharmBase):
                 check=True,
             )
         except subprocess.CalledProcessError as e:
-            if "(Unauthorized)" in e.stderr.decode("utf-8"):
+            if b"(Unauthorized)" in e.stderr:
                 # Ignore error from https://bugs.launchpad.net/juju/+bug/1941655
-                pass
+                self.log.error(f"Ignoring unauthorized error during cleanup:\n{e.stderr}")
             else:
                 # But surface any other errors
                 self.log.error(e.stderr)
