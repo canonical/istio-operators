@@ -168,17 +168,20 @@ async def test_ingress(ops_test: OpsTest, client_model):
                 assert "uuid" in page_text
     finally:
         if not ops_test.keep_client_model:
-            if relation:
-                log.info("Cleaning up client relation")
-                await ingress_app.remove_relation("ingress", "istio-pilot:ingress")
-                await client_model.wait_for_idle(raise_on_blocked=False, timeout=60)
-                await ops_test.model.wait_for_idle(timeout=60)
-            if saas:
-                log.info("Removing CMR consumer")
-                await client_model.remove_saas("istio-pilot")
-            if offer:
-                log.info("Removing CMR offer")
-                await ops_test.model.remove_offer("istio-pilot")
+            try:
+                if relation:
+                    log.info("Cleaning up client relation")
+                    await ingress_app.remove_relation("ingress", "istio-pilot:ingress")
+                    await client_model.wait_for_idle(raise_on_blocked=False, timeout=60)
+                    await ops_test.model.wait_for_idle(timeout=60)
+                if saas:
+                    log.info("Removing CMR consumer")
+                    await client_model.remove_saas("istio-pilot")
+                if offer:
+                    log.info("Removing CMR offer")
+                    await ops_test.model.remove_offer("istio-pilot")
+            except Exception:
+                log.exception("Error performing cleanup")
 
 
 async def get_gateway_addr(ops_test):
