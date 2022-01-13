@@ -1,9 +1,13 @@
 import asyncio
+import logging
 from random import choices
 from string import ascii_lowercase, digits
 
 import pytest
 import juju.model
+
+
+log = logging.getLogger(__name__)
 
 
 def pytest_addoption(parser):
@@ -47,8 +51,13 @@ async def client_model(ops_test, request):
         yield model
     finally:
         if not ops_test.keep_client_model:
-            await asyncio.gather(*(app.remove() for app in model.applications.values()))
-            await model.wait_for_idle()
+            try:
+                await asyncio.gather(*(app.remove() for app in model.applications.values()))
+                await model.block_until(lambda: not model.applications, timeout=2 * 60)
+            except asyncio.TimeoutError:
+                log.error("Timed out cleaning up client model")
+            except Exception:
+                log.exception("Error cleanup in client model")
         await model.disconnect()
         if not ops_test.keep_client_model:
             await ops_test._controller.destroy_model(model_name)
