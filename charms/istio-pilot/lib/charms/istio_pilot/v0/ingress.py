@@ -5,7 +5,7 @@
 """
 
 import logging
-from functools import cached_property
+from functools import cache, cached_property
 from pathlib import Path
 
 import yaml
@@ -141,6 +141,7 @@ class IngressRequirer(Object):
         else:
             return None
 
+    @cache
     def _get_interface(self):
         """Get the SDI instance for the relation.
 
