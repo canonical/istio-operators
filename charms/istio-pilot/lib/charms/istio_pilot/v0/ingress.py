@@ -126,6 +126,7 @@ class IngressRequirer(Object):
         self.framework.observe(charm.on[relation_name].relation_changed, self._check_provider)
         self.framework.observe(charm.on[relation_name].relation_broken, self._lost_provider)
         self.framework.observe(charm.on.leader_elected, self._check_provider)
+        self.framework.observe(charm.on.upgrade_charm, self._check_upgrade)
 
     @cached_property
     def status(self):
@@ -180,6 +181,10 @@ class IngressRequirer(Object):
             self.on.available.emit()
         elif isinstance(self.status, BlockedStatus):
             self.on.failed.emit()
+
+    def _check_upgrade(self, event):
+        if self.is_available and any(self._request_args.values()):
+            self.request(**self._request_args)
 
     def _lost_provider(self, event):
         # The relation technically still exists during the -broken hook, but we want
