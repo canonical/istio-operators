@@ -5,7 +5,7 @@
 """
 
 import logging
-from functools import cache, cached_property
+from functools import cached_property
 from pathlib import Path
 
 import yaml
@@ -36,6 +36,7 @@ LIBPATCH = 1
 SCHEMA_URL_BASE = "https://raw.githubusercontent.com/canonical/operator-schemas"
 # SCHEMA_URL = f"{SCHEMA_URL_BASE}/master/ingress.yaml"
 SCHEMA_URL = f"{SCHEMA_URL_BASE}/1ed74c640bc289b71f261cda67177ee5209a1562/ingress.yaml"
+SCHEMA_FILE = Path(__file__).parent / "ingress.yaml"
 SCHEMA_VERSIONS = {"v3"}
 
 DEFAULT_RELATION_NAME = "ingress"
@@ -110,8 +111,6 @@ class IngressRequirer(Object):
 
         self._validate_relation_meta()
 
-        self.status = self._get_status()
-
         self._request_args = {
             "port": port,
             "service": service,
@@ -128,12 +127,13 @@ class IngressRequirer(Object):
         self.framework.observe(charm.on[relation_name].relation_broken, self._lost_provider)
         self.framework.observe(charm.on.leader_elected, self._check_provider)
 
-    def _get_status(self):
+    @cached_property
+    def status(self):
         if not self.charm.model.relations[self.relation_name]:
             # the key will always exist but may be an empty list
             return BlockedStatus(f"Missing relation: {self.relation_name}")
         try:
-            self._get_interface()
+            self._sdi
         except NoCompatibleVersions:
             return BlockedStatus(f"Relation version not compatible: {self.relation_name}")
         except NoVersionsListed:
@@ -141,28 +141,25 @@ class IngressRequirer(Object):
         else:
             return None
 
-    @cache
-    def _get_interface(self):
+    @cached_property
+    def _sdi(self):
         """Get the SDI instance for the relation.
 
         This provides defaults for the schema URL and supported versions so that
         every client charm doesn't need to specify it, since they're already using
         the versioned library which is inherently tied to a schema & version. It
-        still defers to what's in the metadata.yaml, however, so that local_sdi.py
-        can be used to inline the schema into the charm to avoid runtime network
-        access, if desired.
+        looks for a local copy of the schema first, to allow it to be inlined during
+        the build process to avoid a runtime network dependency.
         """
-        # Can't use self.charm.meta, unfortunately, because it doesn't preserve
-        # the schema or versions fields.
-        meta = yaml.safe_load(Path("metadata.yaml").read_text())
-        endpoint_spec = meta["requires"][self.relation_name]
-        schema = get_schema(endpoint_spec.get("schema", SCHEMA_URL))
-        versions = endpoint_spec.get("versions", SCHEMA_VERSIONS)
+        if SCHEMA_FILE.exists():
+            schema = yaml.safe_load(SCHEMA_FILE.read_text())
+        else:
+            schema = get_schema(SCHEMA_URL)
         return SerializedDataInterface(
             self.charm,
             self.relation_name,
             schema,
-            versions,
+            SCHEMA_VERSIONS,
             "requires",
         )
 
@@ -223,8 +220,7 @@ class IngressRequirer(Object):
             )
         if self.status is not None:
             raise RequestFailed(self.status)
-        ingress = self._get_interface()
-        ingress.send_data(
+        self._sdi.send_data(
             {
                 "namespace": namespace or self.model.name,
                 "prefix": prefix or f"/{self.charm.app.name}/",
@@ -236,57 +232,46 @@ class IngressRequirer(Object):
         )
 
     @cached_property
+    def _data(self):
+        try:
+            if not self._sdi:
+                return None
+        except (NoCompatibleVersions, NoVersionsListed):
+            return None
+        all_data = self._sdi.get_data()
+        for (rel, app), data in all_data.items():
+            if app is self.charm.app:
+                continue
+            if data.get("unit_urls"):
+                # Workaround the fact that the other side of a CMR relation can't know
+                # our proper unit name, by using the fact that the unit numbers will be
+                # consistent, at least.
+                data["unit_urls"] = {
+                    f"{self.charm.app.name}/{unit_name.split('/')[-1]}": unit_url
+                    for unit_name, unit_url in data["unit_urls"].items()
+                }
+            return data
+        else:
+            return {}
+
+    @property
     def url(self):
         """The full ingress URL to reach the target service by.
 
         May return None if the URL isn't available yet.
         """
-        try:
-            ingress = self._get_interface()
-            if not ingress:
-                return None
-        except (NoCompatibleVersions, NoVersionsListed):
-            return None
-        all_data = ingress.get_data()
-        for (rel, app), data in all_data.items():
-            if app is self.charm.app:
-                continue
-            return data["url"]
-        else:
-            return None
+        return self._data.get("url")
 
-    @cached_property
+    @property
     def unit_urls(self):
         """The full ingress URLs which map to each indvidual unit.
 
         May return None if the URLs aren't available yet, or if per-unit routing
         was not requested. Otherwise, returns a map of unit name to URL.
         """
-        try:
-            ingress = self._get_interface()
-            if not ingress:
-                return None
-        except (NoCompatibleVersions, NoVersionsListed):
-            return None
-        all_data = ingress.get_data()
-        for (rel, app), data in all_data.items():
-            if app is self.charm.app:
-                continue
-            cmr_unit_urls = data.get("unit_urls")
-            if cmr_unit_urls is None:
-                return None
-            # Workaround the fact that the other side of a CMR relation can't know
-            # our proper unit name, by using the fact that the unit numbers will be
-            # consistent, at least.
-            unit_urls = {}
-            for unit_name, unit_url in cmr_unit_urls.items():
-                unit_name = f"{self.charm.app.name}/{unit_name.split('/')[-1]}"
-                unit_urls[unit_name] = unit_url
-            return unit_urls
-        else:
-            return None
+        return self._data.get("unit_urls")
 
-    @cached_property
+    @property
     def unit_url(self):
         """The full ingress URL which map to the current unit.
 
@@ -312,3 +297,65 @@ class RequestFailed(Exception):
     def __init__(self, status):
         super().__init__(status.message)
         self.status = status
+
+
+class MockIngressProvider:
+    """Class to help with unit testing ingress client charms."""
+
+    app_name = "mock-ingress-provider"
+
+    def __init__(self, harness, relation_name=DEFAULT_RELATION_NAME):
+        self.harness = harness
+        self.relation_name = relation_name
+        self.relation_id = None
+        if harness.model.name is None:
+            harness._backend.model_name = "test-model"
+
+    def _clear_caches(self):
+        for attr in dir(self.harness.charm):
+            value = getattr(self.harness.charm, attr)
+            if isinstance(value, IngressRequirer) and value.relation_name == self.relation_name:
+                try:
+                    del value.status
+                    del value._data
+                    del value._sdi
+                except AttributeError:
+                    # this happens if a value hasn't been cached yet
+                    pass
+                break
+
+    def relate(self):
+        self.relation_id = self.harness.add_relation(self.relation_name, self.app_name)
+        self._clear_caches()
+        self.harness.add_relation_unit(self.relation_id, f"{self.app_name}/0")
+        self.harness.update_relation_data(
+            self.relation_id,
+            self.app_name,
+            {"_supported_versions": "[v3]"},
+        )
+
+    def respond(self):
+        request_data = self.harness.get_relation_data(self.relation_id, self.harness.charm.app.name)
+        request = yaml.safe_load(request_data["data"])
+        prefix = request["prefix"]
+        if prefix.endswith("/"):
+            tail = "/"
+            prefix = prefix[:-1]
+        else:
+            tail = ""
+        url_base = f"http://{self.app_name}"
+        response_data = {"url": f"{url_base}{prefix}{tail}"}
+        if request["per_unit_routes"]:
+            response_data["unit_urls"] = {
+                self.harness.charm.unit.name: f"{url_base}{prefix}-unit-0{tail}"
+            }
+        self._clear_caches()
+        self.harness.update_relation_data(
+            self.relation_id,
+            self.app_name,
+            {"data": yaml.safe_dump(response_data)},
+        )
+
+
+if __name__ == "__main__":
+    SCHEMA_FILE.write_text(yaml.safe_dump(get_schema(SCHEMA_URL)))
