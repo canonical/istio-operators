@@ -26,13 +26,21 @@ def test_ingress_requirer():
         ),
     )
     provider = MockIngressProvider(harness)
-    harness.set_leader(True)
+    harness.set_leader(False)
     harness.begin_with_initial_hooks()
 
     assert not harness.charm.ingress.is_available
     assert not harness.charm.ingress.is_ready
 
     provider.relate()
+    assert not harness.charm.ingress.is_available
+    assert not harness.charm.ingress.is_ready
+
+    provider.respond()
+    assert not harness.charm.ingress.is_available
+    assert not harness.charm.ingress.is_ready
+
+    harness.set_leader(True)
     assert harness.charm.ingress.is_available
     assert not harness.charm.ingress.is_ready
 

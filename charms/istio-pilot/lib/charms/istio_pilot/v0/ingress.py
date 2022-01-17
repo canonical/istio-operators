@@ -341,6 +341,8 @@ class MockIngressProvider:
 
     def respond(self):
         request_data = self.harness.get_relation_data(self.relation_id, self.harness.charm.app.name)
+        if not request_data.get("data"):
+            return
         request = yaml.safe_load(request_data["data"])
         prefix = request["prefix"]
         if prefix.endswith("/"):
