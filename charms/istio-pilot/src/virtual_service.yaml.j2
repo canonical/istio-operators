@@ -6,6 +6,9 @@ metadata:
 spec:
   gateways:
   - '{{ namespace }}/{{ gateway }}'
+  {% for i in custom_gateway %}
+  - '{{ i }}'
+  {% endfor %}
   hosts:
   - '*'
   http:

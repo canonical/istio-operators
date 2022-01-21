@@ -117,8 +117,14 @@ class Operator(CharmBase):
 
             return kwargs
 
+        custom_gateway = (
+            []
+            if self.model.config['namespaced-custom-gateways'] == ''
+            else self.model.config['namespaced-custom-gateways'].split(',')
+        )
+
         virtual_services = ''.join(
-            t.render(**get_kwargs(ingress.versions[app.name], route))
+            t.render(**get_kwargs(ingress.versions[app.name], route), custom_gateway=custom_gateway)
             for ((_, app), route) in routes
         )
 

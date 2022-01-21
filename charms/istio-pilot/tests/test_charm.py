@@ -240,3 +240,116 @@ def test_with_ingress_auth_relation(harness, mocker):
         assert expected_input == expected
 
     assert isinstance(harness.charm.model.unit.status, ActiveStatus)
+
+
+@pytest.mark.parametrize(
+    "gateways",
+    [
+        ([]),
+        (["default/gateway-A"]),
+        (["app/gateway-A", "db/gateway-B"]),
+    ],
+    ids=[
+        'No custom gateway provided',
+        'One custom gateway provided',
+        'Two custom gateway provided with different namespaces',
+    ],
+)
+def test_with_custom_gateways(harness, mocker, gateways):
+    run = mocker.patch('subprocess.run')
+    check_call = mocker.patch('subprocess.check_call')
+
+    harness.set_leader(True)
+    harness.add_oci_resource(
+        "noop",
+        {
+            "registrypath": "",
+            "username": "",
+            "password": "",
+        },
+    )
+    rel_id = harness.add_relation("ingress", "app")
+
+    harness.add_relation_unit(rel_id, "app/0")
+    data = {"service": "service-name", "port": 6666, "prefix": "/"}
+    harness.update_relation_data(
+        rel_id,
+        "app",
+        {"_supported_versions": "- v1", "data": yaml.dump(data)},
+    )
+    harness.update_config({"namespaced-custom-gateways": ",".join(gateways)})
+    harness.begin_with_initial_hooks()
+
+    expected = [
+        {
+            'apiVersion': 'networking.istio.io/v1alpha3',
+            'kind': 'VirtualService',
+            'metadata': {'name': 'service-name'},
+            'spec': {
+                'gateways': [
+                    'None/istio-gateway',
+                ]
+                + gateways,
+                'hosts': ['*'],
+                'http': [
+                    {
+                        'match': [{'uri': {'prefix': '/'}}],
+                        'rewrite': {'uri': '/'},
+                        'route': [
+                            {
+                                'destination': {
+                                    'host': 'service-name.None.svc.cluster.local',
+                                    'port': {'number': 6666},
+                                }
+                            }
+                        ],
+                    }
+                ],
+            },
+        },
+        {
+            'apiVersion': 'networking.istio.io/v1beta1',
+            'kind': 'Gateway',
+            'metadata': {'name': 'istio-gateway'},
+            'spec': {
+                'selector': {'istio': 'ingressgateway'},
+                'servers': [
+                    {'hosts': ['*'], 'port': {'name': 'http', 'number': 80, 'protocol': 'HTTP'}}
+                ],
+            },
+        },
+    ]
+
+    assert check_call.call_args_list == [
+        Call(
+            [
+                './istioctl',
+                'install',
+                '-y',
+                '-s',
+                'profile=minimal',
+                '-s',
+                'values.global.istioNamespace=None',
+            ]
+        )
+    ]
+
+    assert len(run.call_args_list) == 4
+
+    for call in run.call_args_list[::2]:
+        args = [
+            './kubectl',
+            'delete',
+            'virtualservices,gateways',
+            '-lapp.juju.is/created-by=istio-pilot',
+            '-n',
+            None,
+        ]
+        assert call.args == (args,)
+
+    for call in run.call_args_list[1::2]:
+        expected_input = list(yaml.safe_load_all(call.kwargs['input']))
+        assert call.args == (['./kubectl', 'apply', '-f-'],)
+        assert expected_input == expected
+
+    assert isinstance(harness.charm.model.unit.status, ActiveStatus)
