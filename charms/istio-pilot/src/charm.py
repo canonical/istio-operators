@@ -5,7 +5,7 @@ from pathlib import Path
 
 import yaml
 from jinja2 import Environment, FileSystemLoader
-from ops.charm import CharmBase
+from ops.charm import CharmBase, RelationJoinedEvent
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from serialized_data_interface import NoCompatibleVersions, NoVersionsListed, get_interfaces
@@ -23,6 +23,7 @@ class Operator(CharmBase):
             self.on.install,
             self.on.leader_elected,
             self.on.upgrade_charm,
+            # self.on.update_status,
             self.on.config_changed,
             self.on['ingress'].relation_changed,
             self.on["istio-pilot"].relation_changed,
