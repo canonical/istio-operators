@@ -16,21 +16,6 @@ from oci_image import OCIImageResource, OCIImageResourceError
 class Operator(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
-        if not self.unit.is_leader():
-            # We can't do anything useful when not the leader, so do nothing.
-            self.model.unit.status = WaitingStatus("Waiting for leadership")
-            return
-
-        try:
-            self.interfaces = get_interfaces(self)
-        except NoVersionsListed as err:
-            self.model.unit.status = WaitingStatus(str(err))
-            return
-        except NoCompatibleVersions as err:
-            self.model.unit.status = BlockedStatus(str(err))
-            return
-        else:
-            self.model.unit.status = ActiveStatus()
 
         self.log = logging.getLogger(__name__)
         self.image = OCIImageResource(self, "oci-image")
@@ -41,20 +26,26 @@ class Operator(CharmBase):
             self.on.update_status,
             self.on.config_changed,
             self.on['istio-pilot'].relation_changed,
+            self.on['istio-pilot'].relation_joined,
         ]:
             self.framework.observe(event, self.main)
 
     def main(self, event):
         try:
-            image_details = self.image.fetch()
-        except OCIImageResourceError as e:
-            self.model.unit.status = e.status
-            self.log.info(e)
+            self._check_leader()
+
+            interfaces = self._get_interfaces()
+
+            image_details = self._check_image_details()
+
+        except CheckFailed as error:
+            self.model.unit.status = error.status
             return
 
-        if not ((pilot := self.interfaces["istio-pilot"]) and pilot.get_data()):
+        if not ((pilot := interfaces["istio-pilot"]) and pilot.get_data()):
             self.model.unit.status = WaitingStatus("Waiting for istio-pilot relation data")
             return
+
         pilot = list(pilot.get_data().values())[0]
         pilot_url = "{service-name}:{service-port}".format(**pilot)
 
@@ -203,6 +194,26 @@ class Operator(CharmBase):
 
         self.model.unit.status = ActiveStatus()
 
+    def _check_leader(self):
+        if not self.unit.is_leader():
+            raise CheckFailed("Waiting for leadership", WaitingStatus)
+
+    def _get_interfaces(self):
+        try:
+            interfaces = get_interfaces(self)
+        except NoVersionsListed as err:
+            raise CheckFailed(str(err), WaitingStatus)
+        except NoCompatibleVersions as err:
+            raise CheckFailed(str(err), BlockedStatus)
+        return interfaces
+
+    def _check_image_details(self):
+        try:
+            image_details = self.image.fetch()
+        except OCIImageResourceError as e:
+            raise CheckFailed(f"{e.status_message}: oci-image", e.status_type)
+        return image_details
+
     def check_ca_root_cert(self, namespace):
         # Workaround due to this bug: https://bugs.launchpad.net/juju/+bug/1892255
         os.environ.update(
@@ -230,6 +241,17 @@ class Operator(CharmBase):
             self.model.unit.status = BlockedStatus("istio-ca-root-cert certificate not found.")
             return None
         return config_map
+
+
+class CheckFailed(Exception):
+    """ Raise this exception if one of the checks in main fails. """
+
+    def __init__(self, msg, status_type=None):
+        super().__init__()
+
+        self.msg = msg
+        self.status_type = status_type
+        self.status = status_type(msg)
 
 
 if __name__ == "__main__":

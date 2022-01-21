@@ -8,4 +8,6 @@ bases:
       channel: "20.04"
 parts:
   charm:
+    prime: 
+      - ./files/crds.yaml
     charm-python-packages: [setuptools, pip]
