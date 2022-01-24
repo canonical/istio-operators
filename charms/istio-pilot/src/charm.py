@@ -5,7 +5,7 @@ from pathlib import Path
 
 import yaml
 from jinja2 import Environment, FileSystemLoader
-from ops.charm import CharmBase, RelationJoinedEvent
+from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from serialized_data_interface import NoCompatibleVersions, NoVersionsListed, get_interfaces

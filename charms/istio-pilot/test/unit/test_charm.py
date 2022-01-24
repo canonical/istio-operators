@@ -1,5 +1,4 @@
 import pytest
-import pdb
 
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.testing import Harness
@@ -78,6 +77,7 @@ def test_main_service_mesh(harness):
     else:
         assert False
 
+
 # def test_main_istio_pilot(harness):
 #     harness.set_leader(True)
 #     harness.add_oci_resource(
@@ -91,7 +91,7 @@ def test_main_service_mesh(harness):
 #     harness.begin_with_initial_hooks()
 #     rel_id = harness.add_relation("istio-pilot", "app")
 #     # harness.add_relation_unit(rel_id, "app/0")
-#     
+#
 #     relation = harness.model.get_relation("istio-pilot", rel_id)
 #     # data = {
 #     #     "service-name": "service",
@@ -106,7 +106,5 @@ def test_main_service_mesh(harness):
 #     #     {"_supported_versions": "- v1", "data": yaml.dump(data)},
 #     # )
 #     harness.charm.on.istio_pilot_relation_joined.emit(relation)
-# 
+#
 #     assert relation.data[harness.charm.app] == None
-
-
