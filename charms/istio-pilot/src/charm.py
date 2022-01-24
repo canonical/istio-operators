@@ -10,6 +10,9 @@ from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from serialized_data_interface import NoCompatibleVersions, NoVersionsListed, get_interfaces
+from lightkube import Client, codecs
+from lightkube.core.exceptions import ApiError
+from lightkube.generic_resource import create_namespaced_resource
 
 
 class Operator(CharmBase):
@@ -33,6 +36,42 @@ class Operator(CharmBase):
             self.model.unit.status = ActiveStatus()
 
         self.log = logging.getLogger(__name__)
+
+        # Every lightkube API call will use the model name as the namespace by default
+        self.lightkube_client = Client(namespace=self.model.name, field_manager="lightkube")
+        # Create namespaced resource classes for lightkube client
+        # This is necessary for lightkube to interact with custom resources
+        self.envoy_filter_resource = create_namespaced_resource(
+            group="networking.istio.io",
+            version="v1alpha3",
+            kind="EnvoyFilter",
+            plural="envoyfilters",
+            verbs=None,
+        )
+
+        self.virtual_service_resource = create_namespaced_resource(
+            group="networking.istio.io",
+            version="v1alpha3",
+            kind="VirtualService",
+            plural="virtualservices",
+            verbs=None,
+        )
+
+        self.gateway_resource = create_namespaced_resource(
+            group="networking.istio.io",
+            version="v1beta1",
+            kind="Gateway",
+            plural="gateways",
+            verbs=None,
+        )
+
+        self.rbac_config_resource = create_namespaced_resource(
+            group="rbac.istio.io",
+            version="v1alpha1",
+            kind="RbacConfig",
+            plural="rbacconfigs",
+            verbs=None,
+        )
 
         self.env = Environment(loader=FileSystemLoader('src'))
 
@@ -78,11 +117,17 @@ class Operator(CharmBase):
             ]
         )
 
-        subprocess.run(
-            ["./kubectl", "delete", "-f-", "--ignore-not-found"],
-            input=manifests,
-            # Can't remove stuff yet: https://bugs.launchpad.net/juju/+bug/1941655
-            # check=True,
+        for resource in [
+            self.virtual_service_resource,
+            self.gateway_resource,
+            self.envoy_filter_resource,
+            self.rbac_config_resource,
+        ]:
+            self._delete_existing_resource_objects(
+                resource, namespace=self.model.name, ignore_unauthorized=True
+            )
+        self._delete_manifest(
+            manifests, namespace=self.model.name, ignore_not_found=True, ignore_unauthorized=True
         )
 
     def send_info(self, event):
@@ -129,22 +174,10 @@ class Operator(CharmBase):
         manifests = [virtual_services, gateways]
         manifests = '\n'.join([m for m in manifests if m])
 
-        subprocess.run(
-            [
-                './kubectl',
-                'delete',
-                'virtualservices,gateways',
-                f'-lapp.juju.is/created-by={self.model.app.name}',
-                '-n',
-                self.model.name,
-            ],
-            check=True,
-        )
-        subprocess.run(
-            ["./kubectl", "apply", "-f-"],
-            input=manifests.encode('utf-8'),
-            check=True,
-        )
+        for resource in [self.virtual_service_resource, self.gateway_resource]:
+            self._delete_existing_resource_objects(resource, namespace=self.model.name)
+
+        self._apply_manifest(manifests, namespace=self.model.name)
 
     def handle_ingress_auth(self, event):
         auth_routes = self.interfaces['ingress-auth']
@@ -181,23 +214,57 @@ class Operator(CharmBase):
 
         manifests = [rbac_configs, auth_filters]
         manifests = '\n'.join([m for m in manifests if m])
-        subprocess.run(
-            [
-                './kubectl',
-                'delete',
-                'envoyfilters,rbacconfigs',
-                f'-lapp.juju.is/created-by={self.model.app.name}',
-                '-n',
-                self.model.name,
-            ],
-            check=True,
-        )
 
-        subprocess.run(
-            ["./kubectl", "apply", "-f-"],
-            input=manifests.encode('utf-8'),
-            check=True,
-        )
+        for resource in [self.envoy_filter_resource, self.rbac_config_resource]:
+            self._delete_existing_resource_objects(resource, namespace=self.model.name)
+        self._apply_manifest(manifests, namespace=self.model.name)
+
+    def _delete_object(
+        self, obj, namespace=None, ignore_not_found=False, ignore_unauthorized=False
+    ):
+        try:
+            self.lightkube_client.delete(type(obj), obj.metadata.name, namespace=namespace)
+        except ApiError as err:
+            self.log.exception("ApiError encountered while attempting to delete resource.")
+            if err.status.message is not None:
+                if "not found" in err.status.message and ignore_not_found:
+                    self.log.error(f"Ignoring not found error:\n{err.status.message}")
+                elif "(Unauthorized)" in err.status.message and ignore_unauthorized:
+                    # Ignore error from https://bugs.launchpad.net/juju/+bug/1941655
+                    self.log.error(f"Ignoring unauthorized error:\n{err.status.message}")
+                else:
+                    self.log.error(err.status.message)
+                    raise
+            else:
+                raise
+
+    def _delete_existing_resource_objects(
+        self, resource, namespace=None, ignore_not_found=False, ignore_unauthorized=False
+    ):
+        for obj in self.lightkube_client.list(
+            resource, labels={"app.juju.is/created-by": f"{self.app.name}"}
+        ):
+            self._delete_object(
+                obj,
+                namespace=namespace,
+                ignore_not_found=ignore_not_found,
+                ignore_unauthorized=ignore_unauthorized,
+            )
+
+    def _apply_manifest(self, manifest, namespace=None):
+        for obj in codecs.load_all_yaml(manifest):
+            self.lightkube_client.apply(obj, namespace=namespace)
+
+    def _delete_manifest(
+        self, manifest, namespace=None, ignore_not_found=False, ignore_unauthorized=False
+    ):
+        for obj in codecs.load_all_yaml(manifest):
+            self._delete_object(
+                obj,
+                namespace=namespace,
+                ignore_not_found=ignore_not_found,
+                ignore_unauthorized=ignore_unauthorized,
+            )
 
 
 if __name__ == "__main__":

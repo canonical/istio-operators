@@ -297,7 +297,6 @@ subjects:
 apiVersion: v1
 kind: Service
 metadata:
-  annotations:
   labels:
     app: istio-{{ kind }}gateway
     install.operator.istio.io/owning-resource: unknown

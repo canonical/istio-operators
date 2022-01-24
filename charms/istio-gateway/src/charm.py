@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 
 import logging
-import subprocess
 
 from jinja2 import Environment, FileSystemLoader
 from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from serialized_data_interface import NoCompatibleVersions, NoVersionsListed, get_interfaces
+from lightkube import Client, codecs
+from lightkube.core.exceptions import ApiError
 
 
 class Operator(CharmBase):
@@ -31,6 +32,9 @@ class Operator(CharmBase):
             self.model.unit.status = ActiveStatus()
 
         self.log = logging.getLogger(__name__)
+
+        # Every lightkube API call will use the model name as the namespace by default
+        self.lightkube_client = Client(namespace=self.model.name, field_manager="lightkube")
 
         self.framework.observe(self.on.install, self.install)
         self.framework.observe(self.on["istio-pilot"].relation_changed, self.install)
@@ -63,7 +67,8 @@ class Operator(CharmBase):
             pilot_port=pilot['service-port'],
         )
 
-        subprocess.run(["./kubectl", "apply", "-f-"], input=rendered.encode('utf-8'), check=True)
+        for obj in codecs.load_all_yaml(rendered):
+            self.lightkube_client.apply(obj, namespace=obj.metadata.namespace)
 
         self.unit.status = ActiveStatus()
 
@@ -79,12 +84,25 @@ class Operator(CharmBase):
             pilot_port='foo',
         )
 
-        subprocess.run(
-            ["./kubectl", "delete", "-f-"],
-            input=rendered.encode('utf-8'),
-            # Can't remove stuff yet: https://bugs.launchpad.net/juju/+bug/1941655
-            # check=True
-        )
+        try:
+            for obj in codecs.load_all_yaml(rendered):
+                self.lightkube_client.delete(
+                    type(obj), obj.metadata.name, namespace=obj.metadata.namespace
+                )
+        except ApiError as err:
+            self.log.exception("ApiError encountered while attempting to delete resource.")
+            if err.status.message is not None:
+                if "(Unauthorized)" in err.status.message:
+                    # Ignore error from https://bugs.launchpad.net/juju/+bug/1941655
+                    self.log.error(
+                        f"Ignoring unauthorized error during cleanup:" f"\n{err.status.message}"
+                    )
+                else:
+                    # But surface any other errors
+                    self.log.error(err.status.message)
+                    raise
+            else:
+                raise
 
 
 if __name__ == "__main__":
