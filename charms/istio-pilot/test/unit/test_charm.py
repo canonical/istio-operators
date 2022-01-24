@@ -13,7 +13,7 @@ def harness():
 
 
 def test_not_leader(harness):
-    harness.begin()
+    harness.begin_with_initial_hooks()
     assert isinstance(harness.charm.model.unit.status, WaitingStatus)
 
 
@@ -76,3 +76,35 @@ def test_main_service_mesh(harness):
             break
     else:
         assert False
+
+
+# def test_main_istio_pilot(harness):
+#     harness.set_leader(True)
+#     harness.add_oci_resource(
+#         "oci-image",
+#         {
+#             "registrypath": "docker.io/istio/pilot:1.5.0",
+#             "username": "",
+#             "password": "",
+#         },
+#     )
+#     harness.begin_with_initial_hooks()
+#     rel_id = harness.add_relation("istio-pilot", "app")
+#     # harness.add_relation_unit(rel_id, "app/0")
+#
+#     relation = harness.model.get_relation("istio-pilot", rel_id)
+#     # data = {
+#     #     "service-name": "service",
+#     #     "service-port": "666",
+#     # }
+#     relation.data[relation.app]._is_mutable = lambda: True
+#     relation.data[relation.app]["_supported_versions"] = "- v1"
+#     # relation.data[relation.app]["data"] = yaml.dump(data)
+#     # harness.update_relation_data(
+#     #     rel_id,
+#     #     "app",
+#     #     {"_supported_versions": "- v1", "data": yaml.dump(data)},
+#     # )
+#     harness.charm.on.istio_pilot_relation_joined.emit(relation)
+#
+#     assert relation.data[harness.charm.app] == None

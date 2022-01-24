@@ -17,59 +17,55 @@ class Operator(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
 
-        if not self.unit.is_leader():
-            # We can't do anything useful when not the leader, so do nothing.
-            self.model.unit.status = WaitingStatus("Waiting for leadership")
-            return
-
-        try:
-            self.interfaces = get_interfaces(self)
-        except NoVersionsListed as err:
-            self.model.unit.status = WaitingStatus(str(err))
-            return
-        except NoCompatibleVersions as err:
-            self.model.unit.status = BlockedStatus(str(err))
-            return
-        else:
-            self.model.unit.status = ActiveStatus()
-
         self.log = logging.getLogger(__name__)
         self.image = OCIImageResource(self, "oci-image")
         for event in [
             self.on.install,
             self.on.leader_elected,
             self.on.upgrade_charm,
+            self.on.update_status,
             self.on.config_changed,
             self.on['ingress'].relation_changed,
+            self.on["istio-pilot"].relation_changed,
+            self.on["istio-pilot"].relation_joined,
         ]:
             self.framework.observe(event, self.set_pod_spec)
 
-        self.framework.observe(self.on["istio-pilot"].relation_changed, self.send_info)
-
-    def send_info(self, event):
-        if self.interfaces["istio-pilot"]:
-            self.interfaces["istio-pilot"].send_data(
+    def _send_info(self, interfaces):
+        if interfaces["istio-pilot"]:
+            interfaces["istio-pilot"].send_data(
                 {
                     "service-name": f'{self.model.app.name}.{self.model.name}.svc',
                     "service-port": str(self.model.config['xds-ca-tls-port']),
                 }
             )
+            self.log.info("istio-pilot relation is available.  Service data written to relation")
+        else:
+            self.log.info(
+                "istio-pilot relation not available.  " "No service data written to relation"
+            )
 
     def set_pod_spec(self, event):
         try:
-            image_details = self.image.fetch()
-        except OCIImageResourceError as e:
-            self.model.unit.status = e.status
-            self.log.info(e)
+            self._check_leader()
+
+            interfaces = self._get_interfaces()
+
+            image_details = self._check_image_details()
+
+        except CheckFailed as error:
+            self.model.unit.status = error.status
             return
 
         self.model.unit.status = MaintenanceStatus("Setting pod spec")
+
+        self._send_info(interfaces)
 
         config = self.model.config
         namespace = self.model.name
         service_name = self.model.app.name
 
-        routes = self.interfaces['ingress']
+        routes = interfaces['ingress']
         if routes:
             routes = list(routes.get_data().values())
         else:
@@ -123,7 +119,7 @@ class Operator(CharmBase):
             },
         }
 
-        auth_routes = self.interfaces['ingress-auth']
+        auth_routes = interfaces['ingress-auth']
         if auth_routes:
             auth_routes = list(auth_routes.get_data().values())
         else:
@@ -363,6 +359,37 @@ class Operator(CharmBase):
         )
 
         self.model.unit.status = ActiveStatus()
+
+    def _check_leader(self):
+        if not self.unit.is_leader():
+            raise CheckFailed("Waiting for leadership", WaitingStatus)
+
+    def _get_interfaces(self):
+        try:
+            interfaces = get_interfaces(self)
+        except NoVersionsListed as err:
+            raise CheckFailed(str(err), WaitingStatus)
+        except NoCompatibleVersions as err:
+            raise CheckFailed(str(err), BlockedStatus)
+        return interfaces
+
+    def _check_image_details(self):
+        try:
+            image_details = self.image.fetch()
+        except OCIImageResourceError as e:
+            raise CheckFailed(f"{e.status_message}: oci-image", e.status_type)
+        return image_details
+
+
+class CheckFailed(Exception):
+    """Raise this exception if one of the checks in main fails."""
+
+    def __init__(self, msg, status_type=None):
+        super().__init__()
+
+        self.msg = str(msg)
+        self.status_type = status_type
+        self.status = status_type(msg)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,4 @@
-ops==1.1.0
-git+https://github.com/charmed-kubernetes/interface-k8s-service
+ops==1.3.0
 oci-image==1.0.0
 jinja2==2.11.3
 serialized-data-interface<0.4
