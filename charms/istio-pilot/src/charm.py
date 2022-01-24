@@ -41,7 +41,8 @@ class Operator(CharmBase):
             )
             self.log.info("istio-pilot relation is available.  Service data written to relation")
         else:
-            self.log.info("istio-pilot relation not available.  No service data written to relation")
+            self.log.info("istio-pilot relation not available.  "
+                          "No service data written to relation")
 
     def set_pod_spec(self, event):
         try:
