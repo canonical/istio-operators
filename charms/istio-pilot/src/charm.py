@@ -10,6 +10,7 @@ from ops.charm import CharmBase, RelationBrokenEvent
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from serialized_data_interface import NoCompatibleVersions, NoVersionsListed, get_interfaces
+from charms.istio_pilot.v0.ingress_per_unit import IngressPerUnitProvider
 
 
 class Operator(CharmBase):
@@ -20,6 +21,8 @@ class Operator(CharmBase):
             # We can't do anything useful when not the leader, so do nothing.
             self.model.unit.status = WaitingStatus("Waiting for leadership")
             return
+
+        self.ingress_per_unit = IngressPerUnitProvider(self)
 
         try:
             self.interfaces = get_interfaces(self)
@@ -48,6 +51,9 @@ class Operator(CharmBase):
         self.framework.observe(self.on['ingress'].relation_broken, self.handle_ingress)
         self.framework.observe(self.on['ingress-auth'].relation_changed, self.handle_ingress_auth)
         self.framework.observe(self.on['ingress-auth'].relation_departed, self.handle_ingress_auth)
+
+        self.framework.observe(self.ingress_per_unit.on.ready, self.handle_ingress_per_unit)
+        self.framework.observe(self.ingress_per_unit.on.failed, self.handle_ingress_per_unit_failed)
 
     def install(self, event):
         """Install charm."""
@@ -165,14 +171,6 @@ class Operator(CharmBase):
 
             prefix = kwargs["prefix"]
             kwargs.setdefault("rewrite", prefix)
-            if prefix == "/":
-                kwargs["unit_prefix"] = "/unit-{}/"
-            elif prefix.endswith("/"):
-                kwargs["unit_prefix"] = prefix[:-1] + "-unit-{}/"
-            else:
-                kwargs["unit_prefix"] = prefix + "-unit-{}"
-
-            kwargs["unit_nums"] = sorted(unit.name.split("/")[-1] for unit in rel.units)
 
             return kwargs
 
@@ -188,23 +186,6 @@ class Operator(CharmBase):
         )
         if routes:
             self._kubectl("apply", "-f-", input=virtual_services)
-
-        # Send URL(s) back
-        for (rel, app), route in routes.items():
-            if int(ingress.versions[app.name][1:]) < 3:
-                # only version 3+ supports response data
-                continue
-            prefix = route["prefix"].strip("/")
-            response_data = {
-                "url": f"http://{gateway_address}/{prefix}/",
-            }
-            if route.get("per_unit_routes", False):
-                unit_urls = response_data["unit_urls"] = {}
-                for unit in rel.units:
-                    unit_num = unit.name.split("/")[-1]
-                    unit_path = f"{prefix}-unit-{unit_num}"
-                    unit_urls[unit.name] = f"http://{gateway_address}/{unit_path}/"
-            ingress.send_data(response_data, app_name=app.name)
 
     def handle_ingress_auth(self, event):
         auth_routes = self.interfaces['ingress-auth']
@@ -248,6 +229,56 @@ class Operator(CharmBase):
         )
 
         self._kubectl("apply", "-f-", input=manifests)
+
+    def handle_ingress_per_unit(self, event):
+        gateway_address = self._get_gateway_address()
+        if not gateway_address:
+            self.unit.status = WaitingStatus("Waiting for gateway address")
+            event.defer()
+            return
+        else:
+            self.unit.status = ActiveStatus()
+
+        request = self.ingress_per_unit.get_request(event.relation)
+        self._kubectl(
+            'delete',
+            'virtualservices,destinationrules',
+            '-l',
+            ','.join(
+                [
+                    f'app.juju.is/created-by={self.app.name}',
+                    f'app.juju.is/for={request.name}',
+                ]
+            ),
+        )
+        t = self.env.get_template('virtual_service.yaml.j2')
+        self._kubectl("apply", "-f-", input=t.render(gateway=gateway_address, request=request))
+
+        request.send_urls(
+            {unit: f"http://{gateway_address}/{unit.prefix}/" for unit in request.units}
+        )
+
+    def handle_ingress_per_unit_broken(self, event):
+        request = self.ingress_per_unit.get_request(event.relation)
+        try:
+            self._kubectl(
+                'delete',
+                'virtualservices,destinationrules',
+                '-l',
+                ','.join(
+                    [
+                        f'app.juju.is/created-by={self.app.name}',
+                        f'app.juju.is/for={request.name}',
+                    ]
+                ),
+            )
+        except subprocess.CalledProcessError as e:
+            self.log.exception(
+                f"Failed to clean up for {event.relation}: {e.stderr or e.stdout}"
+            )
+
+    def handle_ingress_per_unit_failed(self, event):
+        self.charm.unit.status = self.ingress_per_unit.get_status(event.relation)
 
     def _kubectl(self, *args, namespace=None, input=None, capture_output=False):
         """Helper for running kubectl."""

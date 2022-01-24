@@ -2,3 +2,4 @@ jinja2<3.1
 ops<1.4.0
 requests<2.27.0
 serialized-data-interface<0.4
+sborl<1.0

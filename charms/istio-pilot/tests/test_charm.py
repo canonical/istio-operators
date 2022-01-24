@@ -6,6 +6,8 @@ from charm import Operator
 from ops.model import ActiveStatus, WaitingStatus
 from ops.testing import Harness
 
+from charms.istio_pilot.v0.ingress_unit.testing import MockIPURequirer
+
 
 # autouse to ensure we don't accidentally call out, but
 # can also be used explicitly to get access to the mock.
@@ -168,8 +170,9 @@ def test_with_ingress_relation(harness, subprocess):
     assert isinstance(harness.charm.model.unit.status, ActiveStatus)
 
 
-def test_with_ingress_relation_v3(harness, subprocess):
+def test_with_ingress_auth_relation(harness, subprocess):
     run = subprocess.run
+    check_call = subprocess.check_call
 
     harness.set_leader(True)
     harness.add_oci_resource(
@@ -180,6 +183,117 @@ def test_with_ingress_relation_v3(harness, subprocess):
             "password": "",
         },
     )
+    rel_id = harness.add_relation("ingress-auth", "app")
+
+    harness.add_relation_unit(rel_id, "app/0")
+    data = {
+        "service": "service-name",
+        "port": 6666,
+        "allowed-request-headers": ['foo'],
+        "allowed-response-headers": ['bar'],
+    }
+    harness.update_relation_data(
+        rel_id,
+        "app",
+        {"_supported_versions": "- v1", "data": yaml.dump(data)},
+    )
+    harness.begin_with_initial_hooks()
+
+    expected = [
+        {
+            'apiVersion': 'rbac.istio.io/v1alpha1',
+            'kind': 'RbacConfig',
+            'metadata': {'name': 'default'},
+            'spec': {'mode': 'OFF'},
+        },
+        {
+            'apiVersion': 'networking.istio.io/v1alpha3',
+            'kind': 'EnvoyFilter',
+            'metadata': {'name': 'authn-filter'},
+            'spec': {
+                'filters': [
+                    {
+                        'filterConfig': {
+                            'httpService': {
+                                'authorizationRequest': {
+                                    'allowedHeaders': {'patterns': [{'exact': 'foo'}]}
+                                },
+                                'authorizationResponse': {
+                                    'allowedUpstreamHeaders': {'patterns': [{'exact': 'bar'}]}
+                                },
+                                'serverUri': {
+                                    'cluster': 'outbound|6666||service-name.None.svc.cluster.local',
+                                    'failureModeAllow': False,
+                                    'timeout': '10s',
+                                    'uri': 'http://service-name.None.svc.cluster.local:6666',
+                                },
+                            }
+                        },
+                        'filterName': 'envoy.ext_authz',
+                        'filterType': 'HTTP',
+                        'insertPosition': {'index': 'FIRST'},
+                        'listenerMatch': {'listenerType': 'GATEWAY'},
+                    }
+                ],
+                'workloadLabels': {'istio': 'ingressgateway'},
+            },
+        },
+    ]
+
+    assert check_call.call_args_list == [
+        Call(
+            [
+                './istioctl',
+                'install',
+                '-y',
+                '-s',
+                'profile=minimal',
+                '-s',
+                'values.global.istioNamespace=None',
+            ]
+        )
+    ]
+
+    assert run.call_count == 6
+
+    for call in run.call_args_list[2::2]:
+        args = [
+            './kubectl',
+            '-n',
+            None,
+            'delete',
+            'envoyfilters,rbacconfigs',
+            '-lapp.juju.is/created-by=istio-pilot',
+        ]
+        assert call.args == (args,)
+
+    for call in run.call_args_list[5::2]:
+        expected_input = list(yaml.safe_load_all(call.kwargs['input']))
+        assert call.args == (['./kubectl', '-n', None, 'apply', '-f-'],)
+        assert expected_input == expected
+
+    assert isinstance(harness.charm.model.unit.status, ActiveStatus)
+
+
+def test_with_ingress_per_unit(harness, subprocess):
+    run = subprocess.run
+
+    requirer = MockIPURequirer(harness)
+    requirer.add_unit()
+
+    harness.set_leader(True)
+    harness.add_oci_resource(
+        "noop",
+        {
+            "registrypath": "",
+            "username": "",
+            "password": "",
+        },
+    )
+    harness.begin_with_initial_hooks()
+
+    relation = requirer.relate()
+    requirer.request(port=80)
 
     rel_id = harness.add_relation("ingress", "app")
     harness.add_relation_unit(rel_id, "app/0")
@@ -218,12 +332,6 @@ def test_with_ingress_relation_v3(harness, subprocess):
     run.return_value.stdout = yaml.safe_dump(
         {"items": [{"status": {"loadBalancer": {"ingress": [{"ip": "127.0.0.1"}]}}}]}
     ).encode("utf-8")
-    try:
-        harness.begin_with_initial_hooks()
-    except KeyError as e:
-        if str(e) == "'v3'":
-            pytest.xfail("Schema v3 not merged yet")
-        raise
 
     expected_input = [
         {
@@ -336,108 +444,3 @@ def test_with_ingress_relation_v3(harness, subprocess):
             "app/1": "http://127.0.0.1/app-unit-1/",
         },
     }
-
-
-def test_with_ingress_auth_relation(harness, subprocess):
-    run = subprocess.run
-    check_call = subprocess.check_call
-
-    harness.set_leader(True)
-    harness.add_oci_resource(
-        "noop",
-        {
-            "registrypath": "",
-            "username": "",
-            "password": "",
-        },
-    )
-    rel_id = harness.add_relation("ingress-auth", "app")
-
-    harness.add_relation_unit(rel_id, "app/0")
-    data = {
-        "service": "service-name",
-        "port": 6666,
-        "allowed-request-headers": ['foo'],
-        "allowed-response-headers": ['bar'],
-    }
-    harness.update_relation_data(
-        rel_id,
-        "app",
-        {"_supported_versions": "- v1", "data": yaml.dump(data)},
-    )
-    harness.begin_with_initial_hooks()
-
-    expected = [
-        {
-            'apiVersion': 'rbac.istio.io/v1alpha1',
-            'kind': 'RbacConfig',
-            'metadata': {'name': 'default'},
-            'spec': {'mode': 'OFF'},
-        },
-        {
-            'apiVersion': 'networking.istio.io/v1alpha3',
-            'kind': 'EnvoyFilter',
-            'metadata': {'name': 'authn-filter'},
-            'spec': {
-                'filters': [
-                    {
-                        'filterConfig': {
-                            'httpService': {
-                                'authorizationRequest': {
-                                    'allowedHeaders': {'patterns': [{'exact': 'foo'}]}
-                                },
-                                'authorizationResponse': {
-                                    'allowedUpstreamHeaders': {'patterns': [{'exact': 'bar'}]}
-                                },
-                                'serverUri': {
-                                    'cluster': 'outbound|6666||service-name.None.svc.cluster.local',
-                                    'failureModeAllow': False,
-                                    'timeout': '10s',
-                                    'uri': 'http://service-name.None.svc.cluster.local:6666',
-                                },
-                            }
-                        },
-                        'filterName': 'envoy.ext_authz',
-                        'filterType': 'HTTP',
-                        'insertPosition': {'index': 'FIRST'},
-                        'listenerMatch': {'listenerType': 'GATEWAY'},
-                    }
-                ],
-                'workloadLabels': {'istio': 'ingressgateway'},
-            },
-        },
-    ]
-
-    assert check_call.call_args_list == [
-        Call(
-            [
-                './istioctl',
-                'install',
-                '-y',
-                '-s',
-                'profile=minimal',
-                '-s',
-                'values.global.istioNamespace=None',
-            ]
-        )
-    ]
-
-    assert run.call_count == 6
-
-    for call in run.call_args_list[2::2]:
-        args = [
-            './kubectl',
-            '-n',
-            None,
-            'delete',
-            'envoyfilters,rbacconfigs',
-            '-lapp.juju.is/created-by=istio-pilot',
-        ]
-        assert call.args == (args,)
-
-    for call in run.call_args_list[5::2]:
-        expected_input = list(yaml.safe_load_all(call.kwargs['input']))
-        assert call.args == (['./kubectl', '-n', None, 'apply', '-f-'],)
-        assert expected_input == expected
-
-    assert isinstance(harness.charm.model.unit.status, ActiveStatus)

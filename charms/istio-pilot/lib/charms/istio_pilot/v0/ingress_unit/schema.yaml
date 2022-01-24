@@ -1,0 +1,35 @@
+v1:
+  requires:
+    unit:
+      type: object
+      properties:
+        model:
+          type: string
+        name:
+          type: string
+        ip:
+          type: string
+        port:
+          type: integer
+        prefix:
+          type: string
+        rewrite:
+          type: string
+      required:
+        - model
+        - name
+        - ip
+        - port
+        - prefix
+        - rewrite
+  provides:
+    app:
+      type: object
+      properties:
+        urls:
+          type: object
+          patternProperties:
+            "":
+              type: string
+      required:
+        - urls

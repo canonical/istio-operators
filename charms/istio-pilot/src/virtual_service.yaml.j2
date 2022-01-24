@@ -20,32 +20,3 @@ spec:
         host: '{{ service }}.{{ namespace }}.svc.cluster.local'
         port:
           number: {{ port }}
-{%- if per_unit_routes and unit_nums %}
-{%- for unit_num in unit_nums %}
-  - name: unit-{{ unit_num }}-route
-    match:
-    - uri:
-        prefix: '{{ unit_prefix.format(unit_num) }}'
-    rewrite:
-      uri: '{{ rewrite }}'
-    route:
-    - destination:
-        host: '{{ service }}.{{ namespace }}.svc.cluster.local'
-        port:
-          number: {{ port }}
-        subset: {{ service }}-{{ unit_num }}
-{%- endfor %}
----
-apiVersion: networking.istio.io/v1alpha3
-kind: DestinationRule
-metadata:
-  name: {{ service }}
-spec:
-  host: '{{ service }}.{{ namespace }}.svc.cluster.local'
-  subsets:
-{%- for unit_num in unit_nums %}
-  - name: {{ service }}-{{ unit_num }}
-    labels:
-      statefulset.kubernetes.io/pod-name: {{ service }}-{{ unit_num }}
-{%- endfor %}
-{% endif %}

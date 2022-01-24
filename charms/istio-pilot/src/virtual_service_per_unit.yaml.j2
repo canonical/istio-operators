@@ -1,0 +1,42 @@
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: {{ request.app.name }}
+  labels:
+    app.juju.is/for: {{ request.app.name }}
+spec:
+  gateways:
+  - '{{ gateway }}'
+  hosts:
+  - '*'
+  http:
+{%- for unit in request.units %}
+  - name: {{ request.get_prefix(unit) }}-route
+    match:
+    - uri:
+        prefix: '/{{ request.get_prefix(unit) }}/'
+    rewrite:
+      uri: '{{ request.rewrite }}'
+    route:
+     destination:
+        host: '{{ request.service }}.{{ request.model }}.svc.cluster.local'
+        port:
+          number: {{ request.port }}
+        subset: {{ request.get_prefix(unit) }}
+{%- endfor %}
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: DestinationRule
+metadata:
+  name: {{ request.app.name }}
+  labels:
+    app.juju.is/for: {{ request.app.name }}
+spec:
+  host: '{{ request.service }}.{{ request.model }}.svc.cluster.local'
+  subsets:
+{%- for unit in request.units %}
+  - name: {{ unit.name }}
+    labels:
+      statefulset.kubernetes.io/pod-name: {{ unit.name }}
+{% endfor %}
