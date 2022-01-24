@@ -41,8 +41,9 @@ class Operator(CharmBase):
             )
             self.log.info("istio-pilot relation is available.  Service data written to relation")
         else:
-            self.log.info("istio-pilot relation not available.  "
-                          "No service data written to relation")
+            self.log.info(
+                "istio-pilot relation not available.  " "No service data written to relation"
+            )
 
     def set_pod_spec(self, event):
         try:
@@ -381,7 +382,7 @@ class Operator(CharmBase):
 
 
 class CheckFailed(Exception):
-    """ Raise this exception if one of the checks in main fails. """
+    """Raise this exception if one of the checks in main fails."""
 
     def __init__(self, msg, status_type=None):
         super().__init__()
