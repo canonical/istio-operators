@@ -39,9 +39,9 @@ class Operator(CharmBase):
                     "service-port": str(self.model.config['xds-ca-tls-port']),
                 }
             )
-            self.log.info("istio-pilot relation is available info has been sent")
+            self.log.info("istio-pilot relation is available.  Service data written to relation")
         else:
-            self.log.info("istio-pilot relation not available not able to send service info")
+            self.log.info("istio-pilot relation not available.  No service data written to relation")
 
     def set_pod_spec(self, event):
         try:
