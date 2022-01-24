@@ -2,32 +2,32 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   labels:
-    app: istio-ingressgateway
+    app: istio-egressgateway
     install.operator.istio.io/owning-resource: unknown
-    istio: ingressgateway
+    istio: egressgateway
     istio.io/rev: default
-    operator.istio.io/component: "IngressGateways"
+    operator.istio.io/component: "EgressGateways"
     release: istio
-  name: istio-ingressgateway-service-account
+  name: istio-egressgateway-service-account
   namespace: None
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    app: istio-ingressgateway
+    app: istio-egressgateway
     install.operator.istio.io/owning-resource: unknown
-    istio: ingressgateway
+    istio: egressgateway
     istio.io/rev: default
-    operator.istio.io/component: IngressGateways
+    operator.istio.io/component: EgressGateways
     release: istio
-  name: istio-ingressgateway
+  name: istio-egressgateway
   namespace: None
 spec:
   selector:
     matchLabels:
-      app: istio-ingressgateway
-      istio: ingressgateway
+      app: istio-egressgateway
+      istio: egressgateway
   strategy:
     rollingUpdate:
       maxSurge: 100%
@@ -40,15 +40,15 @@ spec:
         prometheus.io/scrape: "true"
         sidecar.istio.io/inject: "false"
       labels:
-        app: istio-ingressgateway
+        app: istio-egressgateway
         chart: gateways
         heritage: Tiller
         install.operator.istio.io/owning-resource: unknown
-        istio: ingressgateway
+        istio: egressgateway
         istio.io/rev: default
-        operator.istio.io/component: IngressGateways
+        operator.istio.io/component: EgressGateways
         release: istio
-        service.istio.io/canonical-name: istio-ingressgateway
+        service.istio.io/canonical-name: istio-egressgateway
         service.istio.io/canonical-revision: latest
         sidecar.istio.io/inject: "false"
     spec:
@@ -133,9 +133,9 @@ spec:
                 fieldRef:
                   fieldPath: spec.serviceAccountName
             - name: ISTIO_META_WORKLOAD_NAME
-              value: istio-ingressgateway
+              value: istio-egressgateway
             - name: ISTIO_META_OWNER
-              value: kubernetes://apis/apps/v1/namespaces/None/deployments/istio-ingressgateway
+              value: kubernetes://apis/apps/v1/namespaces/None/deployments/istio-egressgateway
             - name: ISTIO_META_MESH_ID
               value: cluster.local
             - name: TRUST_DOMAIN
@@ -194,18 +194,18 @@ spec:
               name: istio-data
             - mountPath: /etc/istio/pod
               name: podinfo
-            - mountPath: /etc/istio/ingressgateway-certs
-              name: ingressgateway-certs
+            - mountPath: /etc/istio/egressgateway-certs
+              name: egressgateway-certs
               readOnly: true
-            - mountPath: /etc/istio/ingressgateway-ca-certs
-              name: ingressgateway-ca-certs
+            - mountPath: /etc/istio/egressgateway-ca-certs
+              name: egressgateway-ca-certs
               readOnly: true
       securityContext:
         fsGroup: 1337
         runAsGroup: 1337
         runAsNonRoot: true
         runAsUser: 1337
-      serviceAccountName: istio-ingressgateway-service-account
+      serviceAccountName: istio-egressgateway-service-account
       volumes:
         - configMap:
             name: istio-ca-root-cert
@@ -234,33 +234,33 @@ spec:
             name: istio
             optional: true
           name: config-volume
-        - name: ingressgateway-certs
+        - name: egressgateway-certs
           secret:
             optional: true
-            secretName: istio-ingressgateway-certs
-        - name: ingressgateway-ca-certs
+            secretName: istio-egressgateway-certs
+        - name: egressgateway-ca-certs
           secret:
             optional: true
-            secretName: istio-ingressgateway-ca-certs
+            secretName: istio-egressgateway-ca-certs
 ---
 apiVersion: policy/v1beta1
 kind: PodDisruptionBudget
 metadata:
   labels:
-    app: istio-ingressgateway
+    app: istio-egressgateway
     install.operator.istio.io/owning-resource: unknown
-    istio: ingressgateway
+    istio: egressgateway
     istio.io/rev: default
-    operator.istio.io/component: "IngressGateways"
+    operator.istio.io/component: "EgressGateways"
     release: istio
-  name: istio-ingressgateway
+  name: istio-egressgateway
   namespace: None
 spec:
   minAvailable: 1
   selector:
     matchLabels:
-      app: istio-ingressgateway
-      istio: ingressgateway
+      app: istio-egressgateway
+      istio: egressgateway
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -268,9 +268,9 @@ metadata:
   labels:
     install.operator.istio.io/owning-resource: unknown
     istio.io/rev: default
-    operator.istio.io/component: "IngressGateways"
+    operator.istio.io/component: "EgressGateways"
     release: istio
-  name: istio-ingressgateway-sds
+  name: istio-egressgateway-sds
   namespace: None
 rules:
   - apiGroups: [""]
@@ -283,30 +283,29 @@ metadata:
   labels:
     install.operator.istio.io/owning-resource: unknown
     istio.io/rev: default
-    operator.istio.io/component: "IngressGateways"
+    operator.istio.io/component: "EgressGateways"
     release: istio
-  name: istio-ingressgateway-sds
+  name: istio-egressgateway-sds
   namespace: None
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: istio-ingressgateway-sds
+  name: istio-egressgateway-sds
 subjects:
   - kind: ServiceAccount
-    name: istio-ingressgateway-service-account
+    name: istio-egressgateway-service-account
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  annotations:
   labels:
-    app: istio-ingressgateway
+    app: istio-egressgateway
     install.operator.istio.io/owning-resource: unknown
-    istio: ingressgateway
+    istio: egressgateway
     istio.io/rev: default
-    operator.istio.io/component: "IngressGateways"
+    operator.istio.io/component: "EgressGateways"
     release: istio
-  name: istio-ingressgateway
+  name: istio-egressgateway
   namespace: None
 spec:
   ports:
@@ -319,5 +318,5 @@ spec:
       protocol: TCP
       targetPort: 8443
   selector:
-    istio: ingressgateway
-  type: LoadBalancer
+    istio: egressgateway
+  type: ClusterIP

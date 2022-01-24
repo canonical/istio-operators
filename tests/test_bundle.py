@@ -12,7 +12,7 @@ log = logging.getLogger(__name__)
 
 @pytest.mark.abort_on_fail
 async def test_deploy_bundle(ops_test: OpsTest):
-    await ops_test.deploy_bundle(destructive_mode=True, serial=True, extra_args=['--trust'])
+    await ops_test.deploy_bundle(serial=True, extra_args=['--trust'])
 
     await ops_test.model.wait_for_idle(timeout=60 * 10)
     await ops_test.run(
@@ -33,6 +33,7 @@ async def test_deploy_bundle(ops_test: OpsTest):
         'namespace',
         'default',
         'istio-injection=enabled',
+        '--overwrite=true',
         check=True,
     )
     await ops_test.run(
@@ -51,6 +52,19 @@ async def test_deploy_bundle(ops_test: OpsTest):
         'deployment',
         '--all',
         '--all-namespaces',
+        '--timeout=5m',
+        check=True,
+    )
+
+    # Wait for the pods as well, since the Deployment can be considered
+    # "complete" while the pods are still starting.
+    await ops_test.run(
+        'kubectl',
+        'wait',
+        '--for=condition=ready',
+        'pod',
+        '--all',
+        '-n=default',
         '--timeout=5m',
         check=True,
     )
