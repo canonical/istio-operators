@@ -110,7 +110,7 @@ class Operator(CharmBase):
 
             v1 ingress schema doesn't allow sending over a namespace.
             """
-            kwargs = route
+            kwargs = {"default_gateway": default_gateway, **route}
 
             if 'namespace' not in kwargs:
                 kwargs['namespace'] = self.model.name
@@ -118,10 +118,11 @@ class Operator(CharmBase):
             return kwargs
 
         custom_gateways = list(filter(None, self.config["custom-gateways"].split(",")))
-        gateways = [default_gateway] + list(custom_gateways)
 
         virtual_services = ''.join(
-            t.render(**get_kwargs(ingress.versions[app.name], route), gateways=gateways)
+            t.render(
+                **get_kwargs(ingress.versions[app.name], route), custom_gateways=custom_gateways
+            )
             for ((_, app), route) in routes
         )
 

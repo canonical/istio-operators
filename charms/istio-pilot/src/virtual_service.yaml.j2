@@ -5,12 +5,9 @@ metadata:
   name: {{ service }}
 spec:
   gateways:
-  {% for i in gateways %}
-  {% if '/' in i %}
+  - '{{ namespace }}/{{ default_gateway }}'
+  {% for i in custom_gateways %}
   - '{{ i }}'
-  {% else %}
-  - '{{ namespace }}/{{ i }}'
-  {% endif %}
   {% endfor %}
   hosts:
   - '*'
