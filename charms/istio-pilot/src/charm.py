@@ -103,28 +103,25 @@ class Operator(CharmBase):
             routes = []
 
         t = self.env.get_template('virtual_service.yaml.j2')
-        gateway = self.model.config['default-gateways'].split(',')[0]
+        default_gateway = self.model.config['default-gateways'].split(',')[0]
 
         def get_kwargs(version, route):
             """Handles both v1 and v2 ingress relations.
 
             v1 ingress schema doesn't allow sending over a namespace.
             """
-            kwargs = {'gateway': gateway, **route}
+            kwargs = route
 
             if 'namespace' not in kwargs:
                 kwargs['namespace'] = self.model.name
 
             return kwargs
 
-        custom_gateway = (
-            []
-            if self.model.config['namespaced-custom-gateways'] == ''
-            else self.model.config['namespaced-custom-gateways'].split(',')
-        )
+        custom_gateways = list(filter(None, self.config["custom-gateways"].split(",")))
+        gateways = [default_gateway] + list(custom_gateways)
 
         virtual_services = ''.join(
-            t.render(**get_kwargs(ingress.versions[app.name], route), custom_gateway=custom_gateway)
+            t.render(**get_kwargs(ingress.versions[app.name], route), gateways=gateways)
             for ((_, app), route) in routes
         )
 

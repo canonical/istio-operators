@@ -3,7 +3,10 @@ options:
     default: istio-gateway
     description: Comma-separated list of gateways to create by default
     type: string
-  namespaced-custom-gateways:
+  custom-gateways:
     default: ""
-    description: Comma-separated list of namespaced custom gateways to use
+    description: >-
+      Comma-separated list of custom or manually configured Gateway resources to use.
+      Names can include the namespace, in the form "namespace/gateway", or defaults to
+      the model in which the charm is deployed.
     type: string

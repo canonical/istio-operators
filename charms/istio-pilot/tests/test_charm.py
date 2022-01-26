@@ -277,7 +277,7 @@ def test_with_custom_gateways(harness, mocker, gateways):
         "app",
         {"_supported_versions": "- v1", "data": yaml.dump(data)},
     )
-    harness.update_config({"namespaced-custom-gateways": ",".join(gateways)})
+    harness.update_config({"custom-gateways": ",".join(gateways)})
     harness.begin_with_initial_hooks()
 
     expected = [
