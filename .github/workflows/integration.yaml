@@ -63,7 +63,7 @@ jobs:
         sg microk8s -c 'juju bootstrap microk8s uk8s'
         sg microk8s -c 'juju add-model istio-system'
 
-    - run: sg microk8s -c 'KUBECONFIG=/home/runner/.kube/config tox -e integration -- --model istio-system'
+    - run: sg microk8s -c 'KUBECONFIG=/home/runner/.kube/config tox -e integration -- --model istio-system --destructive-mode'
       timeout-minutes: 15
 
     - name: Setup Debug Artifact Collection
@@ -90,6 +90,7 @@ jobs:
         kubectl describe gateways -A | tee tmp/kube-gateways.txt
         kubectl describe deployments -A | tee tmp/kube-deployments.txt
         kubectl describe replicasets -A | tee tmp/kubectl-replicasets.txt
+        kubectl exec -n istio-system istio-pilot-0 --container charm -- agents/unit-istio-pilot-0/charm/istioctl analyze -n default | tee tmp/istioctl-analyze.txt
 
     - name: Collect Kube logs
       if: failure()
