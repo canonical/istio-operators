@@ -24,6 +24,7 @@ description: |
 maintainers: [Juju Developers <juju@lists.ubuntu.com>]
 tags: [service-mesh, ingress]
 series: [kubernetes]
+min-juju-version: "2.9.0"
 resources:
   oci-image:
     type: oci-image
