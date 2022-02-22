@@ -12,6 +12,7 @@ from serialized_data_interface import NoCompatibleVersions, NoVersionsListed, ge
 from lightkube import Client, codecs
 from lightkube.core.exceptions import ApiError
 from lightkube.generic_resource import create_namespaced_resource
+from lightkube.resources.core_v1 import Service
 
 
 class Operator(CharmBase):
@@ -128,7 +129,8 @@ class Operator(CharmBase):
                 resource, namespace=self.model.name, ignore_unauthorized=True
             )
         self._delete_manifest(
-            manifests, namespace=self.model.name, ignore_not_found=True, ignore_unauthorized=True)
+            manifests, namespace=self.model.name, ignore_not_found=True, ignore_unauthorized=True
+        )
 
     def handle_default_gateway(self, event):
         """Handles creating gateways from charm config
@@ -139,12 +141,14 @@ class Operator(CharmBase):
         t = self.env.get_template('gateway.yaml.j2')
         gateway = self.model.config['default-gateway']
         manifest = t.render(name=gateway, app_name=self.app.name)
-        self._kubectl(
-            'delete',
-            'gateways',
-            f"-lapp.juju.is/created-by={self.app.name},"
-            f"app.{self.app.name}.io/is-workload-entity=true",
-        self._kubectl("apply", "-f-", input=manifest)
+        self._delete_existing_resource_objects(
+            resource=self.gateway_resource,
+            labels={
+                "app.juju.is/created-by": f"{self.app.name}",
+                "app.{self.app.name}.io/is-workload-entity": "true",
+            },
+        )
+        self._apply_manifest(manifest)
 
         # Update the ingress objects as they rely on the default_gateway
         self.handle_ingress(event)
@@ -280,10 +284,15 @@ class Operator(CharmBase):
                 raise
 
     def _delete_existing_resource_objects(
-        self, resource, namespace=None, ignore_not_found=False, ignore_unauthorized=False
+        self,
+        resource,
+        namespace=None,
+        ignore_not_found=False,
+        ignore_unauthorized=False,
+        labels={},
     ):
         for obj in self.lightkube_client.list(
-            resource, labels={"app.juju.is/created-by": f"{self.app.name}"}
+            resource, labels={"app.juju.is/created-by": f"{self.app.name}"}.update(labels)
         ):
             self._delete_object(
                 obj,
@@ -306,6 +315,35 @@ class Operator(CharmBase):
                 ignore_not_found=ignore_not_found,
                 ignore_unauthorized=ignore_unauthorized,
             )
+
+    def _get_gateway_address(self):
+        """Look up the load balancer address for the ingress gateway.
+        If the gateway isn't available or doesn't have a load balancer address yet,
+        returns None.
+        """
+        svcs = self.lightkube_client.get(
+            Service, name="ingress-gateway", namespace=self.model.name
+        )
+        self.log.info(svcs)
+
+
+#        svcs = yaml.safe_load(Service,
+#            self._kubectl(
+#                "get",
+#                "svc",
+#                "-l",
+#                "istio=ingressgateway",
+#                "-oyaml",
+#                namespace=self.model.name,
+#                capture_output=True,
+#            )
+#        )
+#        if not svcs["items"]:
+#            return None
+#        addrs = svcs["items"][0]["status"].get("loadBalancer", {}).get("ingress", [])
+#        if not addrs:
+#            return None
+#        return addrs[0].get("hostname", addrs[0].get("ip"))
 
 
 if __name__ == "__main__":
