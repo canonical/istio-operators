@@ -84,6 +84,7 @@ class Operator(CharmBase):
 
         self.framework.observe(self.on['ingress'].relation_changed, self.handle_ingress)
         self.framework.observe(self.on['ingress'].relation_broken, self.handle_ingress)
+        self.framework.observe(self.on['ingress'].relation_departed, self.handle_ingress)
         self.framework.observe(self.on['ingress-auth'].relation_changed, self.handle_ingress_auth)
         self.framework.observe(self.on['ingress-auth'].relation_departed, self.handle_ingress_auth)
 
@@ -123,7 +124,6 @@ class Operator(CharmBase):
             self.virtual_service_resource,
             self.gateway_resource,
             self.envoy_filter_resource,
-            self.rbac_config_resource,
         ]:
             self._delete_existing_resource_objects(
                 resource, namespace=self.model.name, ignore_unauthorized=True
@@ -160,9 +160,13 @@ class Operator(CharmBase):
             )
 
     def handle_ingress(self, event):
-        gateway_address = self._get_gateway_address()
-        if not gateway_address:
-            self.unit.status = WaitingStatus("Waiting for gateway address")
+        try:
+            self._get_gateway_address
+        except (ApiError, TypeError) as e:
+            if e == ApiError:
+                self.log.exception("ApiError: Could not get istio-ingressgateway, retrying")
+            elif e == TypeError:
+                self.log.exception("TypeError: No ip address found, retrying")
             event.defer()
             return
         else:
@@ -207,17 +211,12 @@ class Operator(CharmBase):
             for ((_, app), route) in routes.items()
         )
 
-        t = self.env.get_template('gateway.yaml.j2')
-        gateways = self.model.config['default-gateways'].split(',')
-        gateways = ''.join(t.render(name=g) for g in gateways)
+        self._delete_existing_resource_objects(
+            self.virtual_service_resource, namespace=self.model.name
+        )
 
-        manifests = [virtual_services, gateways]
-        manifests = '\n'.join([m for m in manifests if m])
-
-        for resource in [self.virtual_service_resource, self.gateway_resource]:
-            self._delete_existing_resource_objects(resource, namespace=self.model.name)
-
-        self._apply_manifest(manifests, namespace=self.model.name)
+        if routes:
+            self._apply_manifest(virtual_services, namespace=self.model.name)
 
     def handle_ingress_auth(self, event):
         auth_routes = self.interfaces['ingress-auth']
@@ -257,12 +256,10 @@ class Operator(CharmBase):
             for r in auth_routes
         )
 
-        manifests = [auth_filters]
-        manifests = '\n'.join([m for m in manifests if m])
-
-        for resource in [self.envoy_filter_resource, self.rbac_config_resource]:
-            self._delete_existing_resource_objects(resource, namespace=self.model.name)
-        self._apply_manifest(manifests, namespace=self.model.name)
+        self._delete_existing_resource_objects(
+            self.envoy_filter_resource, namespace=self.model.name
+        )
+        self._apply_manifest(auth_filters, namespace=self.model.name)
 
     def _delete_object(
         self, obj, namespace=None, ignore_not_found=False, ignore_unauthorized=False
@@ -316,34 +313,17 @@ class Operator(CharmBase):
                 ignore_unauthorized=ignore_unauthorized,
             )
 
+    @property
     def _get_gateway_address(self):
         """Look up the load balancer address for the ingress gateway.
         If the gateway isn't available or doesn't have a load balancer address yet,
         returns None.
         """
+        # FIXME: service name is hardcoded
         svcs = self.lightkube_client.get(
-            Service, name="ingress-gateway", namespace=self.model.name
+            Service, name="istio-ingressgateway", namespace=self.model.name
         )
-        self.log.info(svcs)
-
-
-#        svcs = yaml.safe_load(Service,
-#            self._kubectl(
-#                "get",
-#                "svc",
-#                "-l",
-#                "istio=ingressgateway",
-#                "-oyaml",
-#                namespace=self.model.name,
-#                capture_output=True,
-#            )
-#        )
-#        if not svcs["items"]:
-#            return None
-#        addrs = svcs["items"][0]["status"].get("loadBalancer", {}).get("ingress", [])
-#        if not addrs:
-#            return None
-#        return addrs[0].get("hostname", addrs[0].get("ip"))
+        return svcs.status.loadBalancer.ingress[0].ip
 
 
 if __name__ == "__main__":
