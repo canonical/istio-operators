@@ -3,26 +3,36 @@ apiVersion: networking.istio.io/v1alpha3
 kind: EnvoyFilter
 metadata:
   name: authn-filter
+  labels:
+    app.{{ app_name }}.io/is-workload-entity: "true"
 spec:
-  filters:
-  - filterConfig:
-      httpService:
-        authorizationRequest:
-          allowedHeaders:
-            patterns: {{ request_headers }}
-        authorizationResponse:
-          allowedUpstreamHeaders:
-            patterns: {{ response_headers }}
-        serverUri:
-          cluster: outbound|{{ port }}||{{ service }}.{{ namespace }}.svc.cluster.local
-          failureModeAllow: false
-          timeout: 10s
-          uri: http://{{ service }}.{{ namespace }}.svc.cluster.local:{{ port }}
-    filterName: envoy.ext_authz
-    filterType: HTTP
-    insertPosition:
-      index: FIRST
-    listenerMatch:
-      listenerType: GATEWAY
-  workloadLabels:
-    istio: ingressgateway
+  configPatches:
+    - applyTo: HTTP_FILTER
+      match:
+        context: GATEWAY
+        listener:
+          filterChain:
+            filter:
+              name: "envoy.filters.network.http_connection_manager"
+      patch:
+        # For some reason, INSERT_FIRST doesn't work
+        operation: INSERT_BEFORE
+        value:
+          # See: https://www.envoyproxy.io/docs/envoy/v1.17.0/configuration/http/http_filters/ext_authz_filter#config-http-filters-ext-authz
+          name: "envoy.filters.http.ext_authz"
+          typed_config:
+            '@type': type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
+            http_service:
+              server_uri:
+                uri: http://{{ service }}.{{ namespace }}.svc.cluster.local:{{ port }}
+                cluster: outbound|{{ port }}||{{ service }}.{{ namespace }}.svc.cluster.local
+                timeout: 10s
+              authorization_request:
+                allowed_headers:
+                  patterns: {{ request_headers }}
+              authorization_response:
+                allowed_upstream_headers:
+                  patterns: {{ response_headers }}
+  workloadSelector:
+    labels:
+      istio: ingressgateway

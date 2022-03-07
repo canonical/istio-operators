@@ -128,7 +128,10 @@ def test_with_ingress_relation(harness, subprocess, mocked_client, helpers, mock
         {
             'apiVersion': 'networking.istio.io/v1alpha3',
             'kind': 'VirtualService',
-            'metadata': {'name': 'service-name'},
+            'metadata': {
+                'name': 'service-name',
+                'labels': {'app.istio-pilot.io/is-workload-entity': 'true'},
+            },
             'spec': {
                 'gateways': ['None/istio-gateway'],
                 'hosts': ['*'],
@@ -145,17 +148,6 @@ def test_with_ingress_relation(harness, subprocess, mocked_client, helpers, mock
                             }
                         ],
                     }
-                ],
-            },
-        },
-        {
-            'apiVersion': 'networking.istio.io/v1beta1',
-            'kind': 'Gateway',
-            'metadata': {'name': 'istio-gateway'},
-            'spec': {
-                'selector': {'istio': 'ingressgateway'},
-                'servers': [
-                    {'hosts': ['*'], 'port': {'name': 'http', 'number': 80, 'protocol': 'HTTP'}}
                 ],
             },
         },
@@ -179,7 +171,7 @@ def test_with_ingress_relation(harness, subprocess, mocked_client, helpers, mock
     assert helpers.calls_contain_namespace(delete_calls, harness.model.name)
     actual_res_names = helpers.get_deleted_resource_types(delete_calls)
 
-    expected_res_names = ['VirtualService', 'Gateway']
+    expected_res_names = ['VirtualService']
     assert helpers.compare_deleted_resource_names(actual_res_names, expected_res_names)
 
     apply_calls = mocked_client.return_value.apply.call_args_list
@@ -231,43 +223,57 @@ def test_with_ingress_auth_relation(harness, subprocess, helpers, mocked_client,
 
     expected = [
         {
-            'apiVersion': 'rbac.istio.io/v1alpha1',
-            'kind': 'RbacConfig',
-            'metadata': {'name': 'default'},
-            'spec': {'mode': 'OFF'},
-        },
-        {
             'apiVersion': 'networking.istio.io/v1alpha3',
             'kind': 'EnvoyFilter',
-            'metadata': {'name': 'authn-filter'},
+            'metadata': {
+                'name': 'authn-filter',
+                'labels': {'app.istio-pilot.io/is-workload-entity': 'true'},
+            },
             'spec': {
-                'filters': [
+                'configPatches': [
                     {
-                        'filterConfig': {
-                            'httpService': {
-                                'authorizationRequest': {
-                                    'allowedHeaders': {'patterns': [{'exact': 'foo'}]}
-                                },
-                                'authorizationResponse': {
-                                    'allowedUpstreamHeaders': {'patterns': [{'exact': 'bar'}]}
-                                },
-                                'serverUri': {
-                                    'cluster': 'outbound|6666||service-name.None.svc.cluster.local',
-                                    'failureModeAllow': False,
-                                    'timeout': '10s',
-                                    'uri': 'http://service-name.None.svc.cluster.local:6666',
-                                },
-                            }
+                        'applyTo': 'HTTP_FILTER',
+                        'match': {
+                            'context': 'GATEWAY',
+                            'listener': {
+                                'filterChain': {
+                                    'filter': {
+                                        'name': 'envoy.filters.network.http_connection_manager'
+                                    }
+                                }
+                            },
                         },
-                        'filterName': 'envoy.ext_authz',
-                        'filterType': 'HTTP',
-                        'insertPosition': {'index': 'FIRST'},
-                        'listenerMatch': {'listenerType': 'GATEWAY'},
+                        'patch': {
+                            'operation': 'INSERT_BEFORE',
+                            'value': {
+                                'name': 'envoy.filters.http.ext_authz',
+                                'typed_config': {
+                                    '@type': 'type.googleapis.com/envoy.extensions.filters.http.'
+                                    'ext_authz.v3.ExtAuthz',
+                                    'http_service': {
+                                        'server_uri': {
+                                            'uri': 'http://service-name.None.svc.cluster.local:6666',  # noqa: E501
+                                            'cluster': 'outbound|6666||service-name.None.svc.'
+                                            'cluster.local',
+                                            'timeout': '10s',
+                                        },
+                                        'authorization_request': {
+                                            'allowed_headers': {'patterns': [{'exact': 'foo'}]}
+                                        },
+                                        'authorization_response': {
+                                            'allowed_upstream_headers': {
+                                                'patterns': [{'exact': 'bar'}]
+                                            }
+                                        },
+                                    },
+                                },
+                            },
+                        },
                     }
                 ],
-                'workloadLabels': {'istio': 'ingressgateway'},
+                'workloadSelector': {'labels': {'istio': 'ingressgateway'}},
             },
-        },
+        }
     ]
 
     assert check_call.call_args_list == [
@@ -287,7 +293,7 @@ def test_with_ingress_auth_relation(harness, subprocess, helpers, mocked_client,
     delete_calls = mocked_client.return_value.delete.call_args_list
     assert helpers.calls_contain_namespace(delete_calls, harness.model.name)
     actual_res_names = helpers.get_deleted_resource_types(delete_calls)
-    expected_res_names = ['EnvoyFilter', 'RbacConfig']
+    expected_res_names = ['EnvoyFilter']
     assert helpers.compare_deleted_resource_names(actual_res_names, expected_res_names)
 
     apply_calls = mocked_client.return_value.apply.call_args_list
@@ -349,7 +355,6 @@ def test_removal(harness, subprocess, mocked_client, helpers, mocker):
         'VirtualService',
         'Gateway',
         'EnvoyFilter',
-        'RbacConfig',
         'ResourceObjectFromYaml',
         'ResourceObjectFromYaml',
     ]

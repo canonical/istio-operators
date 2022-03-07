@@ -3,6 +3,8 @@ apiVersion: networking.istio.io/v1beta1
 kind: Gateway
 metadata:
   name: {{ name }}
+  labels:
+    app.{{ app_name }}.io/is-workload-entity: "true"
 spec:
   selector:
     istio: ingressgateway

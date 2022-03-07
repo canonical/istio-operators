@@ -3,6 +3,8 @@ apiVersion: networking.istio.io/v1alpha3
 kind: VirtualService
 metadata:
   name: {{ service }}
+  labels:
+    app.{{ app_name }}.io/is-workload-entity: "true"
 spec:
   gateways:
   - '{{ namespace }}/{{ gateway }}'
