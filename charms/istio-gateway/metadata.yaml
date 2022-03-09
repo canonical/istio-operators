@@ -4,17 +4,6 @@ summary: |
 description: |
   https://istio.io/latest/docs/tasks/traffic-management/ingress/
   https://istio.io/latest/docs/tasks/traffic-management/egress/
-
-containers:
-  noop:
-    resource: noop
-
-resources:
-  noop:
-    type: oci-image
-    description: ''
-    upstream-source: alpine:latest
-
 requires:
   istio-pilot:
     interface: k8s-service
