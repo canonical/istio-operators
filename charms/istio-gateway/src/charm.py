@@ -36,13 +36,13 @@ class Operator(CharmBase):
         # Every lightkube API call will use the model name as the namespace by default
         self.lightkube_client = Client(namespace=self.model.name, field_manager="lightkube")
 
-        self.framework.observe(self.on.install, self.install)
-        self.framework.observe(self.on["istio-pilot"].relation_changed, self.install)
-        self.framework.observe(self.on.config_changed, self.install)
+        self.framework.observe(self.on.start, self.start)
+        self.framework.observe(self.on["istio-pilot"].relation_changed, self.start)
+        self.framework.observe(self.on.config_changed, self.start)
         self.framework.observe(self.on.remove, self.remove)
 
-    def install(self, event):
-        """Install charm."""
+    def start(self, event):
+        """Event handler for StartEevnt."""
 
         if self.model.config['kind'] not in ('ingress', 'egress'):
             self.model.unit.status = BlockedStatus('Config item `kind` must be set')
