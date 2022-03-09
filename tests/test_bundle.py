@@ -35,13 +35,27 @@ async def test_kubectl_access(ops_test: OpsTest):
         "get",
         "pods",
         check=True,
-        fail_msg="Failed to do a simple kubectl task - is KUBECONFIG properly configured?"
+        fail_msg="Failed to do a simple kubectl task - is KUBECONFIG properly configured?",
     )
 
 
 @pytest.mark.abort_on_fail
-async def test_deploy_bundle(ops_test: OpsTest):
-    await ops_test.deploy_bundle(serial=True, extra_args=['--trust'])
+async def test_deploy_istio_charms(ops_test: OpsTest):
+    # Build, deploy, and relate istio charms
+    charms_path = "./charms/istio"
+    istio_charms = await ops_test.build_charms(f"{charms_path}-gateway", f"{charms_path}-pilot")
+
+    await ops_test.model.deploy(
+        istio_charms['istio-pilot'], application_name='istio-pilot', trust=True
+    )
+    await ops_test.model.deploy(
+        istio_charms['istio-gateway'],
+        application_name='istio-gateway',
+        config={'kind': 'ingress'},
+        trust=True,
+    )
+
+    await ops_test.model.add_relation("istio-pilot:istio-pilot", "istio-gateway:istio-pilot")
 
     await ops_test.model.wait_for_idle(
         status="active",
