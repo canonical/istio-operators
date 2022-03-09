@@ -2,6 +2,7 @@
 
 import logging
 import subprocess
+from typing import Any
 
 import yaml
 from jinja2 import Environment, FileSystemLoader
@@ -161,7 +162,7 @@ class Operator(CharmBase):
 
     def handle_ingress(self, event):
         try:
-            self._get_gateway_address
+            self._gateway_address
         except (ApiError, TypeError) as e:
             if e == ApiError:
                 self.log.exception("ApiError: Could not get istio-ingressgateway, retrying")
@@ -211,12 +212,11 @@ class Operator(CharmBase):
             for ((_, app), route) in routes.items()
         )
 
-        self._delete_existing_resource_objects(
-            self.virtual_service_resource, namespace=self.model.name
+        self._reconcile_desired_resources(
+            kind=self.virtual_service_resource,
+            desired_resources=virtual_services,
+            namespace=self.model.name,
         )
-
-        if routes:
-            self._apply_manifest(virtual_services, namespace=self.model.name)
 
     def handle_ingress_auth(self, event):
         auth_routes = self.interfaces['ingress-auth']
@@ -313,8 +313,42 @@ class Operator(CharmBase):
                 ignore_unauthorized=ignore_unauthorized,
             )
 
+    def _reconcile_desired_resources(
+        self, kind: Any, desired_resources: str, namespace: str = None
+    ) -> None:
+        """Reconciles the desired list of resources of any kind.
+
+        Args:
+            kind: resource kind (e.g. Service, Pod)
+            desired_resource: all desired resources in manifest form as str
+            namespace (optional): namespace of the object
+        """
+
+        existing_resources = self.lightkube_client.list(
+            res=kind,
+            labels={
+                "app.juju.is/created-by": f"{self.app.name}",
+                f"app.{self.app.name}.io/is-workload-entity": "true",
+            },
+            namespace=namespace,
+        )
+        if desired_resources:
+            desired_resources = codecs.loadd_all_yaml(desired_resources)
+            diff_obj = set(existing_resources) - set(desired_resources)
+            for obj in diff_obj:
+                self._delete_object(obj)
+            self._apply_manifest(desired_resources, namespace=namespace)
+        else:
+            self._delete_existing_resource_objects(
+                resource=kind,
+                labels={
+                    f"app.{self.app.name}.io/is-workload-entity": "true",
+                },
+                namespace=namespace,
+            )
+
     @property
-    def _get_gateway_address(self):
+    def _gateway_address(self):
         """Look up the load balancer address for the ingress gateway.
         If the gateway isn't available or doesn't have a load balancer address yet,
         returns None.
