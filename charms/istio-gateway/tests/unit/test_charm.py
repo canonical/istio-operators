@@ -5,20 +5,20 @@ from lightkube.core.exceptions import ApiError
 
 
 def test_events(configured_harness, mocker):
-    install = mocker.patch('charm.Operator.install')
+    start = mocker.patch('charm.Operator.start')
     remove = mocker.patch('charm.Operator.remove')
 
-    configured_harness.charm.on.install.emit()
-    install.assert_called_once()
-    install.reset_mock()
+    configured_harness.charm.on.start.emit()
+    start.assert_called_once()
+    start.reset_mock()
 
     configured_harness.charm.on.remove.emit()
     remove.assert_called_once()
     remove.reset_mock()
 
     configured_harness.charm.on.config_changed.emit()
-    install.assert_called_once()
-    install.reset_mock()
+    start.assert_called_once()
+    start.reset_mock()
 
     rel_id = configured_harness.add_relation("istio-pilot", "app")
     configured_harness.update_relation_data(
@@ -26,8 +26,8 @@ def test_events(configured_harness, mocker):
         "app",
         {"some_key": "some_value"},
     )
-    install.assert_called_once()
-    install.reset_mock()
+    start.assert_called_once()
+    start.reset_mock()
 
 
 def test_install_not_leader(harness):
@@ -49,11 +49,11 @@ def test_install_no_rel(harness, helpers):
     assert harness.charm.model.unit.status == BlockedStatus('Waiting for istio-pilot relation')
 
 
-def test_install_apply(configured_harness, kind, mocked_client, helpers):
+def test_start_apply(configured_harness, kind, mocked_client, helpers):
     # Reset the mock so that the calls list does not include any calls from other hooks
     mocked_client.reset_mock()
 
-    configured_harness.charm.on.install.emit()
+    configured_harness.charm.on.start.emit()
     actual_objects = []
     expected_objects = list(yaml.safe_load_all(open(f'tests/unit/data/{kind}-example.yaml')))
 
