@@ -4,20 +4,6 @@ from charm import Operator
 from ops.testing import Harness
 
 
-class Helpers:
-    @staticmethod
-    def begin_noop(harness):
-        # Most of the tests use these lines to kick things off
-        harness.begin_with_initial_hooks()
-        container = harness.model.unit.get_container('noop')
-        harness.charm.on['noop'].pebble_ready.emit(container)
-
-
-@pytest.fixture(scope="session")
-def helpers():
-    return Helpers()
-
-
 @pytest.fixture
 def harness():
     return Harness(Operator)
@@ -38,18 +24,10 @@ def kind(request):
 
 
 @pytest.fixture()
-def configured_harness(harness, kind, helpers):
+def configured_harness(harness, kind):
     harness.set_leader(True)
 
     harness.update_config({'kind': kind})
-    harness.add_oci_resource(
-        "noop",
-        {
-            "registrypath": "",
-            "username": "",
-            "password": "",
-        },
-    )
     rel_id = harness.add_relation("istio-pilot", "app")
 
     harness.add_relation_unit(rel_id, "app/0")
@@ -60,6 +38,6 @@ def configured_harness(harness, kind, helpers):
         {"_supported_versions": "- v1", "data": yaml.dump(data)},
     )
 
-    helpers.begin_noop(harness)
+    harness.begin_with_initial_hooks()
 
     return harness
