@@ -9,8 +9,6 @@ from lightkube.core.exceptions import ApiError
 def test_events(harness, mocker):
     harness.set_leader(True)
     harness.begin_with_initial_hooks()
-    container = harness.model.unit.get_container('noop')
-    harness.charm.on['noop'].pebble_ready.emit(container)
 
     install = mocker.patch('charm.Operator.install')
     remove = mocker.patch('charm.Operator.remove')
@@ -73,8 +71,6 @@ def test_basic(harness, subprocess, mocker):
     check_call = subprocess.check_call
     harness.set_leader(True)
     harness.begin_with_initial_hooks()
-    container = harness.model.unit.get_container('noop')
-    harness.charm.on['noop'].pebble_ready.emit(container)
 
     expected_args = [
         './istioctl',
@@ -97,14 +93,7 @@ def test_with_ingress_relation(harness, subprocess, mocked_client, helpers, mock
     check_call = subprocess.check_call
 
     harness.set_leader(True)
-    harness.add_oci_resource(
-        "noop",
-        {
-            "registrypath": "",
-            "username": "",
-            "password": "",
-        },
-    )
+
     rel_id = harness.add_relation("ingress", "app")
     harness.add_relation_unit(rel_id, "app/0")
     data = {"service": "service-name", "port": 6666, "prefix": "/"}
@@ -188,14 +177,6 @@ def test_with_ingress_auth_relation(harness, subprocess, helpers, mocked_client,
     check_call = subprocess.check_call
 
     harness.set_leader(True)
-    harness.add_oci_resource(
-        "noop",
-        {
-            "registrypath": "",
-            "username": "",
-            "password": "",
-        },
-    )
     rel_id = harness.add_relation("ingress-auth", "app")
 
     harness.add_relation_unit(rel_id, "app/0")
@@ -317,14 +298,6 @@ def test_removal(harness, subprocess, mocked_client, helpers, mocker):
     )
 
     harness.set_leader(True)
-    harness.add_oci_resource(
-        "noop",
-        {
-            "registrypath": "",
-            "username": "",
-            "password": "",
-        },
-    )
 
     harness.begin_with_initial_hooks()
 

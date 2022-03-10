@@ -41,15 +41,15 @@ def test_install_no_kind(harness):
     assert harness.charm.model.unit.status == BlockedStatus('Config item `kind` must be set')
 
 
-def test_install_no_rel(harness, helpers):
+def test_install_no_rel(harness):
     harness.set_leader(True)
     harness.update_config({'kind': 'ingress'})
-    helpers.begin_noop(harness)
+    harness.begin_with_initial_hooks()
 
     assert harness.charm.model.unit.status == BlockedStatus('Waiting for istio-pilot relation')
 
 
-def test_start_apply(configured_harness, kind, mocked_client, helpers):
+def test_start_apply(configured_harness, kind, mocked_client):
     # Reset the mock so that the calls list does not include any calls from other hooks
     mocked_client.reset_mock()
 

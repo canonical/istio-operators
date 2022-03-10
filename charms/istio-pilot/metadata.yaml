@@ -4,17 +4,6 @@ summary: |
   Istio Service Mesh.
 description: |
   https://istio.io/latest/docs/reference/commands/pilot-discovery/
-
-containers:
-  noop:
-    resource: noop
-
-resources:
-  noop:
-    type: oci-image
-    description: ''
-    upstream-source: alpine:latest
-
 provides:
   istio-pilot:
     interface: k8s-service
