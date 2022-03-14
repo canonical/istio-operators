@@ -56,6 +56,12 @@ class Operator(CharmBase):
             self.model.unit.status = WaitingStatus("Waiting for istio-pilot relation data")
             return
 
+        if self.model.config["ingress_svc_type"] not in ("LoadBalancer", "ClusterIP", "NodePort"):
+            self.model.unit.status = BlockedStatus(
+                "Ingress GW svc must be of type: LoadBalancer, NodePort, ClusterIP"
+            )
+            return
+
         pilot = list(pilot.get_data().values())[0]
 
         env = Environment(loader=FileSystemLoader('src'))
@@ -65,6 +71,7 @@ class Operator(CharmBase):
             namespace=self.model.name,
             pilot_host=pilot['service-name'],
             pilot_port=pilot['service-port'],
+            ingress_svc_type=self.model.config["ingress_svc_type"],
         )
 
         for obj in codecs.load_all_yaml(rendered):

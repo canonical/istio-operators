@@ -1,34 +1,33 @@
----
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   labels:
-    app: istio-{{ kind }}gateway
+    app: istio-ingressgateway
     install.operator.istio.io/owning-resource: unknown
-    istio: {{ kind }}gateway
+    istio: ingressgateway
     istio.io/rev: default
-    operator.istio.io/component: "{{ kind|capitalize }}Gateways"
+    operator.istio.io/component: "IngressGateways"
     release: istio
-  name: istio-{{ kind }}gateway-service-account
-  namespace: {{ namespace }}
+  name: istio-ingressgateway-service-account
+  namespace: None
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    app: istio-{{ kind }}gateway
+    app: istio-ingressgateway
     install.operator.istio.io/owning-resource: unknown
-    istio: {{ kind }}gateway
+    istio: ingressgateway
     istio.io/rev: default
-    operator.istio.io/component: {{ kind|capitalize }}Gateways
+    operator.istio.io/component: IngressGateways
     release: istio
-  name: istio-{{ kind }}gateway
-  namespace: {{ namespace }}
+  name: istio-ingressgateway
+  namespace: None
 spec:
   selector:
     matchLabels:
-      app: istio-{{ kind }}gateway
-      istio: {{ kind }}gateway
+      app: istio-ingressgateway
+      istio: ingressgateway
   strategy:
     rollingUpdate:
       maxSurge: 100%
@@ -41,15 +40,15 @@ spec:
         prometheus.io/scrape: "true"
         sidecar.istio.io/inject: "false"
       labels:
-        app: istio-{{ kind }}gateway
+        app: istio-ingressgateway
         chart: gateways
         heritage: Tiller
         install.operator.istio.io/owning-resource: unknown
-        istio: {{ kind }}gateway
+        istio: ingressgateway
         istio.io/rev: default
-        operator.istio.io/component: {{ kind|capitalize }}Gateways
+        operator.istio.io/component: IngressGateways
         release: istio
-        service.istio.io/canonical-name: istio-{{ kind }}gateway
+        service.istio.io/canonical-name: istio-ingressgateway
         service.istio.io/canonical-revision: latest
         sidecar.istio.io/inject: "false"
     spec:
@@ -91,7 +90,8 @@ spec:
             - proxy
             - router
             - --domain
-            - {{ namespace }}.svc.cluster.local
+            - None.svc.cluster.local
+            # - $(POD_NAMESPACE).svc.cluster.local
             - --proxyLogLevel=warning
             - --proxyComponentLogLevel=misc:error
             - --log_output_level=default:info
@@ -99,9 +99,10 @@ spec:
             - name: JWT_POLICY
               value: third-party-jwt
             - name: PILOT_CERT_PROVIDER
-              value: {{ pilot_host }}
+              value: service-name
+              # value: istiod
             - name: CA_ADDR
-              value: {{ pilot_host }}:{{ pilot_port }}
+              value: service-name:6666
             - name: NODE_NAME
               valueFrom:
                 fieldRef:
@@ -132,9 +133,9 @@ spec:
                 fieldRef:
                   fieldPath: spec.serviceAccountName
             - name: ISTIO_META_WORKLOAD_NAME
-              value: istio-{{ kind }}gateway
+              value: istio-ingressgateway
             - name: ISTIO_META_OWNER
-              value: kubernetes://apis/apps/v1/namespaces/{{ namespace }}/deployments/istio-{{ kind }}gateway
+              value: kubernetes://apis/apps/v1/namespaces/None/deployments/istio-ingressgateway
             - name: ISTIO_META_MESH_ID
               value: cluster.local
             - name: TRUST_DOMAIN
@@ -193,18 +194,18 @@ spec:
               name: istio-data
             - mountPath: /etc/istio/pod
               name: podinfo
-            - mountPath: /etc/istio/{{ kind }}gateway-certs
-              name: {{ kind }}gateway-certs
+            - mountPath: /etc/istio/ingressgateway-certs
+              name: ingressgateway-certs
               readOnly: true
-            - mountPath: /etc/istio/{{ kind }}gateway-ca-certs
-              name: {{ kind }}gateway-ca-certs
+            - mountPath: /etc/istio/ingressgateway-ca-certs
+              name: ingressgateway-ca-certs
               readOnly: true
       securityContext:
         fsGroup: 1337
         runAsGroup: 1337
         runAsNonRoot: true
         runAsUser: 1337
-      serviceAccountName: istio-{{ kind }}gateway-service-account
+      serviceAccountName: istio-ingressgateway-service-account
       volumes:
         - configMap:
             name: istio-ca-root-cert
@@ -233,33 +234,33 @@ spec:
             name: istio
             optional: true
           name: config-volume
-        - name: {{ kind }}gateway-certs
+        - name: ingressgateway-certs
           secret:
             optional: true
-            secretName: istio-{{ kind }}gateway-certs
-        - name: {{ kind }}gateway-ca-certs
+            secretName: istio-ingressgateway-certs
+        - name: ingressgateway-ca-certs
           secret:
             optional: true
-            secretName: istio-{{ kind }}gateway-ca-certs
+            secretName: istio-ingressgateway-ca-certs
 ---
 apiVersion: policy/v1beta1
 kind: PodDisruptionBudget
 metadata:
   labels:
-    app: istio-{{ kind }}gateway
+    app: istio-ingressgateway
     install.operator.istio.io/owning-resource: unknown
-    istio: {{ kind }}gateway
+    istio: ingressgateway
     istio.io/rev: default
-    operator.istio.io/component: "{{ kind|capitalize }}Gateways"
+    operator.istio.io/component: "IngressGateways"
     release: istio
-  name: istio-{{ kind }}gateway
-  namespace: {{ namespace }}
+  name: istio-ingressgateway
+  namespace: None
 spec:
   minAvailable: 1
   selector:
     matchLabels:
-      app: istio-{{ kind }}gateway
-      istio: {{ kind }}gateway
+      app: istio-ingressgateway
+      istio: ingressgateway
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -267,10 +268,10 @@ metadata:
   labels:
     install.operator.istio.io/owning-resource: unknown
     istio.io/rev: default
-    operator.istio.io/component: "{{ kind|capitalize }}Gateways"
+    operator.istio.io/component: "IngressGateways"
     release: istio
-  name: istio-{{ kind }}gateway-sds
-  namespace: {{ namespace }}
+  name: istio-ingressgateway-sds
+  namespace: None
 rules:
   - apiGroups: [""]
     resources: ["secrets"]
@@ -282,30 +283,30 @@ metadata:
   labels:
     install.operator.istio.io/owning-resource: unknown
     istio.io/rev: default
-    operator.istio.io/component: "{{ kind|capitalize }}Gateways"
+    operator.istio.io/component: "IngressGateways"
     release: istio
-  name: istio-{{ kind }}gateway-sds
-  namespace: {{ namespace }}
+  name: istio-ingressgateway-sds
+  namespace: None
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: istio-{{ kind }}gateway-sds
+  name: istio-ingressgateway-sds
 subjects:
   - kind: ServiceAccount
-    name: istio-{{ kind }}gateway-service-account
+    name: istio-ingressgateway-service-account
 ---
 apiVersion: v1
 kind: Service
 metadata:
   labels:
-    app: istio-{{ kind }}gateway
+    app: istio-ingressgateway
     install.operator.istio.io/owning-resource: unknown
-    istio: {{ kind }}gateway
+    istio: ingressgateway
     istio.io/rev: default
-    operator.istio.io/component: "{{ kind|capitalize }}Gateways"
+    operator.istio.io/component: "IngressGateways"
     release: istio
-  name: istio-{{ kind }}gateway
-  namespace: {{ namespace }}
+  name: istio-ingressgateway
+  namespace: None
 spec:
   ports:
     - name: http2
@@ -317,5 +318,5 @@ spec:
       protocol: TCP
       targetPort: 8443
   selector:
-    istio: {{ kind }}gateway
-  type: {{ 'ClusterIP' if kind == 'egress' else ingress_svc_type }}
+    istio: ingressgateway
+  type: LoadBalancer

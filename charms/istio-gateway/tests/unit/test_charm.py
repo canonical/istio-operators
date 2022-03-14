@@ -49,6 +49,27 @@ def test_install_no_rel(harness):
     assert harness.charm.model.unit.status == BlockedStatus('Waiting for istio-pilot relation')
 
 
+def test_start_check_change_svc(configured_harness_only_ingress, ingress_svc_type, mocked_client):
+    # Reset the mock so that the calls list does not include any calls from other hooks
+    mocked_client.reset_mock()
+
+    configured_harness_only_ingress.charm.on.start.emit()
+    actual_objects = []
+    expected_objects = list(
+        yaml.safe_load_all(open(f'tests/unit/data/ingress-{ingress_svc_type}-example.yaml'))
+    )
+    # the apply method is called for every object in the manifest
+    for call in mocked_client.return_value.apply.call_args_list:
+        # Ensure the server side apply calls include the namespace kwarg
+        assert call.kwargs['namespace'] == 'None'
+        # The first (and only) argument to the apply method is the obj
+        # Convert the object to a dictionary and add it to the list
+        actual_objects.append(call.args[0].to_dict())
+
+    assert expected_objects == actual_objects
+    assert configured_harness_only_ingress.charm.model.unit.status == ActiveStatus('')
+
+
 def test_start_apply(configured_harness, kind, mocked_client):
     # Reset the mock so that the calls list does not include any calls from other hooks
     mocked_client.reset_mock()
