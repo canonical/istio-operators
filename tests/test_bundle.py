@@ -111,7 +111,7 @@ async def test_deploy_bookinfo_example(ops_test: OpsTest):
     gateway_json = await ops_test.run(
         'kubectl',
         'get',
-        'services/istio-ingressgateway',
+        'services/istio-ingressgateway-workload',
         '-n',
         ops_test.model_name,
         '-ojson',
