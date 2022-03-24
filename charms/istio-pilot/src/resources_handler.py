@@ -4,12 +4,15 @@
 
 """Resources handling library using Lightkube."""
 import logging
+from typing import Tuple, TextIO, Union, Iterable
 
 import yaml
 from jinja2 import Environment, FileSystemLoader
+import lightkube  # noqa F401  # Needed for patching in test_resources_handler.py
 from lightkube import Client, codecs
 from lightkube.core.exceptions import ApiError
 from lightkube.generic_resource import create_namespaced_resource, GenericNamespacedResource
+from lightkube.core.resource import Resource
 
 
 class ResourceHandler:
@@ -118,3 +121,76 @@ class ResourceHandler:
         )
 
         return ns_resource
+
+    def reconcile_desired_resources(
+        self,
+        resource: GenericNamespacedResource,
+        desired_resources: Union[str, TextIO, None],
+        namespace: str = None,
+    ) -> None:
+        """Reconciles the desired list of resources of any kind.
+
+        Args:
+            resource: resource kind (e.g. Service, Pod)
+            desired_resources: all desired resources in manifest form as str
+            namespace: namespace of the object
+        """
+        existing_resources = self.lightkube_client.list(
+            resource,
+            labels={
+                "app.juju.is/created-by": f"{self.app_name}",
+                f"app.{self.app_name}.io/is-workload-entity": "true",
+            },
+            namespace=namespace,
+        )
+
+        if desired_resources is not None:
+            desired_resources_list = codecs.load_all_yaml(desired_resources)
+            diff_obj = in_left_not_right(left=existing_resources, right=desired_resources_list)
+            for obj in diff_obj:
+                self.delete_object(obj)
+            self.apply_manifest(desired_resources, namespace=namespace)
+
+
+def in_left_not_right(left, right):
+    """Returns the resources in left that are not right
+    Resources between left and right are deemed equal if they are the same resource type and name.
+    Namespace is ignored as the desired resources are expected to be namespaced resources coming
+    from templates that do not have namespace specified.
+    """
+    left_as_dict = resources_to_dict_of_resources(left)
+    right_as_dict = resources_to_dict_of_resources(right)
+
+    keys_in_left_not_right = set(left_as_dict.keys()) - set(right_as_dict.keys())
+    in_left_not_right = [left_as_dict[k] for k in keys_in_left_not_right]
+
+    return in_left_not_right
+
+
+def select_resources_by_name(
+    resource_list: Iterable[Resource], names: Iterable[str]
+) -> Tuple[Resource]:
+    """Returns the subset of the resources in resource_list that match the names defined in names
+    Note this is a naive implementation that selects resources solely by name, ignoring things
+    like resource type or namespace.
+    Raises exceptions if:
+    * any element of names is not in resource_list (raises KeyError)
+    * resource_lists has multiple elements with the same name (raises KeyError)
+    """
+    resource_dict = {resource.metadata.name: resource for resource in resource_list}
+    if len(resource_dict) != len(resource_list):
+        raise ValueError(
+            "Unexpected number of elements found during selection - are there "
+            "multiple resources with the same metadata.name?"
+        )
+    selected = tuple(resource_dict[name] for name in names)
+    return selected
+
+
+def resources_to_dict_of_resources(resources):
+    """Returns a dict of given Lightkube resources keyed by tuples of (kind, namespace, name)"""
+    return {resource_to_tuple(r): r for r in resources}
+
+
+def resource_to_tuple(resource: Resource) -> Tuple[Resource, Resource]:
+    return resource.kind, resource.metadata.name

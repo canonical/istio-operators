@@ -174,13 +174,12 @@ class Operator(CharmBase):
             t.render(**get_kwargs(ingress.versions[app.name], route)).strip().strip("---")
             for ((_, app), route) in routes.items()
         )
-        self._resource_handler.delete_existing_resource_objects(
-            self._get_custom_resource_class(resource_name='virtual_service'),
-            namespace=self.model.name,
-        )
 
-        if routes:
-            self._resource_handler.apply_manifest(virtual_services, namespace=self.model.name)
+        self._resource_handler.reconcile_desired_resources(
+            resource=self._get_custom_resource_class(resource_name='virtual_service'),
+            namespace=self.model.name,
+            desired_resources=virtual_services,
+        )
 
     def handle_ingress_auth(self, event):
         auth_routes = self.interfaces['ingress-auth']
