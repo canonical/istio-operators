@@ -9,7 +9,7 @@ metadata:
     istio.io/rev: default
     operator.istio.io/component: "{{ kind|capitalize }}Gateways"
     release: istio
-  name: istio-{{ kind }}gateway-service-account
+  name: istio-{{ kind }}gateway-workload-service-account
   namespace: {{ namespace }}
 ---
 apiVersion: apps/v1
@@ -22,7 +22,7 @@ metadata:
     istio.io/rev: default
     operator.istio.io/component: {{ kind|capitalize }}Gateways
     release: istio
-  name: istio-{{ kind }}gateway
+  name: istio-{{ kind }}gateway-workload
   namespace: {{ namespace }}
 spec:
   selector:
@@ -49,7 +49,7 @@ spec:
         istio.io/rev: default
         operator.istio.io/component: {{ kind|capitalize }}Gateways
         release: istio
-        service.istio.io/canonical-name: istio-{{ kind }}gateway
+        service.istio.io/canonical-name: istio-{{ kind }}gateway-workload
         service.istio.io/canonical-revision: latest
         sidecar.istio.io/inject: "false"
     spec:
@@ -132,9 +132,9 @@ spec:
                 fieldRef:
                   fieldPath: spec.serviceAccountName
             - name: ISTIO_META_WORKLOAD_NAME
-              value: istio-{{ kind }}gateway
+              value: istio-{{ kind }}gateway-workload
             - name: ISTIO_META_OWNER
-              value: kubernetes://apis/apps/v1/namespaces/{{ namespace }}/deployments/istio-{{ kind }}gateway
+              value: kubernetes://apis/apps/v1/namespaces/{{ namespace }}/deployments/istio-{{ kind }}gateway-workload
             - name: ISTIO_META_MESH_ID
               value: cluster.local
             - name: TRUST_DOMAIN
@@ -204,7 +204,7 @@ spec:
         runAsGroup: 1337
         runAsNonRoot: true
         runAsUser: 1337
-      serviceAccountName: istio-{{ kind }}gateway-service-account
+      serviceAccountName: istio-{{ kind }}gateway-workload-service-account
       volumes:
         - configMap:
             name: istio-ca-root-cert
@@ -236,11 +236,11 @@ spec:
         - name: {{ kind }}gateway-certs
           secret:
             optional: true
-            secretName: istio-{{ kind }}gateway-certs
+            secretName: istio-{{ kind }}gateway-workload-certs
         - name: {{ kind }}gateway-ca-certs
           secret:
             optional: true
-            secretName: istio-{{ kind }}gateway-ca-certs
+            secretName: istio-{{ kind }}gateway-workload-ca-certs
 ---
 apiVersion: policy/v1beta1
 kind: PodDisruptionBudget
@@ -252,7 +252,7 @@ metadata:
     istio.io/rev: default
     operator.istio.io/component: "{{ kind|capitalize }}Gateways"
     release: istio
-  name: istio-{{ kind }}gateway
+  name: istio-{{ kind }}gateway-workload
   namespace: {{ namespace }}
 spec:
   minAvailable: 1
@@ -269,7 +269,7 @@ metadata:
     istio.io/rev: default
     operator.istio.io/component: "{{ kind|capitalize }}Gateways"
     release: istio
-  name: istio-{{ kind }}gateway-sds
+  name: istio-{{ kind }}gateway-workload-sds
   namespace: {{ namespace }}
 rules:
   - apiGroups: [""]
@@ -284,15 +284,15 @@ metadata:
     istio.io/rev: default
     operator.istio.io/component: "{{ kind|capitalize }}Gateways"
     release: istio
-  name: istio-{{ kind }}gateway-sds
+  name: istio-{{ kind }}gateway-workload-sds
   namespace: {{ namespace }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: istio-{{ kind }}gateway-sds
+  name: istio-{{ kind }}gateway-workload-sds
 subjects:
   - kind: ServiceAccount
-    name: istio-{{ kind }}gateway-service-account
+    name: istio-{{ kind }}gateway-workload-service-account
 ---
 apiVersion: v1
 kind: Service
@@ -304,7 +304,7 @@ metadata:
     istio.io/rev: default
     operator.istio.io/component: "{{ kind|capitalize }}Gateways"
     release: istio
-  name: istio-{{ kind }}gateway
+  name: istio-{{ kind }}gateway-workload
   namespace: {{ namespace }}
 spec:
   ports:

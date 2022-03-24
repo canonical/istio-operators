@@ -68,6 +68,7 @@ class Operator(CharmBase):
         )
 
         for obj in codecs.load_all_yaml(rendered):
+            self.log.debug(f"Deploying {obj.metadata.name} of kind {obj.kind}")
             self.lightkube_client.apply(obj, namespace=obj.metadata.namespace)
 
         self.unit.status = ActiveStatus()
