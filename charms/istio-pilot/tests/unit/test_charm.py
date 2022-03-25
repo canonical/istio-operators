@@ -294,7 +294,8 @@ def test_removal(harness, subprocess, mocked_client, helpers, mocker):
     mocked_metadata.name = "ResourceObjectFromYaml"
     mocked_yaml_object = mocker.MagicMock(metadata=mocked_metadata)
     mocker.patch(
-        'charm.codecs.load_all_yaml', return_value=[mocked_yaml_object, mocked_yaml_object]
+        'resources_handler.codecs.load_all_yaml',
+        return_value=[mocked_yaml_object, mocked_yaml_object],
     )
 
     harness.set_leader(True)
@@ -315,6 +316,16 @@ def test_removal(harness, subprocess, mocked_client, helpers, mocker):
         f"values.global.istioNamespace={None}",
     ]
 
+    # Change ingress-auth and ingress relations to
+    # correctly call all ingress handlers, and not as a subproduct
+    # of handle_default_gateway onConfigChanged
+    rel_id = harness.add_relation("ingress-auth", "app")
+    harness.add_relation_unit(rel_id, "app/0")
+    harness.remove_relation_unit(rel_id, "app/0")
+    rel_id = harness.add_relation("ingress", "app")
+    harness.add_relation_unit(rel_id, "app/0")
+    harness.remove_relation_unit(rel_id, "app/0")
+
     assert len(check_output.call_args_list) == 1
     assert check_output.call_args_list[0].args == (expected_args,)
     assert check_output.call_args_list[0].kwargs == {}
@@ -325,9 +336,9 @@ def test_removal(harness, subprocess, mocked_client, helpers, mocker):
     # The 2 mock objects at the end are the "resources" that get returned from the mocked
     # load_all_yaml call when loading the resources from the manifest.
     expected_res_names = [
-        'VirtualService',
         'Gateway',
         'EnvoyFilter',
+        'VirtualService',
         'ResourceObjectFromYaml',
         'ResourceObjectFromYaml',
     ]
@@ -341,7 +352,7 @@ def test_removal(harness, subprocess, mocked_client, helpers, mocker):
     mocked_client.return_value.delete.side_effect = api_error
     # mock out the _delete_existing_resource_objects method since we dont want the ApiError
     # to be thrown there
-    mocker.patch('charm.Operator._delete_existing_resource_objects')
+    mocker.patch('resources_handler.ResourceHandler.delete_existing_resource_objects')
     # Ensure we DO NOT raise the exception
     harness.charm.on.remove.emit()
 
