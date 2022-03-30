@@ -13,6 +13,7 @@ from lightkube import Client, codecs
 from lightkube.core.exceptions import ApiError
 from lightkube.generic_resource import create_namespaced_resource, GenericNamespacedResource
 from lightkube.core.resource import Resource
+from lightkube.resources.core_v1 import Service
 
 
 class ResourceHandler:
@@ -150,6 +151,17 @@ class ResourceHandler:
             for obj in diff_obj:
                 self.delete_object(obj)
             self.apply_manifest(desired_resources, namespace=namespace)
+
+    def get_gateway_address(self):
+        """Look up the load balancer address for the ingress gateway.
+        If the gateway isn't available or doesn't have a load balancer address yet,
+        returns None.
+        """
+        # FIXME: service name is hardcoded
+        svcs = self.lightkube_client.get(
+            Service, name="istio-ingressgateway", namespace=self.model_name
+        )
+        return svcs.status.loadBalancer.ingress[0].ip
 
 
 def in_left_not_right(left, right):

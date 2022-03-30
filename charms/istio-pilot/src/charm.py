@@ -5,14 +5,11 @@ import subprocess
 
 import yaml
 from jinja2 import Environment, FileSystemLoader
-from lightkube import Client
-from lightkube.core.exceptions import ApiError
-from lightkube.resources.core_v1 import Service
 from ops.charm import CharmBase, RelationBrokenEvent
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from serialized_data_interface import NoCompatibleVersions, NoVersionsListed, get_interfaces
-from resources_handler import ResourceHandler, GenericNamespacedResource
+from resources_handler import ApiError, ResourceHandler, GenericNamespacedResource
 
 
 class Operator(CharmBase):
@@ -40,8 +37,6 @@ class Operator(CharmBase):
         self.env = Environment(loader=FileSystemLoader('src'))
         self._custom_resource_classes = {}
         self._resource_handler = ResourceHandler(self.app.name, self.model.name)
-
-        self.lightkube_client = Client(namespace=self.model.name, field_manager="lightkube")
 
         self.framework.observe(self.on.install, self.install)
         self.framework.observe(self.on.remove, self.remove)
@@ -124,7 +119,7 @@ class Operator(CharmBase):
 
     def handle_ingress(self, event):
         try:
-            if not self._get_gateway_address:
+            if not self._resource_handler.get_gateway_address():
                 self.log.info(
                     "No gateway address returned - this may be transitory, but "
                     "if it persists it is likely an unexpected error. "
@@ -132,6 +127,7 @@ class Operator(CharmBase):
                 )
                 event.defer()
                 return
+            self._resource_handler.get_gateway_address()
         except (ApiError, TypeError) as e:
             if isinstance(e, ApiError):
                 self.log.exception(
@@ -254,19 +250,6 @@ class Operator(CharmBase):
                 resource_name
             ] = self._resource_handler.generate_generic_resource_class(f'{resource_name}.yaml.j2')
         return self._custom_resource_classes[resource_name]
-
-    @property
-    def _get_gateway_address(self):
-        """Look up the load balancer address for the ingress gateway.
-        If the gateway isn't available or doesn't have a load balancer address yet,
-        returns None.
-        """
-        # FIXME: service name is hardcoded
-        # TODO: extract this from charm code
-        svcs = self.lightkube_client.get(
-            Service, name="istio-ingressgateway", namespace=self.model.name
-        )
-        return svcs.status.loadBalancer.ingress[0].ip
 
 
 if __name__ == "__main__":
