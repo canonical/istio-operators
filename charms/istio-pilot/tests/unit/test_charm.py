@@ -6,6 +6,30 @@ from ops.model import ActiveStatus, WaitingStatus
 from lightkube.core.exceptions import ApiError
 
 
+@pytest.fixture(autouse=True)
+def mocked_list(mocked_client, mocker):
+    mocked_resource_obj = mocker.MagicMock()
+
+    def side_effect(*args, **kwargs):
+        # List needs to return a list of at least one object of the passed in resource type
+        # so that delete gets called
+        # Additionally, lightkube's delete method takes in the class name of the object,
+        # and the name of the object being deleted as arguments.
+        # Unfortunately, making type(some_mocked_object) return a type other than
+        # 'unittest.mock.MagicMock does not seem possible. So when checking that the correct
+        # resources are being deleted we will check the name of the object being deleted and just
+        # use the the class name for obj.metadata.name
+        resource_obj = args[0]
+        print(resource_obj.metadata.__str__)
+        mocked_metadata = mocker.MagicMock()
+        mocked_metadata.name = str(args[0].__name__)
+        mocked_resource_obj.metadata = mocked_metadata
+        mocked_resource_obj.kind = str(args[0].__name__)
+        return [mocked_resource_obj]
+
+    mocked_client.return_value.list.side_effect = side_effect
+
+
 def test_events(harness, mocker):
     harness.set_leader(True)
     harness.begin_with_initial_hooks()
@@ -343,7 +367,6 @@ def test_removal(harness, subprocess, mocked_client, helpers, mocker):
         'ResourceObjectFromYaml',
     ]
     assert helpers.compare_deleted_resource_names(actual_res_names, expected_res_names)
-
     # Now test the exceptions that should be ignored
     # ApiError
     api_error = ApiError(response=mocker.MagicMock())

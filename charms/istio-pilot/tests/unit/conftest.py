@@ -49,29 +49,6 @@ def mocked_charm_client(mocker):
     yield client
 
 
-# Mocking list is necessary since _delete_existing_resource_objects
-# uses it to find existing resources
-@pytest.fixture(autouse=True)
-def mocked_list(mocked_client, mocker):
-    mocked_resource_obj = mocker.MagicMock()
-
-    def side_effect(*args, **kwargs):
-        # List needs to return a list of at least one object of the passed in resource type
-        # so that delete gets called
-        # Additionally, lightkube's delete method takes in the class name of the object,
-        # and the name of the object being deleted as arguments.
-        # Unfortunately, making type(some_mocked_object) return a type other than
-        # 'unittest.mock.MagicMock does not seem possible. So when checking that the correct
-        # resources are being deleted we will check the name of the object being deleted and just
-        # use the the class name for obj.metadata.name
-        mocked_metadata = mocker.MagicMock()
-        mocked_metadata.name = str(args[0].__name__)
-        mocked_resource_obj.metadata = mocked_metadata
-        return [mocked_resource_obj]
-
-    mocked_client.return_value.list.side_effect = side_effect
-
-
 # Similar to what is done for list, but for get
 # and just returning the status attribute
 @pytest.fixture(autouse=True)
