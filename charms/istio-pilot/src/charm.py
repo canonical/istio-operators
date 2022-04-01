@@ -98,8 +98,8 @@ class Operator(CharmBase):
     def handle_default_gateway(self, event):
         """Handles creating gateways from charm config
 
-        Side effect: self.handle_ingress() is also invoked by this handler as ingress objects
-        depend on the default_gateway
+        Side effect: self.handle_ingress() is also invoked by this handler as ingress
+        objects depend on the default_gateway
         """
         t = self.env.get_template('gateway.yaml.j2')
         gateway = self.model.config['default-gateway']
@@ -124,16 +124,26 @@ class Operator(CharmBase):
 
     def handle_ingress(self, event):
         try:
-            self._get_gateway_address
+            if not self._get_gateway_address:
+                self.log.info(
+                    "No gateway address returned - this may be transitory, but "
+                    "if it persists it is likely an unexpected error. "
+                    "Deferring this event"
+                )
+                event.defer()
+                return
         except (ApiError, TypeError) as e:
-            if e == ApiError:
-                self.log.exception("ApiError: Could not get istio-ingressgateway, retrying")
-            elif e == TypeError:
-                self.log.exception("TypeError: No ip address found, retrying")
+            if isinstance(e, ApiError):
+                self.log.exception(
+                    "ApiError: Could not get istio-ingressgateway, deferring this event"
+                )
+            elif isinstance(e, TypeError):
+                self.log.exception("TypeError: No ip address found, deferring this event")
+            else:
+                self.log.exception("Unexpected exception, deferring this event.  Exception was:")
+                self.log.exception(e)
             event.defer()
             return
-        else:
-            self.unit.status = ActiveStatus()
 
         ingress = self.interfaces['ingress']
 
@@ -156,6 +166,8 @@ class Operator(CharmBase):
 
         t = self.env.get_template('virtual_service.yaml.j2')
         gateway = self.model.config['default-gateway']
+
+        self.unit.status = ActiveStatus()
 
         def get_kwargs(version, route):
             """Handles both v1 and v2 ingress relations.
