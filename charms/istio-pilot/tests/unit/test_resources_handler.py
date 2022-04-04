@@ -38,7 +38,7 @@ def generate_pod_resource_list(pod_names):
         (  # 0 desired resources, M existing resources.  Delete: M calls.
             tuple(),  # Iterable of names of resources desired after reconciliation
             ("a", "b", "c"),  # Iterable of names of resources already on cluster before
-            ("a", "b", "c"),  # Names of resources expected to be passed to delete_object
+            ("a", "b", "c"),  # Names of resources expected to be passed to delete_resource
         ),
         (  # N desired, 0 existing resources.  Delete: 0 calls.
             ("a", "b", "c"),
@@ -73,8 +73,8 @@ def test_reconcile_desired_resources(
     ########################
     # Mock away dependencies
 
-    # Simplify checking object apply/delete actions
-    rh.delete_object = MagicMock()
+    # Simplify checking resource apply/delete actions
+    rh.delete_resource = MagicMock()
     rh.apply_manifest = MagicMock()
 
     # Attach our desired resources to a resource handler with a mocked lightkube client
@@ -110,7 +110,7 @@ def test_reconcile_desired_resources(
     )
 
     # Assert delete called for every element expected to be deleted
-    delete_calls = rh.delete_object.call_args_list
+    delete_calls = rh.delete_resource.call_args_list
     if delete_calls is None:
         delete_calls = tuple()
     names_deleted = tuple(c.args[0].metadata.name for c in delete_calls)
@@ -159,7 +159,7 @@ def test_in_left_not_right(left, right, expected_result):
     "resources,names_selected,context_raised",
     [
         (POD_LIST_1, ("pod-1", "pod-3"), does_not_raise()),  # Works
-        (POD_LIST_1, ("not-a-real-object",), pytest.raises(KeyError)),  # Missing element
+        (POD_LIST_1, ("not-a-real-resource",), pytest.raises(KeyError)),  # Missing element
         (POD_LIST_1 + POD_LIST_1, None, pytest.raises(ValueError)),  # Duplicate in resources
     ],
 )

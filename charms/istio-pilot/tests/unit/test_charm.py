@@ -373,9 +373,9 @@ def test_removal(harness, subprocess, mocked_client, helpers, mocker):
     # # ApiError with not found message should be ignored
     api_error.status.message = "something not found"
     mocked_client.return_value.delete.side_effect = api_error
-    # mock out the _delete_existing_resource_objects method since we dont want the ApiError
+    # mock out the _delete_existing_resources method since we dont want the ApiError
     # to be thrown there
-    mocker.patch('resources_handler.ResourceHandler.delete_existing_resource_objects')
+    mocker.patch('resources_handler.ResourceHandler.delete_existing_resources')
     # Ensure we DO NOT raise the exception
     harness.charm.on.remove.emit()
 
