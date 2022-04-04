@@ -88,7 +88,7 @@ class Operator(CharmBase):
         )
 
         for resource in self._custom_resource_classes.values():
-            self._resource_handler.delete_existing_resource_objects(
+            self._resource_handler.delete_existing_resources(
                 resource, namespace=self.model.name, ignore_unauthorized=True
             )
         self._resource_handler.delete_manifest(
@@ -99,12 +99,12 @@ class Operator(CharmBase):
         """Handles creating gateways from charm config
 
         Side effect: self.handle_ingress() is also invoked by this handler as ingress
-        objects depend on the default_gateway
+        resources depend on the default_gateway
         """
         t = self.env.get_template('gateway.yaml.j2')
         gateway = self.model.config['default-gateway']
         manifest = t.render(name=gateway, app_name=self.app.name)
-        self._resource_handler.delete_existing_resource_objects(
+        self._resource_handler.delete_existing_resources(
             resource=self._get_custom_resource_class(resource_name='gateway'),
             labels={
                 f"app.{self.app.name}.io/is-workload-entity": "true",
@@ -113,7 +113,7 @@ class Operator(CharmBase):
         )
         self._resource_handler.apply_manifest(manifest)
 
-        # Update the ingress objects as they rely on the default_gateway
+        # Update the ingress resources as they rely on the default_gateway
         self.handle_ingress(event)
 
     def send_info(self, event):
@@ -231,7 +231,7 @@ class Operator(CharmBase):
             for r in auth_routes
         )
 
-        self._resource_handler.delete_existing_resource_objects(
+        self._resource_handler.delete_existing_resources(
             self._get_custom_resource_class(resource_name='auth_filter'), namespace=self.model.name
         )
         self._resource_handler.apply_manifest(auth_filters, namespace=self.model.name)

@@ -34,7 +34,7 @@ class ResourceHandler:
 
         self.env = Environment(loader=FileSystemLoader('src'))
 
-    def delete_object(
+    def delete_resource(
         self, obj, namespace=None, ignore_not_found=False, ignore_unauthorized=False
     ):
         try:
@@ -53,7 +53,7 @@ class ResourceHandler:
             else:
                 raise
 
-    def delete_existing_resource_objects(
+    def delete_existing_resources(
         self,
         resource,
         namespace=None,
@@ -68,7 +68,7 @@ class ResourceHandler:
             labels={"app.juju.is/created-by": f"{self.app_name}"}.update(labels),
             namespace=namespace,
         ):
-            self.delete_object(
+            self.delete_resource(
                 obj,
                 namespace=namespace,
                 ignore_not_found=ignore_not_found,
@@ -83,7 +83,7 @@ class ResourceHandler:
         self, manifest, namespace=None, ignore_not_found=False, ignore_unauthorized=False
     ):
         for obj in codecs.load_all_yaml(manifest):
-            self.delete_object(
+            self.delete_resource(
                 obj,
                 namespace=namespace,
                 ignore_not_found=ignore_not_found,
@@ -133,7 +133,7 @@ class ResourceHandler:
         Args:
             resource: resource kind (e.g. Service, Pod)
             desired_resources: all desired resources in manifest form as str
-            namespace: namespace of the object
+            namespace: namespace of the resource
         """
         existing_resources = self.lightkube_client.list(
             resource,
@@ -148,7 +148,7 @@ class ResourceHandler:
             desired_resources_list = codecs.load_all_yaml(desired_resources)
             diff_obj = in_left_not_right(left=existing_resources, right=desired_resources_list)
             for obj in diff_obj:
-                self.delete_object(obj)
+                self.delete_resource(obj)
             self.apply_manifest(desired_resources, namespace=namespace)
 
 
