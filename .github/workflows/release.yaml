@@ -4,17 +4,17 @@ on:
   workflow_dispatch:
     inputs:
       destination-channel:
-        description: 'Destination Channel'
+        description: "Destination Channel"
         required: true
       origin-channel:
-        description: 'Origin Channel'
+        description: "Origin Channel"
         required: false
       rev:
-        description: 'Revision number'
+        description: "Revision number"
         required: false
       tag-prefix:
-        description: 'Tag Prefix'
-        required: false
+        description: "Tag Prefix"
+        required: true
 
 jobs:
   promote-charm:
@@ -31,3 +31,4 @@ jobs:
           origin-channel: ${{ github.event.inputs.origin-channel }}
           revision: ${{ github.event.inputs.rev }}
           tag-prefix: ${{ github.event.inputs.tag-prefix }}
+          charm-path: charms/${{ github.event.inputs.tag-prefix}}
