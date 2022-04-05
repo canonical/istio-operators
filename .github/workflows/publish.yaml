@@ -20,11 +20,11 @@ jobs:
       fail-fast: false
       matrix:
         charm:
-          - charms/istio-pilot
-          - charms/istio-gateway
+          - istio-pilot
+          - istio-gateway
     steps:
       - uses: actions/checkout@v2
-      - uses: canonical/charmhub-upload-action@0.2.0
+      - uses: canonical/charming-actions/upload-charm@1.0.0
         with:
           credentials: ${{ secrets.CHARMCRAFT_CREDENTIALS }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
