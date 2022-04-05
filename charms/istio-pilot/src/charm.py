@@ -89,10 +89,14 @@ class Operator(CharmBase):
 
         for resource in self._custom_resource_classes.values():
             self._resource_handler.delete_existing_resources(
-                resource, namespace=self.model.name, ignore_unauthorized=True
+                resource,
+                namespace=self.model.name,
             )
         self._resource_handler.delete_manifest(
-            manifests, namespace=self.model.name, ignore_not_found=True, ignore_unauthorized=True
+            manifests,
+            namespace=self.model.name,
+            ignore_not_found=True,
+            include_created_by_external=True,
         )
 
     def handle_default_gateway(self, event):
@@ -252,7 +256,9 @@ class Operator(CharmBase):
         if resource_name not in self._custom_resource_classes:
             self._custom_resource_classes[
                 resource_name
-            ] = self._resource_handler.generate_generic_resource_class(f'{resource_name}.yaml.j2')
+            ] = self._resource_handler.generate_generic_resource_class(
+                f'{resource_name}.yaml.j2', from_filename=True
+            )
         return self._custom_resource_classes[resource_name]
 
     @property

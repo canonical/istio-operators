@@ -10,7 +10,7 @@ import yaml
 from jinja2 import Environment, FileSystemLoader
 import lightkube  # noqa F401  # Needed for patching in test_resources_handler.py
 from lightkube import Client, codecs
-from lightkube.core.exceptions import ApiError
+from lightkube.core.exceptions import LoadResourceError, httpx
 from lightkube.generic_resource import create_namespaced_resource, GenericNamespacedResource
 from lightkube.core.resource import Resource
 
@@ -35,30 +35,34 @@ class ResourceHandler:
         self.env = Environment(loader=FileSystemLoader('src'))
 
     def delete_resource(
-        self, obj, namespace=None, ignore_not_found=False, ignore_unauthorized=False
+        self,
+        obj,
+        namespace=None,
+        ignore_not_found=False,
     ):
         try:
             self.lightkube_client.delete(type(obj), obj.metadata.name, namespace=namespace)
-        except ApiError as err:
-            self.log.exception("ApiError encountered while attempting to delete resource.")
-            if err.status.message is not None:
-                if "not found" in err.status.message and ignore_not_found:
-                    self.log.error(f"Ignoring not found error:\n{err.status.message}")
-                elif "(Unauthorized)" in err.status.message and ignore_unauthorized:
-                    # Ignore error from https://bugs.launchpad.net/juju/+bug/1941655
-                    self.log.error(f"Ignoring unauthorized error:\n{err.status.message}")
-                else:
-                    self.log.error(err.status.message)
-                    raise
-            else:
-                raise
+
+        # For some reason, on 404 Not Found errors the raised exception
+        # is httpx.HTTPStatusError instead of an ApiError
+        # FIXME: find out why this is the case, probably something missing
+        # in upstream lightkube
+        except httpx.HTTPStatusError as err:
+            self.log.warning(
+                "HTTPStatusError encountered while attempting to delete resource.\n"
+                "If ignore_not_found is set to True, this WARNING can be dismissed."
+            )
+            if err.response.status_code == 404 and ignore_not_found:
+                self.log.warning(f"Ignoring not found error for: {obj.kind}/{obj.metadata.name}")
+                return
+            self.log.error(err)
+            raise
 
     def delete_existing_resources(
         self,
         resource,
         namespace=None,
         ignore_not_found=False,
-        ignore_unauthorized=False,
         labels=None,
     ):
         if labels is None:
@@ -72,7 +76,6 @@ class ResourceHandler:
                 obj,
                 namespace=namespace,
                 ignore_not_found=ignore_not_found,
-                ignore_unauthorized=ignore_unauthorized,
             )
 
     def apply_manifest(self, manifest, namespace=None):
@@ -80,22 +83,47 @@ class ResourceHandler:
             self.lightkube_client.apply(obj, namespace=namespace)
 
     def delete_manifest(
-        self, manifest, namespace=None, ignore_not_found=False, ignore_unauthorized=False
+        self,
+        manifest,
+        namespace=None,
+        ignore_not_found=False,
+        include_created_by_external=False,
     ):
-        for obj in codecs.load_all_yaml(manifest):
-            self.delete_resource(
-                obj,
-                namespace=namespace,
-                ignore_not_found=ignore_not_found,
-                ignore_unauthorized=ignore_unauthorized,
-            )
+        for obj in yaml.safe_load_all(manifest):
+            if not obj:
+                self.log.warning(
+                    "Attempting to delete a resource from an empty resource object.\n"
+                    "This could be due to an incorrectly formatted manifest."
+                )
+                return
+            try:
+                obj_to_delete = lightkube.codecs.from_dict(obj)
+            except LoadResourceError:
+                if include_created_by_external:
+                    self.generate_generic_resource_class(manifest=obj)
+                    obj_to_delete = lightkube.codecs.from_dict(obj)
+                else:
+                    raise
+            finally:
+                self.delete_resource(
+                    obj_to_delete,
+                    namespace=namespace,
+                    ignore_not_found=ignore_not_found,
+                )
 
-    def generate_generic_resource_class(self, filename: str) -> GenericNamespacedResource:
+    def generate_generic_resource_class(
+        self, manifest: str = None, from_filename=False
+    ) -> GenericNamespacedResource:
         """Returns a class representing a namespaced K8s resource.
 
         Args:
-            - filename: name of the manifest file used to create the resource
+            - manifest: Kubernetes resource object used to create the resource
+            - from_filename (optional): when True, it creates generic resources
+                  from a manifest file instead of an object
         """
+
+        # FIXME: this method receives two mutually exclusive args
+        # we should change that
 
         # TODO: this is a generic context that is used for rendering
         # the manifest files and extract their metadata. We should
@@ -110,8 +138,9 @@ class ResourceHandler:
             'service': 'service',
         }
 
-        t = self.env.get_template(filename)
-        manifest = yaml.safe_load(t.render(context))
+        if from_filename:
+            t = self.env.get_template(manifest)
+            manifest = yaml.safe_load(t.render(context))
         ns_resource = create_namespaced_resource(
             group=manifest["apiVersion"].split("/")[0],
             version=manifest["apiVersion"].split("/")[1],
