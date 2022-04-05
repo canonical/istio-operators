@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        charm-path:
+        charm:
           - charms/istio-pilot
           - charms/istio-gateway
     steps:
@@ -27,5 +27,7 @@ jobs:
       - uses: canonical/charmhub-upload-action@0.2.0
         with:
           credentials: ${{ secrets.CHARMCRAFT_CREDENTIALS }}
-          charm-path: ${{ matrix.charm-path }}
-          charmcraft-channel: latest/edge
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          charm-path: charms/${{ matrix.charm }}
+          channel: latest/edge
+          tag-prefix: ${{ matrix.charm }}
