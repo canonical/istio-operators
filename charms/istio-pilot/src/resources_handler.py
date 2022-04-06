@@ -111,45 +111,20 @@ class ResourceHandler:
                     ignore_not_found=ignore_not_found,
                 )
 
-    def generate_generic_resource_class(
-        self, manifest: str = None, from_filename=False
-    ) -> GenericNamespacedResource:
-        """Returns a class representing a namespaced K8s resource.
+    def generate_generic_resource_class(self, manifest: str = None) -> GenericNamespacedResource:
+        manifest_dict = yaml.safe_load(manifest)
 
-        Args:
-            - manifest: Kubernetes resource object used to create the resource
-            - from_filename (optional): when True, it creates generic resources
-                  from a manifest file instead of an object
-        """
+        # Get the CRD details from cluster itself, then create a resource class from that
+        crd = self.lightkube_client.get(lightkube.CustomResourceDefinition, manifest_dict["kind"])
+        if isNamespaced(crd):
+            resource_creator = create_namespaced_resource
+        else:
+            resource_creator = create_generic_resource
 
-        # FIXME: this method receives two mutually exclusive args
-        # we should change that
+        # Create the lightkube resource
+        resource_class = resource_creator(**crd)
 
-        # TODO: this is a generic context that is used for rendering
-        # the manifest files and extract their metadata. We should
-        # improve how we do this and make it more generic.
-        context = {
-            'namespace': 'namespace',
-            'app_name': 'name',
-            'name': 'generic_resource',
-            'request_headers': 'request_headers',
-            'response_headers': 'response_headers',
-            'port': 'port',
-            'service': 'service',
-        }
-
-        if from_filename:
-            t = self.env.get_template(manifest)
-            manifest = yaml.safe_load(t.render(context))
-        ns_resource = create_namespaced_resource(
-            group=manifest["apiVersion"].split("/")[0],
-            version=manifest["apiVersion"].split("/")[1],
-            kind=manifest["kind"],
-            plural=f"{manifest['kind']}s".lower(),
-            verbs=None,
-        )
-
-        return ns_resource
+        return resource_class
 
     def reconcile_desired_resources(
         self,
