@@ -12,9 +12,9 @@ on:
       rev:
         description: 'Revision number'
         required: false
-      tag-prefix:
-        description: 'Tag Prefix'
-        required: false
+      charm-subdir-name:
+        description: 'Charm subdirectory name'
+        required: true
 
 jobs:
   promote-charm:
@@ -30,4 +30,5 @@ jobs:
           destination-channel: ${{ github.event.inputs.destination-channel }}
           origin-channel: ${{ github.event.inputs.origin-channel }}
           revision: ${{ github.event.inputs.rev }}
-          tag-prefix: ${{ github.event.inputs.tag-prefix }}
+          tag-prefix: ${{ github.event.inputs.charm-subdir-name }}
+          charm-path: charms/${{ github.event.inputs.charm-subdir-name}}
