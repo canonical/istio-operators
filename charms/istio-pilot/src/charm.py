@@ -55,6 +55,24 @@ class Operator(CharmBase):
         self.framework.observe(self.on['ingress-auth'].relation_changed, self.handle_ingress_auth)
         self.framework.observe(self.on['ingress-auth'].relation_departed, self.handle_ingress_auth)
 
+        # Maybe define these from a constant instead?
+        # self._generic_global_resource_definitions = GENERIC_GLOBAL_RESOURCE_DEFINITIONS
+        self._generic_global_resource_definitions = [
+            {"group": "security.istio.io", "version": "v1beta", "kind": "VirtualService", "plural": "virtualservices"},
+            ...
+        ]
+        self._generic_namespaced_resource_definitions = [
+            {"group": "security.istio.io", "version": "v1beta", "kind": "AuthorizationPolity", "plural": "authorizationpolicies"},
+            ...
+        ]
+        self._initialize_lightkube_generic_resources()
+        # Another option could be to read these in from files, since we'll usually be given CRDs as yaml from upstream projects
+        # self._generic_resource_definition_sources = [
+        #   "src/crds",
+        #   ...
+        # ]
+        # self._initialize_lightkube_generic_resources_from_files()
+
     def install(self, event):
         """Install charm."""
 
@@ -273,6 +291,18 @@ class Operator(CharmBase):
             Service, name="istio-ingressgateway", namespace=self.model.name
         )
         return svcs.status.loadBalancer.ingress[0].ip
+
+    def _initialize_lightkube_generic_resources(self):
+        for r in self._generic_global_resources_definitions:
+            lightkube.create_global_resource(
+                group=r['group'],
+                version=r['version'],
+                ...
+            )
+
+        for r in self._generic_namespaced_resource_definitions:
+            # Can shorten above to just **r if we use the same keys
+            lightkube.create_namespaced_resource(**r)
 
 
 if __name__ == "__main__":
