@@ -96,7 +96,6 @@ class Operator(CharmBase):
             manifests,
             namespace=self.model.name,
             ignore_not_found=True,
-            include_created_by_external=True,
         )
 
     def handle_default_gateway(self, event):

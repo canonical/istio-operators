@@ -10,7 +10,7 @@ import yaml
 from jinja2 import Environment, FileSystemLoader
 import lightkube  # noqa F401  # Needed for patching in test_resources_handler.py
 from lightkube import Client, codecs
-from lightkube.core.exceptions import LoadResourceError, httpx
+from lightkube.core.exceptions import httpx
 from lightkube.generic_resource import create_namespaced_resource, GenericNamespacedResource
 from lightkube.core.resource import Resource
 
@@ -87,29 +87,32 @@ class ResourceHandler:
         manifest,
         namespace=None,
         ignore_not_found=False,
-        include_created_by_external=False,
+        delete_crds=False,
     ):
+        crds_to_delete = []
         for obj in yaml.safe_load_all(manifest):
-            if not obj:
+            if obj is None:
                 self.log.warning(
-                    "Attempting to delete a resource from an empty resource object.\n"
+                    "Attempting to delete a resource from an empty resource object."
                     "This could be due to an incorrectly formatted manifest."
                 )
-                return
-            try:
-                obj_to_delete = lightkube.codecs.from_dict(obj)
-            except LoadResourceError:
-                if include_created_by_external:
-                    self.generate_generic_resource_class(manifest=obj)
-                    obj_to_delete = lightkube.codecs.from_dict(obj)
-                else:
-                    raise
-            finally:
-                self.delete_resource(
-                    obj_to_delete,
-                    namespace=namespace,
-                    ignore_not_found=ignore_not_found,
-                )
+                continue
+            res_to_delete = codecs.from_dict(obj, client=self.lightkube_client)
+            if res_to_delete.kind == 'CustomResourceDefinition':
+                crds_to_delete.append(res_to_delete)
+                continue
+            self.delete_resource(
+                res_to_delete,
+                namespace=namespace,
+                ignore_not_found=ignore_not_found,
+            )
+        if delete_crds:
+            self.log.warning(
+                "Deleting CRDs. After this step, you won't be able to interact with"
+                "any custom resource this charm created."
+            )
+            for crd in crds_to_delete:
+                self.delete_resource(crd, namespace=namespace, ignore_not_found=ignore_not_found)
 
     def generate_generic_resource_class(
         self, manifest: str = None, from_filename=False
