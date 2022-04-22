@@ -1,7 +1,7 @@
 from unittest.mock import call as Call
 import pytest
 import yaml
-from ops.model import ActiveStatus, WaitingStatus
+from ops.model import ActiveStatus, Application, WaitingStatus
 from lightkube.core.exceptions import ApiError
 from lightkube.generic_resource import create_global_resource
 from lightkube import codecs
@@ -341,6 +341,20 @@ def test_with_ingress_auth_relation(harness, subprocess, helpers, mocked_client,
     assert apply_args == expected
 
     assert isinstance(harness.charm.model.unit.status, ActiveStatus)
+
+
+def test_correct_data_in_gateway_relation(harness, subprocess):
+    harness.set_leader(True)
+
+    rel_id = harness.add_relation("gateway", "app")
+    harness.add_relation_unit(rel_id, "app/0")
+    harness.begin_with_initial_hooks()
+
+    gateway_relations = harness.model.relations["gateway"]
+    istio_relation_data = gateway_relations[0].data[harness.app]
+
+    assert istio_relation_data["gateway-name"] == harness.model.config["default-gateway"]
+    assert istio_relation_data["gateway-namespace"] == harness.model.name
 
 
 def test_removal(harness, subprocess, mocked_client, helpers, mocker):

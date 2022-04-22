@@ -58,6 +58,7 @@ class Operator(CharmBase):
         self.framework.observe(self.on['ingress'].relation_departed, self.handle_ingress)
         self.framework.observe(self.on['ingress-auth'].relation_changed, self.handle_ingress_auth)
         self.framework.observe(self.on['ingress-auth'].relation_departed, self.handle_ingress_auth)
+        self.framework.observe(self.on['gateway'].relation_changed, self.handle_gateway_relation)
 
     def install(self, event):
         """Install charm."""
@@ -108,6 +109,8 @@ class Operator(CharmBase):
 
         Side effect: self.handle_ingress() is also invoked by this handler as ingress
         resources depend on the default_gateway
+        self.handle_gateway_relation() is also invoked as related juju applications
+        need to know the name of the new gateway
         """
 
         t = self.env.get_template('gateway.yaml.j2')
@@ -124,8 +127,9 @@ class Operator(CharmBase):
         )
         self._resource_handler.apply_manifest(manifest)
 
-        # Update the ingress resources as they rely on the default_gateway
+        # Update the ingress objects and gateway relation as they rely on the default_gateway
         self.handle_ingress(event)
+        self.handle_gateway_relation(event)
 
     def send_info(self, event):
         if self.interfaces["istio-pilot"]:
@@ -253,6 +257,12 @@ class Operator(CharmBase):
             namespace=self.model.name,
         )
         self._resource_handler.apply_manifest(auth_filters, namespace=self.model.name)
+
+    def handle_gateway_relation(self, event):
+        relations = [rel for rel in self.model.relations["gateway"] if rel.app]
+        for relation in relations:
+            relation.data[self.app]["gateway-name"] = self.model.config["default-gateway"]
+            relation.data[self.app]["gateway-namespace"] = self.model.name
 
     @property
     def _gateway_address(self):
