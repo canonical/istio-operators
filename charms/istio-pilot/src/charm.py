@@ -12,7 +12,7 @@ from ops.charm import CharmBase, RelationBrokenEvent
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from serialized_data_interface import NoCompatibleVersions, NoVersionsListed, get_interfaces
-from resources_handler import ResourceHandler, GenericNamespacedResource
+from resources_handler import ResourceHandler
 
 
 class Operator(CharmBase):
@@ -101,11 +101,14 @@ class Operator(CharmBase):
         Side effect: self.handle_ingress() is also invoked by this handler as ingress
         resources depend on the default_gateway
         """
+
         t = self.env.get_template('gateway.yaml.j2')
         gateway = self.model.config['default-gateway']
         manifest = t.render(name=gateway, app_name=self.app.name)
         self._resource_handler.delete_existing_resources(
-            resource=self._get_custom_resource_class(resource_name='gateway'),
+            resource=self._resource_handler.get_custom_resource_class_from_filename(
+                filename='gateway.yaml.j2'
+            ),
             labels={
                 f"app.{self.app.name}.io/is-workload-entity": "true",
             },
@@ -188,7 +191,9 @@ class Operator(CharmBase):
         )
 
         self._resource_handler.reconcile_desired_resources(
-            resource=self._get_custom_resource_class(resource_name='virtual_service'),
+            resource=self._resource_handler.get_custom_resource_class_from_filename(
+                filename='virtual_service.yaml.j2'
+            ),
             namespace=self.model.name,
             desired_resources=virtual_services,
         )
@@ -232,28 +237,12 @@ class Operator(CharmBase):
         )
 
         self._resource_handler.delete_existing_resources(
-            self._get_custom_resource_class(resource_name='auth_filter'), namespace=self.model.name
+            self._resource_handler.get_custom_resource_class_from_filename(
+                filename='auth_filter.yaml.j2'
+            ),
+            namespace=self.model.name,
         )
         self._resource_handler.apply_manifest(auth_filters, namespace=self.model.name)
-
-    def _get_custom_resource_class(self, resource_name: str) -> GenericNamespacedResource:
-        """Receives a valid resource_name, creates a Lightkube k8s generic
-        namespaced resource, and updates a dictionary hosting all available
-        GenericNamespacedResources for this charm.
-
-        Args:
-            resource_name: name of the resource to get.
-
-        Returns:
-            A class associated to a resource_name key representing a k8s resource.
-
-        """
-
-        if resource_name not in self._custom_resource_classes:
-            self._custom_resource_classes[
-                resource_name
-            ] = self._resource_handler.generate_generic_resource_class(f'{resource_name}.yaml.j2')
-        return self._custom_resource_classes[resource_name]
 
     @property
     def _get_gateway_address(self):

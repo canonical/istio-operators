@@ -11,7 +11,6 @@ from jinja2 import Environment, FileSystemLoader
 import lightkube  # noqa F401  # Needed for patching in test_resources_handler.py
 from lightkube import Client, codecs
 from lightkube.core.exceptions import ApiError
-from lightkube.generic_resource import create_namespaced_resource, GenericNamespacedResource
 from lightkube.core.resource import Resource
 
 
@@ -90,16 +89,16 @@ class ResourceHandler:
                 ignore_unauthorized=ignore_unauthorized,
             )
 
-    def generate_generic_resource_class(self, filename: str) -> GenericNamespacedResource:
+    def get_custom_resource_class_from_filename(self, filename: str):
         """Returns a class representing a namespaced K8s resource.
 
         Args:
-            - filename: name of the manifest file used to create the resource
+            - filename: name of the manifest file defining the resource
         """
 
         # TODO: this is a generic context that is used for rendering
-        # the manifest files and extract their metadata. We should
-        # improve how we do this and make it more generic.
+        # the manifest files. We should improve how we do this
+        # and make it more generic.
         context = {
             'namespace': 'namespace',
             'app_name': 'name',
@@ -109,22 +108,14 @@ class ResourceHandler:
             'port': 'port',
             'service': 'service',
         }
-
-        t = self.env.get_template(filename)
-        manifest = yaml.safe_load(t.render(context))
-        ns_resource = create_namespaced_resource(
-            group=manifest["apiVersion"].split("/")[0],
-            version=manifest["apiVersion"].split("/")[1],
-            kind=manifest["kind"],
-            plural=f"{manifest['kind']}s".lower(),
-            verbs=None,
-        )
-
-        return ns_resource
+        manifest = self.env.get_template(filename).render(context)
+        manifest_dict = yaml.safe_load(manifest)
+        ns_resource = codecs.from_dict(manifest_dict, client=self.lightkube_client)
+        return type(ns_resource)
 
     def reconcile_desired_resources(
         self,
-        resource: GenericNamespacedResource,
+        resource,
         desired_resources: Union[str, TextIO, None],
         namespace: str = None,
     ) -> None:
