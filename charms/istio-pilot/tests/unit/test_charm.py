@@ -1,7 +1,7 @@
 from unittest.mock import call as Call
 import pytest
 import yaml
-from ops.model import ActiveStatus, Application, WaitingStatus
+from ops.model import ActiveStatus, WaitingStatus
 from lightkube.core.exceptions import ApiError
 from lightkube.generic_resource import create_global_resource
 from lightkube import codecs
