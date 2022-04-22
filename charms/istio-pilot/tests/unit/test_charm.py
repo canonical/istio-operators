@@ -348,10 +348,13 @@ def test_correct_data_in_gateway_relation(harness, subprocess):
 
     rel_id = harness.add_relation("gateway", "app")
     harness.add_relation_unit(rel_id, "app/0")
+    harness.set_model_name("test-model")
     harness.begin_with_initial_hooks()
+    print("DEBUGGING test harness model app", harness.model.app)
+    print("DEBUGGING test harness model name", harness.model.name)
 
     gateway_relations = harness.model.relations["gateway"]
-    istio_relation_data = gateway_relations[0].data[harness.app]
+    istio_relation_data = gateway_relations[0].data[harness.model.app]
 
     assert istio_relation_data["gateway-name"] == harness.model.config["default-gateway"]
     assert istio_relation_data["gateway-namespace"] == harness.model.name
