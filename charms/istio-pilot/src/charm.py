@@ -38,10 +38,14 @@ class Operator(CharmBase):
         self.log = logging.getLogger(__name__)
 
         self.env = Environment(loader=FileSystemLoader('src'))
-        self._custom_resource_classes = {}
         self._resource_handler = ResourceHandler(self.app.name, self.model.name)
 
         self.lightkube_client = Client(namespace=self.model.name, field_manager="lightkube")
+        self._resource_files = [
+            "gateway.yaml.j2",
+            "auth_filter.yaml.j2",
+            "virtual_service.yaml.j2",
+        ]
 
         self.framework.observe(self.on.install, self.install)
         self.framework.observe(self.on.remove, self.remove)
@@ -87,7 +91,11 @@ class Operator(CharmBase):
             ]
         )
 
-        for resource in self._custom_resource_classes.values():
+        custom_resource_classes = [
+            self._resource_handler.get_custom_resource_class_from_filename(resource_file)
+            for resource_file in self._resource_files
+        ]
+        for resource in custom_resource_classes:
             self._resource_handler.delete_existing_resources(
                 resource, namespace=self.model.name, ignore_unauthorized=True
             )
