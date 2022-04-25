@@ -2,6 +2,7 @@ from unittest.mock import call as Call
 import pytest
 import yaml
 from ops.model import ActiveStatus, WaitingStatus
+from lightkube.core.exceptions import ApiError
 from lightkube.generic_resource import create_global_resource
 from lightkube import codecs
 
@@ -413,33 +414,32 @@ def test_removal(harness, subprocess, mocked_client, helpers, mocker):
     ]
     assert helpers.compare_deleted_resource_names(actual_res_names, expected_res_names)
 
+    # Now test the exceptions that should be ignored
+    # ApiError
+    api_error = ApiError(response=mocker.MagicMock())
+    # # ApiError with not found message should be ignored
+    api_error.status.message = "something not found"
+    mocked_client.return_value.delete.side_effect = api_error
+    # mock out the _delete_existing_resources method since we dont want the ApiError
+    # to be thrown there
+    mocker.patch('resources_handler.ResourceHandler.delete_existing_resources')
+    # Ensure we DO NOT raise the exception
+    harness.charm.on.remove.emit()
 
-#    # Now test the exceptions that should be ignored
-#    # ApiError
-#    api_error = ApiError(response=mocker.MagicMock())
-#    # # ApiError with not found message should be ignored
-#    api_error.status.message = "something not found"
-#    mocked_client.return_value.delete.side_effect = api_error
-#    # mock out the _delete_existing_resources method since we dont want the ApiError
-#    # to be thrown there
-#    mocker.patch('resources_handler.ResourceHandler.delete_existing_resources')
-#    # Ensure we DO NOT raise the exception
-#    harness.charm.on.remove.emit()
+    # ApiError with unauthorized message should be ignored
+    api_error.status.message = "(Unauthorized)"
+    mocked_client.return_value.delete.side_effect = api_error
+    # Ensure we DO NOT raise the exception
+    harness.charm.on.remove.emit()
 
-#    # ApiError with unauthorized message should be ignored
-#    api_error.status.message = "(Unauthorized)"
-#    mocked_client.return_value.delete.side_effect = api_error
-#    # Ensure we DO NOT raise the exception
-#    harness.charm.on.remove.emit()
-#
-#    # Other ApiErrors should throw an exception
-#    api_error.status.message = "mocked ApiError"
-#    mocked_client.return_value.delete.side_effect = api_error
-#    with pytest.raises(ApiError):
-#        harness.charm.on.remove.emit()
-#
-#    # Test with nonexistent status message
-#    api_error.status.message = None
-#    mocked_client.return_value.delete.side_effect = api_error
-#    with pytest.raises(ApiError):
-#        harness.charm.on.remove.emit()
+    # Other ApiErrors should throw an exception
+    api_error.status.message = "mocked ApiError"
+    mocked_client.return_value.delete.side_effect = api_error
+    with pytest.raises(ApiError):
+        harness.charm.on.remove.emit()
+
+    # Test with nonexistent status message
+    api_error.status.message = None
+    mocked_client.return_value.delete.side_effect = api_error
+    with pytest.raises(ApiError):
+        harness.charm.on.remove.emit()
