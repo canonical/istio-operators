@@ -259,7 +259,7 @@ class Operator(CharmBase):
         self._resource_handler.apply_manifest(auth_filters, namespace=self.model.name)
 
     def handle_gateway_relation(self, event):
-        relations = [rel for rel in self.model.relations["gateway"] if rel.app]
+        relations = self.model.relations["gateway"]
         for relation in relations:
             relation.data[self.app]["gateway-name"] = self.model.config["default-gateway"]
             relation.data[self.app]["gateway-namespace"] = self.model.name
