@@ -363,7 +363,6 @@ def test_removal(harness, subprocess, mocked_client, helpers, mocker):
 
     # Reset the mock so that the calls list does not include any calls from other hooks
     mocked_client.reset_mock()
-    harness.charm.on.remove.emit()
 
     expected_args = [
         "./istioctl",
@@ -384,17 +383,15 @@ def test_removal(harness, subprocess, mocked_client, helpers, mocker):
         plural="gateways",
         verbs=None,
     )
-    harness.charm.on.config_changed.emit()
 
     # Change ingress-auth and ingress relations to
     # correctly call all ingress handlers, and not as a subproduct
     # of handle_default_gateway onConfigChanged
     rel_id = harness.add_relation("ingress-auth", "app")
     harness.add_relation_unit(rel_id, "app/0")
-    harness.remove_relation_unit(rel_id, "app/0")
     rel_id = harness.add_relation("ingress", "app")
     harness.add_relation_unit(rel_id, "app/0")
-    harness.remove_relation_unit(rel_id, "app/0")
+    harness.charm.on.remove.emit()
 
     assert len(check_output.call_args_list) == 1
     assert check_output.call_args_list[0].args == (expected_args,)
