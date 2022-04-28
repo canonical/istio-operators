@@ -4,7 +4,6 @@ summary: |
   Istio Service Mesh.
 description: |
   https://istio.io/latest/docs/reference/commands/pilot-discovery/
-min-juju-version: "2.9.0"
 provides:
   istio-pilot:
     interface: k8s-service
@@ -18,3 +17,5 @@ provides:
     interface: ingress-auth
     schema: https://raw.githubusercontent.com/canonical/operator-schemas/master/ingress-auth.yaml
     versions: [v1]
+assumes:
+  - juju >= 2.9.0
