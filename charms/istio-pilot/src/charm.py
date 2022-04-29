@@ -5,14 +5,14 @@ import subprocess
 
 import yaml
 from jinja2 import Environment, FileSystemLoader
+from lightkube import Client
+from lightkube.core.exceptions import ApiError
+from lightkube.resources.core_v1 import Service
 from ops.charm import CharmBase, RelationBrokenEvent
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from serialized_data_interface import NoCompatibleVersions, NoVersionsListed, get_interfaces
-from lightkube import Client, codecs
-from lightkube.core.exceptions import ApiError
-from lightkube.generic_resource import create_namespaced_resource
-from lightkube.resources.core_v1 import Service
+from resources_handler import ResourceHandler
 
 
 class Operator(CharmBase):
@@ -37,43 +37,15 @@ class Operator(CharmBase):
 
         self.log = logging.getLogger(__name__)
 
-        # Every lightkube API call will use the model name as the namespace by default
-        self.lightkube_client = Client(namespace=self.model.name, field_manager="lightkube")
-        # Create namespaced resource classes for lightkube client
-        # This is necessary for lightkube to interact with custom resources
-        self.envoy_filter_resource = create_namespaced_resource(
-            group="networking.istio.io",
-            version="v1alpha3",
-            kind="EnvoyFilter",
-            plural="envoyfilters",
-            verbs=None,
-        )
-
-        self.virtual_service_resource = create_namespaced_resource(
-            group="networking.istio.io",
-            version="v1alpha3",
-            kind="VirtualService",
-            plural="virtualservices",
-            verbs=None,
-        )
-
-        self.gateway_resource = create_namespaced_resource(
-            group="networking.istio.io",
-            version="v1beta1",
-            kind="Gateway",
-            plural="gateways",
-            verbs=None,
-        )
-
-        self.rbac_config_resource = create_namespaced_resource(
-            group="rbac.istio.io",
-            version="v1alpha1",
-            kind="RbacConfig",
-            plural="rbacconfigs",
-            verbs=None,
-        )
-
         self.env = Environment(loader=FileSystemLoader('src'))
+        self._resource_handler = ResourceHandler(self.app.name, self.model.name)
+
+        self.lightkube_client = Client(namespace=self.model.name, field_manager="lightkube")
+        self._resource_files = [
+            "gateway.yaml.j2",
+            "auth_filter.yaml.j2",
+            "virtual_service.yaml.j2",
+        ]
 
         self.framework.observe(self.on.install, self.install)
         self.framework.observe(self.on.remove, self.remove)
@@ -81,7 +53,6 @@ class Operator(CharmBase):
         self.framework.observe(self.on.config_changed, self.handle_default_gateway)
 
         self.framework.observe(self.on["istio-pilot"].relation_changed, self.send_info)
-
         self.framework.observe(self.on['ingress'].relation_changed, self.handle_ingress)
         self.framework.observe(self.on['ingress'].relation_broken, self.handle_ingress)
         self.framework.observe(self.on['ingress'].relation_departed, self.handle_ingress)
@@ -120,37 +91,40 @@ class Operator(CharmBase):
             ]
         )
 
-        for resource in [
-            self.virtual_service_resource,
-            self.gateway_resource,
-            self.envoy_filter_resource,
-        ]:
-            self._delete_existing_resource_objects(
+        custom_resource_classes = [
+            self._resource_handler.get_custom_resource_class_from_filename(resource_file)
+            for resource_file in self._resource_files
+        ]
+        for resource in custom_resource_classes:
+            self._resource_handler.delete_existing_resources(
                 resource, namespace=self.model.name, ignore_unauthorized=True
             )
-        self._delete_manifest(
+        self._resource_handler.delete_manifest(
             manifests, namespace=self.model.name, ignore_not_found=True, ignore_unauthorized=True
         )
 
     def handle_default_gateway(self, event):
         """Handles creating gateways from charm config
 
-        Side effect: self.handle_ingress() is also invoked by this handler as ingress objects
-        depend on the default_gateway
+        Side effect: self.handle_ingress() is also invoked by this handler as ingress
+        resources depend on the default_gateway
         """
+
         t = self.env.get_template('gateway.yaml.j2')
         gateway = self.model.config['default-gateway']
         manifest = t.render(name=gateway, app_name=self.app.name)
-        self._delete_existing_resource_objects(
-            resource=self.gateway_resource,
+        self._resource_handler.delete_existing_resources(
+            resource=self._resource_handler.get_custom_resource_class_from_filename(
+                filename='gateway.yaml.j2'
+            ),
             labels={
-                "app.juju.is/created-by": f"{self.app.name}",
-                "app.{self.app.name}.io/is-workload-entity": "true",
+                f"app.{self.app.name}.io/is-workload-entity": "true",
             },
+            namespace=self.model.name,
         )
-        self._apply_manifest(manifest)
+        self._resource_handler.apply_manifest(manifest)
 
-        # Update the ingress objects as they rely on the default_gateway
+        # Update the ingress resources as they rely on the default_gateway
         self.handle_ingress(event)
 
     def send_info(self, event):
@@ -161,16 +135,26 @@ class Operator(CharmBase):
 
     def handle_ingress(self, event):
         try:
-            self._get_gateway_address
+            if not self._get_gateway_address:
+                self.log.info(
+                    "No gateway address returned - this may be transitory, but "
+                    "if it persists it is likely an unexpected error. "
+                    "Deferring this event"
+                )
+                event.defer()
+                return
         except (ApiError, TypeError) as e:
-            if e == ApiError:
-                self.log.exception("ApiError: Could not get istio-ingressgateway, retrying")
-            elif e == TypeError:
-                self.log.exception("TypeError: No ip address found, retrying")
+            if isinstance(e, ApiError):
+                self.log.exception(
+                    "ApiError: Could not get istio-ingressgateway, deferring this event"
+                )
+            elif isinstance(e, TypeError):
+                self.log.exception("TypeError: No ip address found, deferring this event")
+            else:
+                self.log.exception("Unexpected exception, deferring this event.  Exception was:")
+                self.log.exception(e)
             event.defer()
             return
-        else:
-            self.unit.status = ActiveStatus()
 
         ingress = self.interfaces['ingress']
 
@@ -194,6 +178,8 @@ class Operator(CharmBase):
         t = self.env.get_template('virtual_service.yaml.j2')
         gateway = self.model.config['default-gateway']
 
+        self.unit.status = ActiveStatus()
+
         def get_kwargs(version, route):
             """Handles both v1 and v2 ingress relations.
 
@@ -206,17 +192,19 @@ class Operator(CharmBase):
 
             return kwargs
 
+        # TODO: we could probably extract the rendering bits from the charm code
         virtual_services = '\n---'.join(
             t.render(**get_kwargs(ingress.versions[app.name], route)).strip().strip("---")
             for ((_, app), route) in routes.items()
         )
 
-        self._delete_existing_resource_objects(
-            self.virtual_service_resource, namespace=self.model.name
+        self._resource_handler.reconcile_desired_resources(
+            resource=self._resource_handler.get_custom_resource_class_from_filename(
+                filename='virtual_service.yaml.j2'
+            ),
+            namespace=self.model.name,
+            desired_resources=virtual_services,
         )
-
-        if routes:
-            self._apply_manifest(virtual_services, namespace=self.model.name)
 
     def handle_ingress_auth(self, event):
         auth_routes = self.interfaces['ingress-auth']
@@ -256,62 +244,13 @@ class Operator(CharmBase):
             for r in auth_routes
         )
 
-        self._delete_existing_resource_objects(
-            self.envoy_filter_resource, namespace=self.model.name
+        self._resource_handler.delete_existing_resources(
+            self._resource_handler.get_custom_resource_class_from_filename(
+                filename='auth_filter.yaml.j2'
+            ),
+            namespace=self.model.name,
         )
-        self._apply_manifest(auth_filters, namespace=self.model.name)
-
-    def _delete_object(
-        self, obj, namespace=None, ignore_not_found=False, ignore_unauthorized=False
-    ):
-        try:
-            self.lightkube_client.delete(type(obj), obj.metadata.name, namespace=namespace)
-        except ApiError as err:
-            self.log.exception("ApiError encountered while attempting to delete resource.")
-            if err.status.message is not None:
-                if "not found" in err.status.message and ignore_not_found:
-                    self.log.error(f"Ignoring not found error:\n{err.status.message}")
-                elif "(Unauthorized)" in err.status.message and ignore_unauthorized:
-                    # Ignore error from https://bugs.launchpad.net/juju/+bug/1941655
-                    self.log.error(f"Ignoring unauthorized error:\n{err.status.message}")
-                else:
-                    self.log.error(err.status.message)
-                    raise
-            else:
-                raise
-
-    def _delete_existing_resource_objects(
-        self,
-        resource,
-        namespace=None,
-        ignore_not_found=False,
-        ignore_unauthorized=False,
-        labels={},
-    ):
-        for obj in self.lightkube_client.list(
-            resource, labels={"app.juju.is/created-by": f"{self.app.name}"}.update(labels)
-        ):
-            self._delete_object(
-                obj,
-                namespace=namespace,
-                ignore_not_found=ignore_not_found,
-                ignore_unauthorized=ignore_unauthorized,
-            )
-
-    def _apply_manifest(self, manifest, namespace=None):
-        for obj in codecs.load_all_yaml(manifest):
-            self.lightkube_client.apply(obj, namespace=namespace)
-
-    def _delete_manifest(
-        self, manifest, namespace=None, ignore_not_found=False, ignore_unauthorized=False
-    ):
-        for obj in codecs.load_all_yaml(manifest):
-            self._delete_object(
-                obj,
-                namespace=namespace,
-                ignore_not_found=ignore_not_found,
-                ignore_unauthorized=ignore_unauthorized,
-            )
+        self._resource_handler.apply_manifest(auth_filters, namespace=self.model.name)
 
     @property
     def _get_gateway_address(self):
@@ -320,6 +259,7 @@ class Operator(CharmBase):
         returns None.
         """
         # FIXME: service name is hardcoded
+        # TODO: extract this from charm code
         svcs = self.lightkube_client.get(
             Service, name="istio-ingressgateway", namespace=self.model.name
         )

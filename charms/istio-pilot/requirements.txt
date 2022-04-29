@@ -2,4 +2,8 @@ jinja2<3.1
 ops<1.4.0
 requests<2.27.0
 serialized-data-interface<0.4
-lightkube>=0.10.1
+
+# Temporarily using ca-scribner's branch that adds implicit custom
+# resource creation. Change this after those changes get merged into master
+#lightkube>=0.10.1
+git+https://github.com/ca-scribner/lightkube.git@add-implicit-model-generation#egg=lightkube
