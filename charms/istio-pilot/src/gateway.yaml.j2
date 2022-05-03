@@ -3,6 +3,7 @@ apiVersion: networking.istio.io/v1beta1
 kind: Gateway
 metadata:
   name: {{ name }}
+  namespace: {{ model_name }}
   labels:
     app.{{ app_name }}.io/is-workload-entity: "true"
 spec:
@@ -11,7 +12,27 @@ spec:
   servers:
   - hosts:
     - '*'
+{% if not secret_name %}
     port:
       name: http
       number: 80
       protocol: HTTP
+{% else %}
+    port:
+      name: https
+      number: 443
+      protocol: HTTPS
+    tls:
+      mode: SIMPLE
+      credentialName: {{ secret_name }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ secret_name }}
+  namespace: {{ model_name }}
+type: kubernetes.io/tls
+data:
+  tls.crt: {{ ssl_crt }}
+  tls.key: {{ ssl_key }}
+{% endif %}
