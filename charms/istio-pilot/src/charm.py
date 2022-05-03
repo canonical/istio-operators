@@ -116,11 +116,29 @@ class Operator(CharmBase):
 
         t = self.env.get_template('gateway.yaml.j2')
         gateway = self.model.config['default-gateway']
-        manifest = t.render(name=gateway, app_name=self.app.name)
-        self._resource_handler.delete_existing_resources(
-            resource=self._resource_handler.get_custom_resource_class_from_filename(
-                filename='gateway.yaml.j2'
-            ),
+        secret_name = (
+            "istio-gw-secret"
+            if self.model.config["ssl-crt"] and self.model.config["ssl-key"]
+            else None
+        )
+        manifest = None
+        if secret_name:
+            manifest = t.render(
+                name=gateway,
+                secret_name=secret_name,
+                ssl_crt=self.model.config["ssl-crt"],
+                ssl_key=self.model.config["ssl-key"],
+                model_name=self.model.name,
+                app_name=self.app.name,
+            )
+        else:
+            manifest = t.render(
+                name=gateway,
+                model_name=self.model.name,
+                app_name=self.app.name,
+            )
+        self._delete_existing_resource_objects(
+            resource=self.gateway_resource,
             labels={
                 f"app.{self.app.name}.io/is-workload-entity": "true",
             },
