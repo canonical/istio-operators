@@ -1,6 +1,6 @@
 import logging
-from ops.framework import Object, ObjectEvents, EventSource, EventBase
-from lightkube.generic_resource import create_namespaced_resource
+from ops.framework import Object
+from lightkube.generic_resource import create_global_resource
 
 DEFAULT_RELATION_NAME = "gateway"
 
@@ -18,7 +18,7 @@ class GatewayProvider(Object):
         self.framework.observe(charm.on.update_status, self._on_gateway_config_changed)
 
     def _validate_gateway_exists(self):
-        gateway_resource = create_namespaced_resource(
+        gateway_resource = create_global_resource(
             group="networking.istio.io",
             version="v1beta1",
             kind="Gateway",

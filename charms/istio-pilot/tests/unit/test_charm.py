@@ -354,8 +354,8 @@ def test_correct_data_in_gateway_relation(harness, subprocess):
     gateway_relations = harness.model.relations["gateway"]
     istio_relation_data = gateway_relations[0].data[harness.model.app]
 
-    assert istio_relation_data["gateway-name"] == harness.model.config["default-gateway"]
-    assert istio_relation_data["gateway-namespace"] == harness.model.name
+    assert istio_relation_data["gateway_name"] == harness.model.config["default-gateway"]
+    assert istio_relation_data["gateway_namespace"] == harness.model.name
 
 
 def test_removal(harness, subprocess, mocked_client, helpers, mocker):
@@ -391,13 +391,13 @@ def test_removal(harness, subprocess, mocked_client, helpers, mocker):
 
     # Create the gateway resource and emit config_changed
     # to create all needed resources
-    create_global_resource(
+    """create_global_resource(
         group="networking.istio.io",
         version="v1beta1",
         kind="Gateway",
         plural="gateways",
         verbs=None,
-    )
+    )"""
 
     # Change ingress-auth and ingress relations to
     # correctly call all ingress handlers, and not as a subproduct

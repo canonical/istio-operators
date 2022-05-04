@@ -1,7 +1,6 @@
 import logging
 from ops.framework import EventBase, EventSource, Object
 from ops.charm import CharmEvents, RelationChangedEvent
-from ops.model import RelationData
 
 # Increment this major API version when introducing breaking changes
 LIBAPI = 0
