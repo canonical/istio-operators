@@ -13,6 +13,7 @@ from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from serialized_data_interface import NoCompatibleVersions, NoVersionsListed, get_interfaces
 from resources_handler import ResourceHandler
+from charms.istio_pilot.v0.istio_gateway_info_provider import GatewayProvider
 
 
 class Operator(CharmBase):
@@ -46,6 +47,7 @@ class Operator(CharmBase):
             "auth_filter.yaml.j2",
             "virtual_service.yaml.j2",
         ]
+        self.gateway = GatewayProvider(self, self.lightkube_client)
 
         self.framework.observe(self.on.install, self.install)
         self.framework.observe(self.on.remove, self.remove)
@@ -58,7 +60,6 @@ class Operator(CharmBase):
         self.framework.observe(self.on['ingress'].relation_departed, self.handle_ingress)
         self.framework.observe(self.on['ingress-auth'].relation_changed, self.handle_ingress_auth)
         self.framework.observe(self.on['ingress-auth'].relation_departed, self.handle_ingress_auth)
-        self.framework.observe(self.on['gateway'].relation_changed, self.handle_gateway_relation)
 
     def install(self, event):
         """Install charm."""
@@ -109,8 +110,6 @@ class Operator(CharmBase):
 
         Side effect: self.handle_ingress() is also invoked by this handler as ingress
         resources depend on the default_gateway
-        self.handle_gateway_relation() is also invoked as related juju applications
-        need to know the name of the new gateway
         """
 
         t = self.env.get_template('gateway.yaml.j2')
@@ -129,7 +128,6 @@ class Operator(CharmBase):
 
         # Update the ingress objects and gateway relation as they rely on the default_gateway
         self.handle_ingress(event)
-        self.handle_gateway_relation(event)
 
     def send_info(self, event):
         if self.interfaces["istio-pilot"]:
@@ -257,12 +255,6 @@ class Operator(CharmBase):
             namespace=self.model.name,
         )
         self._resource_handler.apply_manifest(auth_filters, namespace=self.model.name)
-
-    def handle_gateway_relation(self, event):
-        relations = self.model.relations["gateway"]
-        for relation in relations:
-            relation.data[self.app]["gateway-name"] = self.model.config["default-gateway"]
-            relation.data[self.app]["gateway-namespace"] = self.model.name
 
     @property
     def _gateway_address(self):
