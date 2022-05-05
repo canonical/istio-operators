@@ -50,7 +50,7 @@ async def test_deploy_istio_charms(ops_test: OpsTest):
     )
     await ops_test.model.deploy(
         istio_charms['istio-gateway'],
-        application_name='istio-gateway',
+        application_name='istio-ingressgateway',
         config={'kind': 'ingress'},
         trust=True,
     )
