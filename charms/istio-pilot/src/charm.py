@@ -135,12 +135,13 @@ class Operator(CharmBase):
 
     def handle_ingress(self, event):
         try:
-            if not self._get_gateway_address:
+            if not self._gateway_address:
                 self.log.info(
                     "No gateway address returned - this may be transitory, but "
                     "if it persists it is likely an unexpected error. "
                     "Deferring this event"
                 )
+                self.unit.status = WaitingStatus("Waiting for gateway address")
                 event.defer()
                 return
         except (ApiError, TypeError) as e:
@@ -153,6 +154,7 @@ class Operator(CharmBase):
             else:
                 self.log.exception("Unexpected exception, deferring this event.  Exception was:")
                 self.log.exception(e)
+            self.unit.status = BlockedStatus("Missing istio-ingressgateway relation")
             event.defer()
             return
 
