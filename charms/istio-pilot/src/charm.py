@@ -47,7 +47,7 @@ class Operator(CharmBase):
             "auth_filter.yaml.j2",
             "virtual_service.yaml.j2",
         ]
-        self.gateway = GatewayProvider(self, self.lightkube_client)
+        self.gateway = GatewayProvider(self, self.lightkube_client, self._resource_handler)
 
         self.framework.observe(self.on.install, self.install)
         self.framework.observe(self.on.remove, self.remove)
