@@ -59,8 +59,8 @@ async def test_deploy_istio_charms(ops_test: OpsTest):
 
     await ops_test.model.wait_for_idle(
         status="active",
-        raise_on_blocked=True,
-        timeout=60 * 10,
+        raise_on_blocked=False,
+        timeout=90 * 10,
     )
 
 

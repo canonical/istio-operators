@@ -135,24 +135,26 @@ class Operator(CharmBase):
 
     def handle_ingress(self, event):
         try:
-            if not self._get_gateway_address:
+            if not self._gateway_address:
                 self.log.info(
                     "No gateway address returned - this may be transitory, but "
                     "if it persists it is likely an unexpected error. "
                     "Deferring this event"
                 )
+                self.unit.status = WaitingStatus("Waiting for gateway address")
                 event.defer()
                 return
         except (ApiError, TypeError) as e:
             if isinstance(e, ApiError):
                 self.log.exception(
-                    "ApiError: Could not get istio-ingressgateway, deferring this event"
+                    "ApiError: Could not get istio-ingressgateway-workload, deferring this event"
                 )
             elif isinstance(e, TypeError):
                 self.log.exception("TypeError: No ip address found, deferring this event")
             else:
                 self.log.exception("Unexpected exception, deferring this event.  Exception was:")
                 self.log.exception(e)
+            self.unit.status = BlockedStatus("Missing istio-ingressgateway relation")
             event.defer()
             return
 
@@ -253,7 +255,7 @@ class Operator(CharmBase):
         self._resource_handler.apply_manifest(auth_filters, namespace=self.model.name)
 
     @property
-    def _get_gateway_address(self):
+    def _gateway_address(self):
         """Look up the load balancer address for the ingress gateway.
         If the gateway isn't available or doesn't have a load balancer address yet,
         returns None.
@@ -261,7 +263,7 @@ class Operator(CharmBase):
         # FIXME: service name is hardcoded
         # TODO: extract this from charm code
         svcs = self.lightkube_client.get(
-            Service, name="istio-ingressgateway", namespace=self.model.name
+            Service, name="istio-ingressgateway-workload", namespace=self.model.name
         )
         return svcs.status.loadBalancer.ingress[0].ip
 
