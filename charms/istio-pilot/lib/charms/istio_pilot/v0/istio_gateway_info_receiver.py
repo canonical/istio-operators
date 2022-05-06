@@ -1,6 +1,6 @@
 import logging
-from ops.framework import EventBase, EventSource, Object
-from ops.charm import CharmEvents, RelationChangedEvent
+from ops.framework import Object
+from ops.model import Application
 
 # Increment this major API version when introducing breaking changes
 LIBAPI = 0
@@ -13,47 +13,43 @@ LIBPATCH = 1
 DEFAULT_RELATION_INTERFACE = "gateway"
 
 
-class GatewayRelationUpdatedEvent(EventBase):
-    pass
-
-
-class GatewayRelationEvents(CharmEvents):
-    gateway_relation_updated = EventSource(GatewayRelationUpdatedEvent)
-
-
 class GatewayConsumer(Object):
-    def __init__(self, charm, _stored, relation_name: str = DEFAULT_RELATION_INTERFACE):
+    def __init__(self, charm, relation_name: str = DEFAULT_RELATION_INTERFACE):
         super().__init__(charm, relation_name)
-        self._stored = _stored
         self.charm = charm
         self.log = logging.getLogger(__name__)
         self.relation_name = relation_name
-        self._stored.gateway_info = {}
 
-        self.framework.observe(charm.on[relation_name].relation_changed, self._on_relation_changed)
-
-    def _on_relation_changed(self, event: RelationChangedEvent):
+    def get_relation_data(self):
         if not self.model.unit.is_leader():
             return
+        gateway = self.model.relations[self.relation_name]
+        if len(gateway) == 0:
+            raise Exception("Missing gateway relation with istio-pilot")
+        if len(gateway) > 1:
+            raise Exception("Too many gateway relations")
 
-        rel_data = event.relation.data[event.app]
-        self.log.debug(f"istio_gateway_info_receiver.py ~ gateway relation databag {rel_data}")
+        remote_app = [
+            app
+            for app in gateway[0].data.keys()
+            if isinstance(app, Application) and not app._is_our_app
+        ][0]
 
-        if not "gateway_name" in rel_data:
-            self.log.error("Missing gateway_name in relation data")
+        data = gateway[0].data[remote_app]
 
-        if not "gateway_namespace" in rel_data:
-            self.log.error("Missing gateway_name or gateway_namespace in relation data")
+        if not "gateway_name" in data:
+            self.log.error(
+                "Missing gateway name in gateway relation data. Waiting for gateway creation in istio-pilot"
+            )
+            raise Exception(
+                "Missing gateway name in gateway relation data. Waiting for gateway creation in istio-pilot"
+            )
 
-        self._stored.gateway_info = {
-            "gateway_name": rel_data.get("gateway_name"),
-            "gateway_namespace": rel_data.get("gateway_namespace"),
+        if not "gateway_namespace" in data:
+            self.log.error("Missing gateway namespace in gateway relation data")
+            raise Exception("Missing gateway namespace in gateway relation data")
+
+        return {
+            "gateway_name": data["gateway_name"],
+            "gateway_namespace": data["gateway_namespace"],
         }
-
-    def get_gateway_info(self):
-        gateway_data = self._stored.gateway_info
-        if not gateway_data.get("gateway_name"):
-            raise Exception("Missing gateway name. Waiting for gateway creation in istio-pilot")
-        if not gateway_data.get("gateway_namespace"):
-            raise Exception("Missing gateway namespace")
-        return self._stored.gateway_info
