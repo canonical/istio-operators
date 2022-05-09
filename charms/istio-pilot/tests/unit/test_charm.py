@@ -343,8 +343,15 @@ def test_with_ingress_auth_relation(harness, subprocess, helpers, mocked_client,
     assert isinstance(harness.charm.model.unit.status, ActiveStatus)
 
 
-def test_correct_data_in_gateway_relation(harness, subprocess):
+def test_correct_data_in_gateway_relation(harness):
     harness.set_leader(True)
+    create_global_resource(
+        group="networking.istio.io",
+        version="v1beta1",
+        kind="Gateway",
+        plural="gateways",
+        verbs=None,
+    )
 
     rel_id = harness.add_relation("gateway", "app")
     harness.add_relation_unit(rel_id, "app/0")
@@ -391,13 +398,13 @@ def test_removal(harness, subprocess, mocked_client, helpers, mocker):
 
     # Create the gateway resource and emit config_changed
     # to create all needed resources
-    """create_global_resource(
+    create_global_resource(
         group="networking.istio.io",
         version="v1beta1",
         kind="Gateway",
         plural="gateways",
         verbs=None,
-    )"""
+    )
 
     # Change ingress-auth and ingress relations to
     # correctly call all ingress handlers, and not as a subproduct
