@@ -13,7 +13,7 @@ from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from serialized_data_interface import NoCompatibleVersions, NoVersionsListed, get_interfaces
 from resources_handler import ResourceHandler
-from charms.istio_pilot.v0.istio_gateway_info_provider import GatewayProvider
+from charms.istio_pilot.v0.istio_gateway_name import GatewayProvider
 
 
 class Operator(CharmBase):
