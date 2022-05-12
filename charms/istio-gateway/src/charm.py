@@ -48,7 +48,10 @@ class Operator(CharmBase):
             return
 
         if not ((pilot := interfaces["istio-pilot"]) and pilot.get_data()):
-            self.model.unit.status = WaitingStatus("Waiting for istio-pilot relation data")
+            self.model.unit.status = WaitingStatus(
+                "Waiting for istio-pilot relation data, deferring event"
+            )
+            event.defer()
             return
 
         pilot = list(pilot.get_data().values())[0]
