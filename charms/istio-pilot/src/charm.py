@@ -126,7 +126,7 @@ class Operator(CharmBase):
         )
         self._resource_handler.apply_manifest(manifest)
 
-        # Update the ingress objects and gateway relation as they rely on the default_gateway
+        # Update the ingress objects as they rely on the default_gateway
         self.handle_ingress(event)
 
     def send_info(self, event):
