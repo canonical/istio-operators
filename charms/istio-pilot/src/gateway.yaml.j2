@@ -25,14 +25,4 @@ spec:
     tls:
       mode: SIMPLE
       credentialName: {{ secret_name }}
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: {{ secret_name }}
-  namespace: {{ model_name }}
-type: kubernetes.io/tls
-data:
-  tls.crt: {{ ssl_crt }}
-  tls.key: {{ ssl_key }}
 {% endif %}

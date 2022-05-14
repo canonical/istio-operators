@@ -113,11 +113,18 @@ class Operator(CharmBase):
         Side effect: self.handle_ingress() is also invoked by this handler as ingress
         resources depend on the default_gateway
         """
-
+        # Clean-up resources
+        self._delete_existing_resource_objects(
+            resource=self.gateway_resource,
+            labels={
+                "app.juju.is/created-by": f"{self.app.name}",
+                "app.{self.app.name}.io/is-workload-entity": "true",
+            },
+        )
         t = self.env.get_template('gateway.yaml.j2')
         gateway = self.model.config['default-gateway']
         secret_name = (
-            "istio-gw-secret"
+            f"{self.app.name}-gateway-secret"
             if self.model.config["ssl-crt"] and self.model.config["ssl-key"]
             else None
         )
@@ -131,18 +138,21 @@ class Operator(CharmBase):
                 model_name=self.model.name,
                 app_name=self.app.name,
             )
-        else:
-            manifest = t.render(
-                name=gateway,
+            secret = self.env.get_template('gateway-secret.yaml.j2')
+            manifest_secret = secret.render(
+                secret_name=secret_name,
+                ssl_crt=self.model.config["ssl-crt"],
+                ssl_key=self.model.config["ssl-key"],
                 model_name=self.model.name,
                 app_name=self.app.name,
             )
-        self._delete_existing_resource_objects(
-            resource=self.gateway_resource,
-            labels={
-                f"app.{self.app.name}.io/is-workload-entity": "true",
-            },
-            namespace=self.model.name,
+            self._apply_manifest(manifest_secret)
+            return
+
+        manifest = t.render(
+            name=gateway,
+            model_name=self.model.name,
+            app_name=self.app.name,
         )
         self._resource_handler.apply_manifest(manifest)
 
