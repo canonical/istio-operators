@@ -136,6 +136,11 @@ class Operator(CharmBase):
             event.defer()
 
     def handle_ingress(self, event):
+        # FIXME: sending the data every single time
+        # is not a great design, a better one involves refactoring and
+        # probably changing SDI
+        self.send_info(event)
+
         try:
             if not self._gateway_address:
                 self.log.info(
