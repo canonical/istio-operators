@@ -72,7 +72,7 @@ jobs:
 
     - name: Collect charmcraft logs
       if: failure()
-      run: cat /home/runner/snap/charmcraft/common/charmcraft-log-* | tee tmp/charmcraft.log
+      run: cat /home/runner/snap/charmcraft/common/cache/charmcraft/log/charmcraft-*.log | tee tmp/charmcraft.log
 
     - name: Collect Juju status
       if: failure()
