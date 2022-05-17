@@ -1,6 +1,9 @@
 import logging
 from ops.framework import Object
 from ops.model import Application
+from lightkube.generic_resource import create_namespaced_resource
+from lightkube.core.exceptions import ApiError
+from lightkube.core.client import Client
 
 # Increment this major API version when introducing breaking changes
 LIBAPI = 0
@@ -82,11 +85,17 @@ class GatewayRequirer(Object):
 
 
 class GatewayProvider(Object):
-    def __init__(self, charm, lightkube_client, resource_handler):
+    def __init__(self, charm):
         super().__init__(charm, DEFAULT_RELATION_NAME)
-        self.lightkube_client = lightkube_client
         self.charm = charm
-        self.resource_handler = resource_handler
+        self.lightkube_client = Client(namespace=self.charm.model.name, field_manager="lightkube")
+        self.gateway_class = create_namespaced_resource(
+            group="networking.istio.io",
+            version="v1beta1",
+            kind="Gateway",
+            plural="gateways",
+            verbs=None,
+        )
         self.framework.observe(
             charm.on[DEFAULT_RELATION_NAME].relation_changed, self._on_gateway_relation_changed
         )
@@ -94,14 +103,15 @@ class GatewayProvider(Object):
         self.framework.observe(charm.on.update_status, self._on_gateway_config_changed)
 
     def _validate_gateway_exists(self):
-        response = self.lightkube_client.get(
-            self.resource_handler.get_custom_resource_class_from_filename(
-                filename='gateway.yaml.j2'
-            ),
-            self.model.config['default-gateway'],
-            namespace=self.model.name,
-        )
-        return True if response else False
+        try:
+            response = self.lightkube_client.get(
+                self.gateway_class, self.model.config['default-gateway'], namespace=self.model.name
+            )
+            return True
+        except ApiError as error:
+            logger.error(str(error))
+
+        return False
 
     def _on_gateway_relation_changed(self, event):
         if self.model.unit.is_leader():

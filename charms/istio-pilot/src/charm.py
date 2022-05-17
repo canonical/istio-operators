@@ -47,7 +47,7 @@ class Operator(CharmBase):
             "auth_filter.yaml.j2",
             "virtual_service.yaml.j2",
         ]
-        self.gateway = GatewayProvider(self, self.lightkube_client, self._resource_handler)
+        self.gateway = GatewayProvider(self)
 
         self.framework.observe(self.on.install, self.install)
         self.framework.observe(self.on.remove, self.remove)
@@ -126,7 +126,7 @@ class Operator(CharmBase):
         )
         self._resource_handler.apply_manifest(manifest)
 
-        # Update the ingress objects as they rely on the default_gateway
+        # Update the ingress resources as they rely on the default_gateway
         self.handle_ingress(event)
 
     def send_info(self, event):
