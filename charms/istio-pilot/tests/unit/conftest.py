@@ -49,6 +49,12 @@ def mocked_charm_client(mocker):
     yield client
 
 
+@pytest.fixture(autouse=True)
+def mocked_lib_istio_gateway_client(mocker):
+    client = mocker.patch("charms.istio_pilot.v0.istio_gateway_name.Client")
+    yield client
+
+
 # Similar to what is done for list, but for get
 # and just returning the status attribute
 @pytest.fixture(autouse=True)

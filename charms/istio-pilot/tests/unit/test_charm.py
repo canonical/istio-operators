@@ -343,11 +343,10 @@ def test_with_ingress_auth_relation(harness, subprocess, helpers, mocked_client,
     assert isinstance(harness.charm.model.unit.status, ActiveStatus)
 
 
-def test_correct_data_in_gateway_relation(harness, mocker):
+def test_correct_data_in_gateway_relation(harness, mocked_lib_istio_gateway_client):
     harness.set_leader(True)
 
-    client = mocker.patch("charms.istio_pilot.v0.istio_gateway_name.Client.get")
-    client.return_value = {
+    mocked_lib_istio_gateway_client.get.return_value = {
         'apiVersion': 'networking.istio.io/v1beta1',
         'kind': 'Gateway',
         'metadata': {
