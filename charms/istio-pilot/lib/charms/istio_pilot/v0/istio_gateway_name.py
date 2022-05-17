@@ -1,3 +1,47 @@
+"""Library for sharing istio gateway information
+
+This library wraps the relation endpoints using the `istio-gateway-name`
+interface. It provides a Python API for both requesting and providing 
+gateway information.
+
+## Getting Started
+
+### Fetch library with charmcraft
+You can fetch the library using the following commands with charmcraft.
+```shell
+cd some-charm
+charmcraft fetch-lib charms.istio_pilot.v0.istio_gateway_name
+```
+### Add relation to metadata.yaml
+```yaml
+requires:
+    gateway:
+        interface: istio_gateway_name
+        limit: 1
+```
+
+### Update dependency
+Apart from the usual ops dependency, this library requires lightkube.
+Make sure that is added to your charm's `requirements.txt`.
+
+### Initialise the library in charm.py
+```python
+from charms.istio_pilot.v0.istio_gateway_name import GatewayProvider, GatewayRelationError
+
+Class SomeCharm(CharmBase):
+    def __init__(self, *args):
+        self.gateway = GatewayProvider(self, self.lightkube_client, self._resource_handler)
+        self.framework.observe(self.on.some_event_emitted, self.some_event_function)
+
+    def some_event_function():
+        # use the getter function wherever the info is needed
+        try:
+            gateway_data = self.gateway_relation.get_relation_data()
+            except GatewayRelationError as error:
+            ...
+```
+"""
+
 import logging
 from ops.framework import Object
 from ops.model import Application
