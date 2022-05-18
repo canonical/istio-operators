@@ -23,7 +23,6 @@ class Operator(CharmBase):
             # We can't do anything useful when not the leader, so do nothing.
             self.model.unit.status = WaitingStatus("Waiting for leadership")
             return
-
         try:
             self.interfaces = get_interfaces(self)
         except NoVersionsListed as err:
@@ -132,8 +131,16 @@ class Operator(CharmBase):
             self.interfaces["istio-pilot"].send_data(
                 {"service-name": f'istiod.{self.model.name}.svc', "service-port": '15012'}
             )
+        else:
+            self.log.debug(f"Unable to send data, deferring event: {event}")
+            event.defer()
 
     def handle_ingress(self, event):
+        # FIXME: sending the data every single time
+        # is not a great design, a better one involves refactoring and
+        # probably changing SDI
+        self.send_info(event)
+
         try:
             if not self._gateway_address:
                 self.log.info(
@@ -154,7 +161,9 @@ class Operator(CharmBase):
             else:
                 self.log.exception("Unexpected exception, deferring this event.  Exception was:")
                 self.log.exception(e)
-            self.unit.status = BlockedStatus("Missing istio-ingressgateway relation")
+            self.unit.status = WaitingStatus(
+                "Missing istio-ingressgateway-workload service, deferring this event"
+            )
             event.defer()
             return
 
