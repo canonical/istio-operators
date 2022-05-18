@@ -140,8 +140,8 @@ class GatewayProvider(Object):
         self.framework.observe(
             charm.on[relation_name].relation_changed, self._on_gateway_relation_changed
         )
-        self.framework.observe(charm.on.config_changed, self._on_gateway_config_changed)
-        self.framework.observe(charm.on.update_status, self._on_gateway_config_changed)
+        self.framework.observe(charm.on.config_changed, self._on_gateway_relation_changed)
+        self.framework.observe(charm.on.update_status, self._on_gateway_relation_changed)
 
     def _validate_gateway_exists(self):
         from lightkube.core.exceptions import ApiError
@@ -168,7 +168,3 @@ class GatewayProvider(Object):
                         "gateway_namespace": self.model.name,
                     }
                 )
-
-    def _on_gateway_config_changed(self, event):
-        if len(self.model.relations[DEFAULT_RELATION_NAME]) > 0:
-            self._on_gateway_relation_changed(event)
