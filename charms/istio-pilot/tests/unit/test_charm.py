@@ -343,29 +343,13 @@ def test_with_ingress_auth_relation(harness, subprocess, helpers, mocked_client,
     assert isinstance(harness.charm.model.unit.status, ActiveStatus)
 
 
-def test_correct_data_in_gateway_relation(harness, mocked_lib_istio_gateway_client):
+def test_correct_data_in_gateway_relation(harness, mocker):
     harness.set_leader(True)
 
-    mocked_lib_istio_gateway_client.get.return_value = {
-        'apiVersion': 'networking.istio.io/v1beta1',
-        'kind': 'Gateway',
-        'metadata': {
-            'generation': 1,
-            'labels': {
-                'app.istio-pilot.io/is-workload-entity': 'true',
-                'app.juju.is/created-by': 'istio-pilot',
-            },
-            'name': 'istio-gateway',
-            'namespace': 'test-model',
-            'selfLink': '/apis/networking.istio.io/v1beta1/namespaces/dev/gateways/istio-gateway',
-        },
-        'spec': {
-            'selector': {'istio': 'ingressgateway'},
-            'servers': [
-                {'hosts': ['*'], 'port': {'name': 'http', 'number': 80, 'protocol': 'HTTP'}}
-            ],
-        },
-    }
+    mocked_validate_gateway = mocker.patch(
+        "charms.istio_pilot.v0.istio_gateway_name.GatewayProvider._validate_gateway_exists"
+    )
+    mocked_validate_gateway.return_value = True
 
     rel_id = harness.add_relation("gateway", "app")
     harness.add_relation_unit(rel_id, "app/0")

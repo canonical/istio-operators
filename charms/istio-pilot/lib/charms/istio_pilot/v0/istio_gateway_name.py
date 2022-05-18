@@ -20,17 +20,13 @@ requires:
         limit: 1
 ```
 
-### Update dependency
-Apart from the usual ops dependency, this library requires lightkube.
-Make sure that is added to your charm's `requirements.txt`.
-
 ### Initialise the library in charm.py
 ```python
 from charms.istio_pilot.v0.istio_gateway_name import GatewayProvider, GatewayRelationError
 
 Class SomeCharm(CharmBase):
     def __init__(self, *args):
-        self.gateway = GatewayProvider(self, self.lightkube_client, self._resource_handler)
+        self.gateway = GatewayProvider(self)
         self.framework.observe(self.on.some_event_emitted, self.some_event_function)
 
     def some_event_function():
@@ -45,9 +41,6 @@ Class SomeCharm(CharmBase):
 import logging
 from ops.framework import Object
 from ops.model import Application
-from lightkube.generic_resource import create_namespaced_resource
-from lightkube.core.exceptions import ApiError
-from lightkube.core.client import Client
 
 # Increment this major API version when introducing breaking changes
 LIBAPI = 0
@@ -129,10 +122,14 @@ class GatewayRequirer(Object):
 
 
 class GatewayProvider(Object):
-    def __init__(self, charm):
-        super().__init__(charm, DEFAULT_RELATION_NAME)
+    def __init__(self, charm, relation_name=DEFAULT_RELATION_NAME):
+        super().__init__(charm, relation_name)
+
+        from lightkube.core.client import Client
+        from lightkube.generic_resource import create_namespaced_resource
+
         self.charm = charm
-        self.lightkube_client = Client(namespace=self.charm.model.name, field_manager="lightkube")
+        self.lightkube_client = Client(namespace=self.model.name, field_manager="lightkube")
         self.gateway_class = create_namespaced_resource(
             group="networking.istio.io",
             version="v1beta1",
@@ -141,12 +138,14 @@ class GatewayProvider(Object):
             verbs=None,
         )
         self.framework.observe(
-            charm.on[DEFAULT_RELATION_NAME].relation_changed, self._on_gateway_relation_changed
+            charm.on[relation_name].relation_changed, self._on_gateway_relation_changed
         )
         self.framework.observe(charm.on.config_changed, self._on_gateway_config_changed)
         self.framework.observe(charm.on.update_status, self._on_gateway_config_changed)
 
     def _validate_gateway_exists(self):
+        from lightkube.core.exceptions import ApiError
+
         try:
             response = self.lightkube_client.get(
                 self.gateway_class, self.model.config['default-gateway'], namespace=self.model.name
