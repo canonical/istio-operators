@@ -89,6 +89,17 @@ class ResourceHandler:
                 ignore_unauthorized=ignore_unauthorized,
             )
 
+    def validate_resource_exist(self, resource_type, resource_name, resource_namespace):
+        try:
+            response = self.lightkube_client.get(
+                resource_type, resource_name, namespace=resource_namespace
+            )
+            return True
+        except ApiError as error:
+            self.log.error(str(error))
+
+        return False
+
     def get_custom_resource_class_from_filename(self, filename: str):
         """Returns a class representing a namespaced K8s resource.
 

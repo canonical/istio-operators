@@ -13,7 +13,7 @@ from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from serialized_data_interface import NoCompatibleVersions, NoVersionsListed, get_interfaces
 from resources_handler import ResourceHandler
-from charms.istio_pilot.v0.istio_gateway_name import GatewayProvider
+from istio_gateway_name_provider import GatewayProvider, DEFAULT_RELATION_NAME
 
 
 class Operator(CharmBase):
@@ -54,6 +54,9 @@ class Operator(CharmBase):
 
         self.framework.observe(self.on.config_changed, self.handle_default_gateway)
 
+        self.framework.observe(
+            self.on[DEFAULT_RELATION_NAME].relation_changed, self.handle_default_gateway
+        )
         self.framework.observe(self.on["istio-pilot"].relation_changed, self.send_info)
         self.framework.observe(self.on['ingress'].relation_changed, self.handle_ingress)
         self.framework.observe(self.on['ingress'].relation_broken, self.handle_ingress)
@@ -128,6 +131,22 @@ class Operator(CharmBase):
 
         # Update the ingress resources as they rely on the default_gateway
         self.handle_ingress(event)
+
+        # check if gateway is created
+        self.handle_gateway_relation(event)
+
+    def handle_gateway_relation(self, event):
+        is_gateway_created = self._resource_handler.validate_resource_exist(
+            resource_type=self._resource_handler.get_custom_resource_class_from_filename(
+                "gateway.yaml.j2"
+            ),
+            resource_name=self.model.config['default-gateway'],
+            resource_namespace=self.model.name,
+        )
+        if is_gateway_created:
+            self.gateway.on_gateway_relation_changed(
+                self.app, self.model.config['default-gateway'], self.model.name
+            )
 
     def send_info(self, event):
         if self.interfaces["istio-pilot"]:
