@@ -343,11 +343,19 @@ def test_with_ingress_auth_relation(harness, subprocess, helpers, mocked_client,
     assert isinstance(harness.charm.model.unit.status, ActiveStatus)
 
 
-def test_correct_data_in_gateway_relation(harness, mocker):
+def test_correct_data_in_gateway_relation(harness, mocker, mocked_client):
     harness.set_leader(True)
 
+    create_global_resource(
+        group="networking.istio.io",
+        version="v1beta1",
+        kind="Gateway",
+        plural="gateways",
+        verbs=None,
+    )
+
     mocked_validate_gateway = mocker.patch(
-        "charms.istio_pilot.v0.istio_gateway_name.GatewayProvider._validate_gateway_exists"
+        "resources_handler.ResourceHandler.validate_resource_exist"
     )
     mocked_validate_gateway.return_value = True
 
@@ -393,6 +401,14 @@ def test_removal(harness, subprocess, mocked_client, helpers, mocker):
         "-s",
         f"values.global.istioNamespace={None}",
     ]
+
+    create_global_resource(
+        group="networking.istio.io",
+        version="v1beta1",
+        kind="Gateway",
+        plural="gateways",
+        verbs=None,
+    )
 
     # Change ingress-auth and ingress relations to
     # correctly call all ingress handlers, and not as a subproduct

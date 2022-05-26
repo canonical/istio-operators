@@ -13,13 +13,12 @@ class GatewayProvider(Object):
     def __init__(self, charm, relation_name=DEFAULT_RELATION_NAME):
         super().__init__(charm, relation_name)
 
-    def on_gateway_relation_changed(self, charm, gateway_name, gateway_namespace):
-        if self.model.unit.is_leader():
-            relations = self.model.relations["gateway"]
-            for relation in relations:
-                relation.data[charm].update(
-                    {
-                        "gateway_name": gateway_name,
-                        "gateway_namespace": gateway_namespace,
-                    }
-                )
+    def send_gateway_relation_data(self, charm, gateway_name, gateway_namespace):
+        relations = self.model.relations["gateway"]
+        for relation in relations:
+            relation.data[charm].update(
+                {
+                    "gateway_name": gateway_name,
+                    "gateway_namespace": gateway_namespace,
+                }
+            )

@@ -49,12 +49,6 @@ def mocked_charm_client(mocker):
     yield client
 
 
-@pytest.fixture(autouse=True)
-def mocked_gateway_lib_client(mocker):
-    client = mocker.patch("lightkube.core.client.Client")
-    yield client
-
-
 # Similar to what is done for list, but for get
 # and just returning the status attribute
 @pytest.fixture(autouse=True)

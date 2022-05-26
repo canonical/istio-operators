@@ -144,7 +144,7 @@ class Operator(CharmBase):
             resource_namespace=self.model.name,
         )
         if is_gateway_created:
-            self.gateway.on_gateway_relation_changed(
+            self.gateway.send_gateway_relation_data(
                 self.app, self.model.config['default-gateway'], self.model.name
             )
 
