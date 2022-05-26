@@ -91,9 +91,7 @@ class ResourceHandler:
 
     def validate_resource_exist(self, resource_type, resource_name, resource_namespace):
         try:
-            response = self.lightkube_client.get(
-                resource_type, resource_name, namespace=resource_namespace
-            )
+            self.lightkube_client.get(resource_type, resource_name, namespace=resource_namespace)
             return True
         except ApiError as error:
             self.log.error(str(error))

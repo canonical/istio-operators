@@ -1,8 +1,5 @@
 import logging
-from ops.framework import Object, EventBase, EventSource, ObjectEvents
-from ops.charm import CharmEvents
-from lightkube.core.client import Client
-from lightkube.generic_resource import create_namespaced_resource
+from ops.framework import Object
 
 logger = logging.getLogger(__name__)
 
