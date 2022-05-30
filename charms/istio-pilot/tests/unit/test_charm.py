@@ -343,6 +343,34 @@ def test_with_ingress_auth_relation(harness, subprocess, helpers, mocked_client,
     assert isinstance(harness.charm.model.unit.status, ActiveStatus)
 
 
+def test_correct_data_in_gateway_relation(harness, mocker, mocked_client):
+    harness.set_leader(True)
+
+    create_global_resource(
+        group="networking.istio.io",
+        version="v1beta1",
+        kind="Gateway",
+        plural="gateways",
+        verbs=None,
+    )
+
+    mocked_validate_gateway = mocker.patch(
+        "resources_handler.ResourceHandler.validate_resource_exist"
+    )
+    mocked_validate_gateway.return_value = True
+
+    rel_id = harness.add_relation("gateway", "app")
+    harness.add_relation_unit(rel_id, "app/0")
+    harness.set_model_name("test-model")
+    harness.begin_with_initial_hooks()
+
+    gateway_relations = harness.model.relations["gateway"]
+    istio_relation_data = gateway_relations[0].data[harness.model.app]
+
+    assert istio_relation_data["gateway_name"] == harness.model.config["default-gateway"]
+    assert istio_relation_data["gateway_namespace"] == harness.model.name
+
+
 def test_removal(harness, subprocess, mocked_client, helpers, mocker):
     check_output = subprocess.check_output
 
@@ -374,8 +402,6 @@ def test_removal(harness, subprocess, mocked_client, helpers, mocker):
         f"values.global.istioNamespace={None}",
     ]
 
-    # Create the gateway resource and emit config_changed
-    # to create all needed resources
     create_global_resource(
         group="networking.istio.io",
         version="v1beta1",
