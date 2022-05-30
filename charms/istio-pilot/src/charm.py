@@ -147,6 +147,8 @@ class Operator(CharmBase):
             self.gateway.send_gateway_relation_data(
                 self.app, self.model.config['default-gateway'], self.model.name
             )
+        else:
+            self.log.info("Gateway is not created yet. Skip sending gateway relation data.")
 
     def send_info(self, event):
         if self.interfaces["istio-pilot"]:
