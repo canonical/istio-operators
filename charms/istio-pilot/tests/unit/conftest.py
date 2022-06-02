@@ -1,5 +1,8 @@
+from unittest.mock import MagicMock
+
 import pytest
 from charm import Operator
+from lightkube.core.exceptions import ApiError
 from ops.testing import Harness
 
 
@@ -28,10 +31,30 @@ class Helpers:
                 return False
         return True
 
+    @staticmethod
+    def calls_to_tuple_kind_name(calls):
+        result = []
+        for call in calls:
+            resource = call.args[0]
+            result.append((resource.kind, resource.metadata.name))
+        return result
+
+
+class DeleteError(ApiError):
+    def __init__(self):
+        self.status = MagicMock()
+        self.status.message = "placeholder"
+
 
 @pytest.fixture(scope="session")
 def helpers():
     return Helpers()
+
+
+@pytest.fixture(scope="session")
+def api_error_mock():
+    api_exception = DeleteError()
+    yield api_exception
 
 
 # autouse to prevent calling out to the k8s API via lightkube
