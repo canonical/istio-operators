@@ -36,10 +36,11 @@ def generate_pod_resource_list(pod_names):
     return resources
 
 
-def test_delete_resource(caplog):
-    resource = Pod(kind="Pod", metadata=ObjectMeta(name="TestPod"))
+def test_delete_resource(mocked_client):
+    mock_delete = mocked_client.return_value.delete
+    resource = Pod(kind="Pod", metadata=ObjectMeta(name="TestPod", namespace="some-namespace"))
     ResourceHandler(APP_NAME, MODEL_NAME).delete_resource(resource)
-    assert "ApiError" not in caplog.text
+    assert mock_delete.called_once_with(resource)
 
 
 @pytest.mark.parametrize(
