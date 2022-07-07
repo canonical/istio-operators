@@ -6,7 +6,6 @@
 import logging
 from typing import Tuple, TextIO, Union, Iterable
 
-import yaml
 from jinja2 import Environment, FileSystemLoader
 import lightkube  # noqa F401  # Needed for patching in test_resources_handler.py
 from lightkube import Client, codecs
@@ -118,9 +117,8 @@ class ResourceHandler:
             'service': 'service',
         }
         manifest = self.env.get_template(filename).render(context)
-        manifest_dict = yaml.safe_load(manifest)
-        ns_resource = codecs.from_dict(manifest_dict)
-        return type(ns_resource)
+        ns_resource = codecs.load_all_yaml(manifest, context=context, create_resources_for_crds=True)
+        return type(ns_resource[0])
 
     def reconcile_desired_resources(
         self,
