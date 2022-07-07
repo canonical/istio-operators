@@ -114,12 +114,14 @@ class Operator(CharmBase):
         resources depend on the default_gateway
         """
         # Clean-up resources
-        self._delete_existing_resource_objects(
-            resource=self.gateway_resource,
+        self._resource_handler.delete_existing_resources(
+            resource=self._resource_handler.get_custom_resource_class_from_filename(
+                filename='gateway.yaml.j2'
+            ),
             labels={
-                "app.juju.is/created-by": f"{self.app.name}",
-                "app.{self.app.name}.io/is-workload-entity": "true",
+                f"app.{self.app.name}.io/is-workload-entity": "true",
             },
+            namespace=self.model.name,
         )
         t = self.env.get_template('gateway.yaml.j2')
         gateway = self.model.config['default-gateway']
@@ -130,14 +132,6 @@ class Operator(CharmBase):
         )
         manifest = None
         if secret_name:
-            manifest = t.render(
-                name=gateway,
-                secret_name=secret_name,
-                ssl_crt=self.model.config["ssl-crt"],
-                ssl_key=self.model.config["ssl-key"],
-                model_name=self.model.name,
-                app_name=self.app.name,
-            )
             secret = self.env.get_template('gateway-secret.yaml.j2')
             manifest_secret = secret.render(
                 secret_name=secret_name,
@@ -146,11 +140,13 @@ class Operator(CharmBase):
                 model_name=self.model.name,
                 app_name=self.app.name,
             )
-            self._apply_manifest(manifest_secret)
-            return
+            self._resource_handler.apply_manifest(manifest_secret)
 
         manifest = t.render(
             name=gateway,
+            secret_name=secret_name,
+            ssl_crt=self.model.config["ssl-crt"] or None,
+            ssl_key=self.model.config["ssl-key"] or None,
             model_name=self.model.name,
             app_name=self.app.name,
         )
