@@ -119,7 +119,7 @@ class ResourceHandler:
         }
         manifest = self.env.get_template(filename).render(context)
         manifest_dict = yaml.safe_load(manifest)
-        ns_resource = codecs.from_dict(manifest_dict, client=self.lightkube_client)
+        ns_resource = codecs.from_dict(manifest_dict)
         return type(ns_resource)
 
     def reconcile_desired_resources(
