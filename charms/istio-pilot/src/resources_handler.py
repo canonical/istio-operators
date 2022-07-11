@@ -11,6 +11,7 @@ import lightkube  # noqa F401  # Needed for patching in test_resources_handler.p
 from lightkube import Client, codecs
 from lightkube.core.exceptions import ApiError
 from lightkube.core.resource import Resource
+from lightkube.generic_resource import load_in_cluster_generic_resources
 
 
 class ResourceHandler:
@@ -29,6 +30,7 @@ class ResourceHandler:
 
         # Every lightkube API call will use the model name as the namespace by default
         self.lightkube_client = Client(namespace=self.model_name, field_manager="lightkube")
+        load_in_cluster_generic_resources(self.lightkube_client)
 
         self.env = Environment(loader=FileSystemLoader('src'))
 
@@ -117,7 +119,9 @@ class ResourceHandler:
             'service': 'service',
         }
         manifest = self.env.get_template(filename).render(context)
-        ns_resource = codecs.load_all_yaml(manifest, context=context, create_resources_for_crds=True)
+        ns_resource = codecs.load_all_yaml(
+            manifest, context=context, create_resources_for_crds=True
+        )
         return type(ns_resource[0])
 
     def reconcile_desired_resources(
