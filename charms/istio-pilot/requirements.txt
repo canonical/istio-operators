@@ -7,4 +7,4 @@ oci-image
 # Temporarily using ca-scribner's branch that adds implicit custom
 # resource creation. Change this after those changes get merged into master
 #lightkube>=0.10.1
-git+https://github.com/ca-scribner/lightkube.git@add-implicit-model-generation#egg=lightkube
+git+https://github.com/ca-scribner/lightkube.git@30fe8ad5b9ce488946cedf39cf7624ef360df6f1
