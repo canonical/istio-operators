@@ -46,7 +46,10 @@ async def test_deploy_istio_charms(ops_test: OpsTest):
     istio_charms = await ops_test.build_charms(f"{charms_path}-gateway", f"{charms_path}-pilot")
 
     await ops_test.model.deploy(
-        istio_charms['istio-pilot'], application_name='istio-pilot', trust=True
+        istio_charms['istio-pilot'],
+        application_name='istio-pilot',
+        config={'default-gateway': 'kubeflow-gateway'},
+        trust=True,
     )
     await ops_test.model.deploy(
         istio_charms['istio-gateway'],
@@ -125,3 +128,15 @@ async def test_deploy_bookinfo_example(ops_test: OpsTest):
         soup = BS(await results.text())
 
     assert soup.title.string == 'Simple Bookstore App'
+
+
+async def test_gateway_creation(ops_test: OpsTest):
+    await ops_test.run(
+        'kubectl',
+        'get',
+        'gateway/kubeflow-gateway',
+        '-n',
+        ops_test.model_name,
+        check=True,
+        fail_msg="Failed to get the default gateway",
+    )
