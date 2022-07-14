@@ -176,18 +176,20 @@ class Operator(CharmBase):
                 return
         except (ApiError, TypeError) as e:
             if isinstance(e, ApiError):
-                self.log.exception(
+                self.log.debug(
                     "ApiError: Could not get istio-ingressgateway-workload, deferring this event"
                 )
+                self.unit.status = WaitingStatus(
+                    "Missing istio-ingressgateway-workload service, deferring this event"
+                )
+                event.defer()
             elif isinstance(e, TypeError):
-                self.log.exception("TypeError: No ip address found, deferring this event")
+                self.log.debug("TypeError: No ip address found, deferring this event")
+                self.unit.status = WaitingStatus("Waiting for ip address")
+                event.defer()
             else:
-                self.log.exception("Unexpected exception, deferring this event.  Exception was:")
+                self.log.error("Unexpected exception.  Exception was:")
                 self.log.exception(e)
-            self.unit.status = WaitingStatus(
-                "Missing istio-ingressgateway-workload service, deferring this event"
-            )
-            event.defer()
             return
 
         ingress = self.interfaces['ingress']
