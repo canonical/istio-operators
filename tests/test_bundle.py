@@ -48,7 +48,7 @@ async def test_deploy_istio_charms(ops_test: OpsTest):
     await ops_test.model.deploy(
         istio_charms['istio-pilot'],
         application_name='istio-pilot',
-        config={'default-gateway': 'kubeflow-gateway'},
+        config={'default-gateway': 'test-gateway'},
         trust=True,
     )
     await ops_test.model.deploy(
@@ -134,7 +134,7 @@ async def test_gateway_creation(ops_test: OpsTest):
     await ops_test.run(
         'kubectl',
         'get',
-        'gateway/kubeflow-gateway',
+        'gateway/test-gateway',
         '-n',
         ops_test.model_name,
         check=True,
