@@ -42,6 +42,9 @@ import logging
 from ops.framework import Object
 from ops.model import Application
 
+# The unique Charmhub library identifier, never change it
+LIBID = "0eb026ea5857413a9ed89f7740a6b03d"
+
 # Increment this major API version when introducing breaking changes
 LIBAPI = 0
 
@@ -119,3 +122,4 @@ class GatewayRequirer(Object):
             "gateway_name": data["gateway_name"],
             "gateway_namespace": data["gateway_namespace"],
         }
+
