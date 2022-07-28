@@ -113,10 +113,7 @@ class Operator(CharmBase):
         Side effect: self.handle_ingress() is also invoked by this handler as ingress
         resources depend on the default_gateway
         """
-
-        t = self.env.get_template('gateway.yaml.j2')
-        gateway = self.model.config['default-gateway']
-        manifest = t.render(name=gateway, app_name=self.app.name)
+        # Clean-up resources
         self._resource_handler.delete_existing_resources(
             resource=self._resource_handler.get_custom_resource_class_from_filename(
                 filename='gateway.yaml.j2'
@@ -125,6 +122,33 @@ class Operator(CharmBase):
                 f"app.{self.app.name}.io/is-workload-entity": "true",
             },
             namespace=self.model.name,
+        )
+        t = self.env.get_template('gateway.yaml.j2')
+        gateway = self.model.config['default-gateway']
+        secret_name = (
+            f"{self.app.name}-gateway-secret"
+            if self.model.config["ssl-crt"] and self.model.config["ssl-key"]
+            else None
+        )
+        manifest = None
+        if secret_name:
+            secret = self.env.get_template('gateway-secret.yaml.j2')
+            manifest_secret = secret.render(
+                secret_name=secret_name,
+                ssl_crt=self.model.config["ssl-crt"],
+                ssl_key=self.model.config["ssl-key"],
+                model_name=self.model.name,
+                app_name=self.app.name,
+            )
+            self._resource_handler.apply_manifest(manifest_secret)
+
+        manifest = t.render(
+            name=gateway,
+            secret_name=secret_name,
+            ssl_crt=self.model.config["ssl-crt"] or None,
+            ssl_key=self.model.config["ssl-key"] or None,
+            model_name=self.model.name,
+            app_name=self.app.name,
         )
         self._resource_handler.apply_manifest(manifest)
 
