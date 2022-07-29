@@ -12,17 +12,22 @@ jobs:
   lib-check:
     name: Check libraries
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        charm:
+        - istio-gateway
+        - istio-pilot
     steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-        with:
-          fetch-depth: 0
-      - name: Check libs
-        uses: canonical/charming-actions/check-libraries@1.0.3
-        with:
-          credentials: "${{ secrets.charmcraft-credentials }}"
-          github-token: "${{ secrets.GITHUB_TOKEN }}"
-          
+    - name: Checkout
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+    - name: Check libs
+      uses: canonical/charming-actions/check-libraries@1.0.3
+      with:
+        charm-path: ./charms/${{ matrix.charm }}
+        credentials: "${{ secrets.charmcraft-credentials }}"
+        github-token: "${{ secrets.GITHUB_TOKEN }}"
   lint:
     name: Lint Code
     runs-on: ubuntu-latest
@@ -79,7 +84,8 @@ jobs:
         sg microk8s -c 'juju bootstrap microk8s uk8s'
         sg microk8s -c 'juju add-model istio-system'
 
-    - run: sg microk8s -c 'KUBECONFIG=/home/runner/.kube/config tox -e integration -- --model istio-system --destructive-mode'
+    - run: sg microk8s -c 'KUBECONFIG=/home/runner/.kube/config tox -e integration
+        -- --model istio-system --destructive-mode'
       timeout-minutes: 25
 
     - name: Setup Debug Artifact Collection
@@ -88,7 +94,8 @@ jobs:
 
     - name: Collect charmcraft logs
       if: failure()
-      run: cat /home/runner/snap/charmcraft/common/cache/charmcraft/log/charmcraft-*.log | tee tmp/charmcraft.log
+      run: cat /home/runner/snap/charmcraft/common/cache/charmcraft/log/charmcraft-*.log
+        | tee tmp/charmcraft.log
 
     - name: Collect Juju status
       if: failure()
