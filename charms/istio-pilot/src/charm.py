@@ -51,7 +51,8 @@ class Operator(CharmBase):
         self.framework.observe(self.on.install, self.install)
         self.framework.observe(self.on.remove, self.remove)
 
-        self.framework.observe(self.on.config_changed, self.handle_default_gateway)
+        for event in [self.on.config_changed, self.on["ingress"].relation_created]:
+            self.framework.observe(event, self.handle_default_gateway)
 
         self.framework.observe(
             self.on[DEFAULT_RELATION_NAME].relation_changed, self.handle_default_gateway
