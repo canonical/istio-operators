@@ -64,7 +64,7 @@ def test_events(harness, mocker):
         "app",
         {"some_key": "some_value"},
     )
-    handle_ingress.assert_called_once()
+    handle_ingress.assert_called()
     handle_ingress.reset_mock()
 
     harness.add_relation_unit(rel_id, "app/0")
