@@ -361,17 +361,19 @@ def test_correct_data_in_gateway_relation(harness, mocker, mocked_client):
     )
     mocked_validate_gateway.return_value = True
 
-    rel_id = harness.add_relation("gateway", "app")
-    harness.add_relation_unit(rel_id, "app/0")
     harness.set_model_name("test-model")
     mocker.patch('resources_handler.load_in_cluster_generic_resources')
-    harness.begin_with_initial_hooks()
 
-    gateway_relations = harness.model.relations["gateway"]
-    istio_relation_data = gateway_relations[0].data[harness.model.app]
+    rel_id = harness.add_relation("gateway", "app")
+    harness.add_relation_unit(rel_id, "app/0")
+
+    harness.begin_with_initial_hooks()
+    model = harness.charm.framework.model
+    gateway_relations = model.get_relation("gateway", rel_id)
+    istio_relation_data = gateway_relations.data[harness.charm.app]
 
     assert istio_relation_data["gateway_name"] == harness.model.config["default-gateway"]
-    assert istio_relation_data["gateway_namespace"] == harness.model.name
+    assert istio_relation_data["gateway_namespace"] == model.name
 
 
 def test_removal(harness, subprocess, mocked_client, helpers, mocker):
