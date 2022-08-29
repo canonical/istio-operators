@@ -158,10 +158,13 @@ class Operator(CharmBase):
         # Update the ingress resources as they rely on the default_gateway
         self.handle_ingress(event)
 
-        # check if gateway is created
-        self.handle_gateway_relation(event)
-
     def handle_gateway_relation(self, event):
+        if self.model.relations["gateway"]:
+            self.log.info(
+                "No gateway relation found, waiting for remote unit to join the relation"
+            )
+            self.unit.status = WaitingStatus("Waiting for remote unit to join gateway relation")
+            return
         is_gateway_created = self._resource_handler.validate_resource_exist(
             resource_type=self._resource_handler.get_custom_resource_class_from_filename(
                 "gateway.yaml.j2"
