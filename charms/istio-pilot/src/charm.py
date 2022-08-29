@@ -54,9 +54,11 @@ class Operator(CharmBase):
         for event in [self.on.config_changed, self.on["ingress"].relation_created]:
             self.framework.observe(event, self.handle_default_gateway)
 
-        self.framework.observe(
-            self.on[DEFAULT_RELATION_NAME].relation_changed, self.handle_default_gateway
-        )
+        # FIXME: Calling handle_gateway_relation on update_status ensures gateway information is
+        # sent eventually to the related units, this is temporal and we should find a way to
+        # ensure all event handlers are called when they are supposed to.
+        for event in [self.on[DEFAULT_RELATION_NAME].relation_changed, self.on.update_status]:
+            self.framework.observe(event, self.handle_gateway_relation)
         self.framework.observe(self.on["istio-pilot"].relation_changed, self.send_info)
         self.framework.observe(self.on['ingress'].relation_changed, self.handle_ingress)
         self.framework.observe(self.on['ingress'].relation_broken, self.handle_ingress)
