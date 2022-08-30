@@ -345,7 +345,7 @@ def test_with_ingress_auth_relation(harness, subprocess, helpers, mocked_client,
     assert isinstance(harness.charm.model.unit.status, ActiveStatus)
 
 
-def test_correct_data_in_gateway_relation(harness, mocker, mocked_client):
+def test_correct_data_in_gateway_info_relation(harness, mocker, mocked_client):
     harness.set_leader(True)
 
     create_global_resource(
@@ -364,12 +364,12 @@ def test_correct_data_in_gateway_relation(harness, mocker, mocked_client):
     harness.set_model_name("test-model")
     mocker.patch('resources_handler.load_in_cluster_generic_resources')
 
-    rel_id = harness.add_relation("gateway", "app")
+    rel_id = harness.add_relation("gateway-info", "app")
     harness.add_relation_unit(rel_id, "app/0")
 
     harness.begin_with_initial_hooks()
     model = harness.charm.framework.model
-    gateway_relations = model.get_relation("gateway", rel_id)
+    gateway_relations = model.get_relation("gateway-info", rel_id)
     istio_relation_data = gateway_relations.data[harness.charm.app]
 
     assert istio_relation_data["gateway_name"] == harness.model.config["default-gateway"]
