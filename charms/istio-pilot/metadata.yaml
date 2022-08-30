@@ -17,8 +17,8 @@ provides:
     interface: ingress-auth
     schema: https://raw.githubusercontent.com/canonical/operator-schemas/master/ingress-auth.yaml
     versions: [v1]
-  gateway:
-    interface: istio-gateway-name
+  gateway-info:
+    interface: istio-gateway-info
     description: |
       Provides gateway name related Juju application
 assumes:
