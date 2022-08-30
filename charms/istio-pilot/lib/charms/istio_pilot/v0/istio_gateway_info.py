@@ -10,19 +10,19 @@ gateway information.
 You can fetch the library using the following commands with charmcraft.
 ```shell
 cd some-charm
-charmcraft fetch-lib charms.istio_pilot.v0.istio_gateway_name
+charmcraft fetch-lib charms.istio_pilot.v0.istio_gateway_info
 ```
 ### Add relation to metadata.yaml
 ```yaml
 requires:
-    gateway:
-        interface: istio_gateway_name
+    gateway-info:
+        interface: istio_gateway_info
         limit: 1
 ```
 
 ### Initialise the library in charm.py
 ```python
-from charms.istio_pilot.v0.istio_gateway_name import GatewayProvider, GatewayRelationError
+from charms.istio_pilot.v0.istio_gateway_info import GatewayProvider, GatewayRelationError
 
 Class SomeCharm(CharmBase):
     def __init__(self, *args):
@@ -50,11 +50,11 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 1
+LIBPATCH = 2
 
 
-DEFAULT_RELATION_NAME = "gateway"
-DEFAULT_INTERFACE_NAME = "istio-gateway-name"
+RELATION_NAME = "gateway-info"
+INTERFACE_NAME = "istio-gateway-info"
 
 logger = logging.getLogger(__name__)
 
@@ -65,13 +65,13 @@ class GatewayRelationError(Exception):
 
 class GatewayRelationMissingError(GatewayRelationError):
     def __init__(self):
-        self.message = "Missing gateway relation with istio-pilot"
+        self.message = "Missing gateway-info relation with istio-pilot"
         super().__init__(self.message)
 
 
 class GatewayRelationTooManyError(GatewayRelationError):
     def __init__(self):
-        self.message = "Too many istio-gateway-name relations"
+        self.message = "Too many istio-gateway-info relations"
         super().__init__(self.message)
 
 
@@ -82,7 +82,7 @@ class GatewayRelationDataMissingError(GatewayRelationError):
 
 
 class GatewayRequirer(Object):
-    def __init__(self, charm, relation_name: str = DEFAULT_RELATION_NAME):
+    def __init__(self, charm, relation_name: str = RELATION_NAME):
         super().__init__(charm, relation_name)
         self.charm = charm
         self.relation_name = relation_name
@@ -106,16 +106,16 @@ class GatewayRequirer(Object):
 
         if not "gateway_name" in data:
             logger.error(
-                "Missing gateway name in gateway relation data. Waiting for gateway creation in istio-pilot"
+                "Missing gateway name in gateway-info relation data. Waiting for gateway creation in istio-pilot"
             )
             raise GatewayRelationDataMissingError(
-                "Missing gateway name in gateway relation data. Waiting for gateway creation in istio-pilot"
+                "Missing gateway name in gateway-info relation data. Waiting for gateway creation in istio-pilot"
             )
 
         if not "gateway_namespace" in data:
-            logger.error("Missing gateway namespace in gateway relation data")
+            logger.error("Missing gateway namespace in gateway-info relation data")
             raise GatewayRelationDataMissingError(
-                "Missing gateway namespace in gateway relation data"
+                "Missing gateway namespace in gateway-info relation data"
             )
 
         return {
