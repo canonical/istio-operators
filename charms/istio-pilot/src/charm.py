@@ -326,7 +326,17 @@ class Operator(CharmBase):
         svcs = self.lightkube_client.get(
             Service, name="istio-ingressgateway-workload", namespace=self.model.name
         )
-        return svcs.status.loadBalancer.ingress[0].ip
+
+        # return gateway address: hostname or IP; None if not set
+        gateway_address = None
+        if hasattr(svcs.status.loadBalancer.ingress[0], 'hostname') and \
+                svcs.status.loadBalancer.ingress[0].hostname != None:
+            gateway_address = svcs.status.loadBalancer.ingress[0].hostname
+        elif hasattr(svcs.status.loadBalancer.ingress[0], 'ip') and \
+                svcs.status.loadBalancer.ingress[0].ip != None:
+            gateway_address = svcs.status.loadBalancer.ingress[0].ip
+
+        return gateway_address
 
 
 if __name__ == "__main__":
