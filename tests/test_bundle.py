@@ -108,6 +108,16 @@ async def test_deploy_bookinfo_example(ops_test: OpsTest):
         check=True,
     )
 
+    gateway_ip = get_gateway_ip(ops_test)
+    async with aiohttp.ClientSession(raise_for_status=True) as client:
+        results = await client.get(f'http://{gateway_ip}/productpage')
+        soup = BS(await results.text())
+
+    assert soup.title.string == 'Simple Bookstore App'
+
+
+# TODO: Change this to use lightkube
+def get_gateway_ip(ops_test: OpsTest):
     gateway_json = await ops_test.run(
         'kubectl',
         'get',
@@ -119,9 +129,4 @@ async def test_deploy_bookinfo_example(ops_test: OpsTest):
     )
 
     gateway_obj = json.loads(gateway_json[1])
-    gateway_ip = gateway_obj['status']['loadBalancer']['ingress'][0]['ip']
-    async with aiohttp.ClientSession(raise_for_status=True) as client:
-        results = await client.get(f'http://{gateway_ip}/productpage')
-        soup = BS(await results.text())
-
-    assert soup.title.string == 'Simple Bookstore App'
+    return gateway_obj['status']['loadBalancer']['ingress'][0]['ip']
