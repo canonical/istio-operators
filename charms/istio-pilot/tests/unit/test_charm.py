@@ -286,7 +286,7 @@ def test_with_ingress_auth_relation(harness, subprocess, helpers, mocked_client,
                                     'filter': {
                                         'name': 'envoy.filters.network.http_connection_manager'
                                     }
-                                }
+                                },
                             },
                         },
                         'patch': {
