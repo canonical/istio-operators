@@ -15,12 +15,12 @@ spec:
 {% if not secret_name %}
     port:
       name: http
-      number: 80
+      number: {{ gateway_http_port }}
       protocol: HTTP
 {% else %}
     port:
       name: https
-      number: 443
+      number: {{ gateway_https_port }}
       protocol: HTTPS
     tls:
       mode: SIMPLE
