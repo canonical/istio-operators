@@ -87,7 +87,7 @@ jobs:
     # DEBUG
     - name: Setup tmate session
       uses: mxschmitt/action-tmate@v3
-      timeout-minutes: 60
+      timeout-minutes: 180
 
     - run: sg microk8s -c 'KUBECONFIG=/home/runner/.kube/config tox -e integration
         -- --model istio-system --destructive-mode'
