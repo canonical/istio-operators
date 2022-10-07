@@ -329,11 +329,15 @@ class Operator(CharmBase):
 
         # return gateway address: hostname or IP; None if not set
         gateway_address = None
-        if hasattr(svcs.status.loadBalancer.ingress[0], 'hostname') and \
-                svcs.status.loadBalancer.ingress[0].hostname != None:
+        if (
+            hasattr(svcs.status.loadBalancer.ingress[0], 'hostname')
+            and svcs.status.loadBalancer.ingress[0].hostname is not None
+        ):
             gateway_address = svcs.status.loadBalancer.ingress[0].hostname
-        elif hasattr(svcs.status.loadBalancer.ingress[0], 'ip') and \
-                svcs.status.loadBalancer.ingress[0].ip != None:
+        elif (
+            hasattr(svcs.status.loadBalancer.ingress[0], 'ip')
+            and svcs.status.loadBalancer.ingress[0].ip is not None
+        ):
             gateway_address = svcs.status.loadBalancer.ingress[0].ip
 
         return gateway_address
