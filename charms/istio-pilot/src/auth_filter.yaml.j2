@@ -11,6 +11,7 @@ spec:
       match:
         context: GATEWAY
         listener:
+          portNumber: {{ gateway_port }}
           filterChain:
             filter:
               name: "envoy.filters.network.http_connection_manager"

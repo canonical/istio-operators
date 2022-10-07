@@ -281,11 +281,12 @@ def test_with_ingress_auth_relation(harness, subprocess, helpers, mocked_client,
                         'match': {
                             'context': 'GATEWAY',
                             'listener': {
+                                'portNumber': 8080,
                                 'filterChain': {
                                     'filter': {
                                         'name': 'envoy.filters.network.http_connection_manager'
                                     }
-                                }
+                                },
                             },
                         },
                         'patch': {
