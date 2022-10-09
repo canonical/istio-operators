@@ -16,6 +16,10 @@ from resources_handler import ResourceHandler
 from istio_gateway_info_provider import GatewayProvider, RELATION_NAME
 
 
+GATEWAY_HTTP_PORT = 8080
+GATEWAY_HTTPS_PORT = 8443
+
+
 class Operator(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
@@ -152,6 +156,8 @@ class Operator(CharmBase):
             ssl_key=self.model.config["ssl-key"] or None,
             model_name=self.model.name,
             app_name=self.app.name,
+            gateway_http_port=GATEWAY_HTTP_PORT,
+            gateway_https_port=GATEWAY_HTTPS_PORT,
         )
         self._resource_handler.apply_manifest(manifest)
 
@@ -286,11 +292,17 @@ class Operator(CharmBase):
             )
             return
 
+        if self.model.config["ssl-crt"] and self.model.config["ssl-key"]:
+            gateway_port = GATEWAY_HTTPS_PORT
+        else:
+            gateway_port = GATEWAY_HTTP_PORT
+
         t = self.env.get_template('auth_filter.yaml.j2')
         auth_filters = ''.join(
             t.render(
                 namespace=self.model.name,
                 app_name=self.app.name,
+                gateway_port=gateway_port,
                 **{
                     'request_headers': yaml.safe_dump(
                         [{'exact': h} for h in r.get('allowed-request-headers', [])],
