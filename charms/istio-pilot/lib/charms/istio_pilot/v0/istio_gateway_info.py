@@ -43,14 +43,14 @@ from ops.framework import Object
 from ops.model import Application
 
 # The unique Charmhub library identifier, never change it
-LIBID = "0eb026ea5857413a9ed89f7740a6b03d"
+LIBID = "354103422e7a43e2870e4203fbb5a649"
 
 # Increment this major API version when introducing breaking changes
 LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 2
+LIBPATCH = 1
 
 
 RELATION_NAME = "gateway-info"
