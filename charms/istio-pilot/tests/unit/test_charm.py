@@ -482,13 +482,6 @@ def test_remove_exceptions(harness, mocked_client, mocker):
 #
 # Test Service
 #
-# Overriding mocked_get(autouse=True) fixture (disabling autouse) to allow setting
-# of return value of get() method.
-@pytest.fixture(scope="function")
-def mocked_get(mocked_charm_client, mocker):
-    return
-
-
 def test_service(harness, subprocess, mocked_client, helpers, mocker, mocked_list):
 
     mocker.patch('resources_handler.load_in_cluster_generic_resources')
@@ -497,34 +490,37 @@ def test_service(harness, subprocess, mocked_client, helpers, mocker, mocked_lis
 
     # Test retrieval of gateway address set in Service
     # verify None
-    harness.charm.lightkube_client.get.return_value = codecs.from_dict(
-        {
-            'apiVersion': 'v1',
-            'kind': 'Service',
-            'status': {'loadBalancer': {'ingress': [{}]}},
-        }
-    )
+    harness.charm.lightkube_client.get.side_effect = [
+        codecs.from_dict(
+            {
+                'apiVersion': 'v1',
+                'kind': 'Service',
+                'status': {'loadBalancer': {'ingress': [{}]}},
+            }
+        )
+    ]
     assert harness.charm._gateway_address is None
-    harness.charm.lightkube_client.get.return_value = None
 
     # verify IP address
-    harness.charm.lightkube_client.get.return_value = codecs.from_dict(
-        {
-            'apiVersion': 'v1',
-            'kind': 'Service',
-            'status': {'loadBalancer': {'ingress': [{'ip': "127.0.0.1"}]}},
-        }
-    )
+    harness.charm.lightkube_client.get.side_effect = [
+        codecs.from_dict(
+            {
+                'apiVersion': 'v1',
+                'kind': 'Service',
+                'status': {'loadBalancer': {'ingress': [{'ip': "127.0.0.1"}]}},
+            }
+        )
+    ]
     assert harness.charm._gateway_address == "127.0.0.1"
-    harness.charm.lightkube_client.get.return_value = None
 
     # verify hostname
-    harness.charm.lightkube_client.get.return_value = codecs.from_dict(
-        {
-            'apiVersion': 'v1',
-            'kind': 'Service',
-            'status': {'loadBalancer': {'ingress': [{'hostname': "test.com"}]}},
-        }
-    )
+    harness.charm.lightkube_client.get.side_effect = [
+        codecs.from_dict(
+            {
+                'apiVersion': 'v1',
+                'kind': 'Service',
+                'status': {'loadBalancer': {'ingress': [{'hostname': "test.com"}]}},
+            }
+        )
+    ]
     assert harness.charm._gateway_address == "test.com"
-    harness.charm.lightkube_client.get.return_value = None
