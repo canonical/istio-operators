@@ -479,10 +479,8 @@ def test_remove_exceptions(harness, mocked_client, mocker):
         harness.charm.on.remove.emit()
 
 
-#
-# Test Service
-#
 def test_service(harness, subprocess, mocked_client, helpers, mocker, mocked_list):
+    """Test that the charm._gateway_address correctly returns gateway service IP/hostname."""
 
     mocker.patch('resources_handler.load_in_cluster_generic_resources')
     harness.set_leader(True)
