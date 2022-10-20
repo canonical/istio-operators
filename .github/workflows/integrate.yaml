@@ -23,7 +23,7 @@ jobs:
       with:
         fetch-depth: 0
     - name: Check libs
-      uses: canonical/charming-actions/check-libraries@2.0.0-rc
+      uses: canonical/charming-actions/check-libraries@2.1.1
       with:
         charm-path: ./charms/${{ matrix.charm }}
         credentials: "${{ secrets.charmcraft-credentials }}"
@@ -82,7 +82,8 @@ jobs:
 
     - name: Bootstrap
       run: |
-        sg microk8s -c 'juju bootstrap microk8s uk8s'
+        # Pinned until this bug is resolved: https://bugs.launchpad.net/juju/+bug/1992833
+        sg microk8s -c 'juju bootstrap microk8s uk8s --agent-version=2.9.34'
         sg microk8s -c 'juju add-model istio-system'
 
     - run: sg microk8s -c 'KUBECONFIG=/home/runner/.kube/config tox -e integration

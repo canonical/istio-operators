@@ -477,3 +477,48 @@ def test_remove_exceptions(harness, mocked_client, mocker):
     mocked_client.return_value.delete.side_effect = api_error
     with pytest.raises(ApiError):
         harness.charm.on.remove.emit()
+
+
+def test_service(harness, subprocess, mocked_client, helpers, mocker, mocked_list):
+    """Test that the charm._gateway_address correctly returns gateway service IP/hostname."""
+
+    mocker.patch('resources_handler.load_in_cluster_generic_resources')
+    harness.set_leader(True)
+    harness.begin()
+
+    # Test retrieval of gateway address set in Service
+    # verify None
+    harness.charm.lightkube_client.get.side_effect = [
+        codecs.from_dict(
+            {
+                'apiVersion': 'v1',
+                'kind': 'Service',
+                'status': {'loadBalancer': {'ingress': [{}]}},
+            }
+        )
+    ]
+    assert harness.charm._gateway_address is None
+
+    # verify IP address
+    harness.charm.lightkube_client.get.side_effect = [
+        codecs.from_dict(
+            {
+                'apiVersion': 'v1',
+                'kind': 'Service',
+                'status': {'loadBalancer': {'ingress': [{'ip': "127.0.0.1"}]}},
+            }
+        )
+    ]
+    assert harness.charm._gateway_address == "127.0.0.1"
+
+    # verify hostname
+    harness.charm.lightkube_client.get.side_effect = [
+        codecs.from_dict(
+            {
+                'apiVersion': 'v1',
+                'kind': 'Service',
+                'status': {'loadBalancer': {'ingress': [{'hostname': "test.com"}]}},
+            }
+        )
+    ]
+    assert harness.charm._gateway_address == "test.com"
