@@ -54,7 +54,7 @@ class Operator(CharmBase):
             event.defer()
             return
 
-        if self.model.config["ingress_service_type"] not in ("LoadBalancer", "ClusterIP"):
+        if self.model.config["gateway_service_type"] not in ("LoadBalancer", "ClusterIP"):
             self.model.unit.status = BlockedStatus(
                 "Ingress GW svc must be of type: LoadBalancer, ClusterIP"
             )
@@ -69,7 +69,7 @@ class Operator(CharmBase):
             namespace=self.model.name,
             pilot_host=pilot['service-name'],
             pilot_port=pilot['service-port'],
-            ingress_service_type=self.model.config["ingress_service_type"],
+            gateway_service_type=self.model.config["gateway_service_type"],
         )
 
         for obj in codecs.load_all_yaml(rendered):

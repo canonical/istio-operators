@@ -114,7 +114,7 @@ def test_removal(configured_harness, kind, mocked_client, mocker):
 
 
 def test_service_type_cluserip(
-    configured_harness_only_ingress, ingress_service_type, mocked_client
+    configured_harness_only_ingress, gateway_service_type, mocked_client
 ):
     # Reset the mock so that the calls list does not include any calls from other hooks
     mocked_client.reset_mock()
@@ -136,5 +136,5 @@ def test_service_type_cluserip(
     )
     workload_service = list(ingress_workloads)[0]
 
-    assert workload_service['spec'].get('type') == ingress_service_type
+    assert workload_service['spec'].get('type') == gateway_service_type
     assert configured_harness_only_ingress.charm.model.unit.status == ActiveStatus('')

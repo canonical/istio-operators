@@ -44,15 +44,15 @@ def configured_harness(harness, kind):
 
 
 @pytest.fixture(params=["LoadBalancer", "ClusterIP"])
-def ingress_service_type(request):
+def gateway_service_type(request):
     return request.param
 
 
 @pytest.fixture()
-def configured_harness_only_ingress(harness, ingress_service_type):
+def configured_harness_only_ingress(harness, gateway_service_type):
     harness.set_leader(True)
 
-    harness.update_config({'kind': 'ingress', 'ingress_service_type': ingress_service_type})
+    harness.update_config({'kind': 'ingress', 'gateway_service_type': gateway_service_type})
     rel_id = harness.add_relation("istio-pilot", "app")
 
     harness.add_relation_unit(rel_id, "app/0")
