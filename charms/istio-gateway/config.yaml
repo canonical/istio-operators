@@ -5,6 +5,7 @@ options:
     type: string
   ingress_service_type:
     default: 'LoadBalancer'
+    type: string
     description: |
       Type of service for the ingress gateway out of: 'ClusterIP' or 'LoadBalancer'. 
       Egress gateways are always set as ClusterIP
