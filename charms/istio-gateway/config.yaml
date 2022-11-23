@@ -3,3 +3,8 @@ options:
     default: ''
     description: Kind of Istio gateway. Must be set to one of `ingress`, `egress`
     type: string
+  ingress_service_type:
+    default: 'LoadBalancer'
+    description: |
+      Type of service for the ingress gateway out of: 'ClusterIP' or 'LoadBalancer'. 
+      Egress gateways are always set as ClusterIP

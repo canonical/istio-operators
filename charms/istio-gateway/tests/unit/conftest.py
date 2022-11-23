@@ -41,3 +41,28 @@ def configured_harness(harness, kind):
     harness.begin_with_initial_hooks()
 
     return harness
+
+
+@pytest.fixture(params=["LoadBalancer", "ClusterIP"])
+def ingress_service_type(request):
+    return request.param
+
+
+@pytest.fixture()
+def configured_harness_only_ingress(harness, ingress_service_type):
+    harness.set_leader(True)
+
+    harness.update_config({'kind': 'ingress', 'ingress_service_type': ingress_service_type})
+    rel_id = harness.add_relation("istio-pilot", "app")
+
+    harness.add_relation_unit(rel_id, "app/0")
+    data = {"service-name": "service-name", "service-port": '6666'}
+    harness.update_relation_data(
+        rel_id,
+        "app",
+        {"_supported_versions": "- v1", "data": yaml.dump(data)},
+    )
+
+    harness.begin_with_initial_hooks()
+
+    return harness
