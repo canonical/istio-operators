@@ -111,3 +111,30 @@ def test_removal(configured_harness, kind, mocked_client, mocker):
     mocked_client.return_value.delete.side_effect = api_error
     with pytest.raises(ApiError):
         configured_harness.charm.on.remove.emit()
+
+
+def test_service_type_cluserip(
+    configured_harness_only_ingress, gateway_service_type, mocked_client
+):
+    # Reset the mock so that the calls list does not include any calls from other hooks
+    mocked_client.reset_mock()
+
+    configured_harness_only_ingress.charm.on.start.emit()
+    actual_objects = []
+
+    # the apply method is called for every object in the manifest
+    for call in mocked_client.return_value.apply.call_args_list:
+        # Ensure the server side apply calls include the namespace kwarg
+        assert call.kwargs['namespace'] == 'None'
+        # The first (and only) argument to the apply method is the obj
+        # Convert the object to a dictionary and add it to the list
+        actual_objects.append(call.args[0].to_dict())
+
+    services = filter(lambda obj: obj.get('kind') == 'Service', actual_objects)
+    ingress_workloads = filter(
+        lambda obj: obj['metadata'].get('name') == "istio-ingressgateway-workload", services
+    )
+    workload_service = list(ingress_workloads)[0]
+
+    assert workload_service['spec'].get('type') == gateway_service_type
+    assert configured_harness_only_ingress.charm.model.unit.status == ActiveStatus('')
