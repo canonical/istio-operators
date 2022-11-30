@@ -1,0 +1,6 @@
+aiohttp<3.8
+asyncio<3.5
+beautifulsoup4<4.11
+PyYAML==6.0
+lightkube
+pytest-operator<1.0

@@ -281,11 +281,12 @@ def test_with_ingress_auth_relation(harness, subprocess, helpers, mocked_client,
                         'match': {
                             'context': 'GATEWAY',
                             'listener': {
+                                'portNumber': 8080,
                                 'filterChain': {
                                     'filter': {
                                         'name': 'envoy.filters.network.http_connection_manager'
                                     }
-                                }
+                                },
                             },
                         },
                         'patch': {
@@ -345,7 +346,7 @@ def test_with_ingress_auth_relation(harness, subprocess, helpers, mocked_client,
     assert isinstance(harness.charm.model.unit.status, ActiveStatus)
 
 
-def test_correct_data_in_gateway_relation(harness, mocker, mocked_client):
+def test_correct_data_in_gateway_info_relation(harness, mocker, mocked_client):
     harness.set_leader(True)
 
     create_global_resource(
@@ -361,17 +362,19 @@ def test_correct_data_in_gateway_relation(harness, mocker, mocked_client):
     )
     mocked_validate_gateway.return_value = True
 
-    rel_id = harness.add_relation("gateway", "app")
-    harness.add_relation_unit(rel_id, "app/0")
     harness.set_model_name("test-model")
     mocker.patch('resources_handler.load_in_cluster_generic_resources')
-    harness.begin_with_initial_hooks()
 
-    gateway_relations = harness.model.relations["gateway"]
-    istio_relation_data = gateway_relations[0].data[harness.model.app]
+    rel_id = harness.add_relation("gateway-info", "app")
+    harness.add_relation_unit(rel_id, "app/0")
+
+    harness.begin_with_initial_hooks()
+    model = harness.charm.framework.model
+    gateway_relations = model.get_relation("gateway-info", rel_id)
+    istio_relation_data = gateway_relations.data[harness.charm.app]
 
     assert istio_relation_data["gateway_name"] == harness.model.config["default-gateway"]
-    assert istio_relation_data["gateway_namespace"] == harness.model.name
+    assert istio_relation_data["gateway_namespace"] == model.name
 
 
 def test_removal(harness, subprocess, mocked_client, helpers, mocker):
@@ -474,3 +477,48 @@ def test_remove_exceptions(harness, mocked_client, mocker):
     mocked_client.return_value.delete.side_effect = api_error
     with pytest.raises(ApiError):
         harness.charm.on.remove.emit()
+
+
+def test_service(harness, subprocess, mocked_client, helpers, mocker, mocked_list):
+    """Test that the charm._gateway_address correctly returns gateway service IP/hostname."""
+
+    mocker.patch('resources_handler.load_in_cluster_generic_resources')
+    harness.set_leader(True)
+    harness.begin()
+
+    # Test retrieval of gateway address set in Service
+    # verify None
+    harness.charm.lightkube_client.get.side_effect = [
+        codecs.from_dict(
+            {
+                'apiVersion': 'v1',
+                'kind': 'Service',
+                'status': {'loadBalancer': {'ingress': [{}]}},
+            }
+        )
+    ]
+    assert harness.charm._gateway_address is None
+
+    # verify IP address
+    harness.charm.lightkube_client.get.side_effect = [
+        codecs.from_dict(
+            {
+                'apiVersion': 'v1',
+                'kind': 'Service',
+                'status': {'loadBalancer': {'ingress': [{'ip': "127.0.0.1"}]}},
+            }
+        )
+    ]
+    assert harness.charm._gateway_address == "127.0.0.1"
+
+    # verify hostname
+    harness.charm.lightkube_client.get.side_effect = [
+        codecs.from_dict(
+            {
+                'apiVersion': 'v1',
+                'kind': 'Service',
+                'status': {'loadBalancer': {'ingress': [{'hostname': "test.com"}]}},
+            }
+        )
+    ]
+    assert harness.charm._gateway_address == "test.com"

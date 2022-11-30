@@ -13,7 +13,11 @@ from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from serialized_data_interface import NoCompatibleVersions, NoVersionsListed, get_interfaces
 from resources_handler import ResourceHandler
-from istio_gateway_name_provider import GatewayProvider, DEFAULT_RELATION_NAME
+from istio_gateway_info_provider import GatewayProvider, RELATION_NAME
+
+
+GATEWAY_HTTP_PORT = 8080
+GATEWAY_HTTPS_PORT = 8443
 
 
 class Operator(CharmBase):
@@ -54,9 +58,11 @@ class Operator(CharmBase):
         for event in [self.on.config_changed, self.on["ingress"].relation_created]:
             self.framework.observe(event, self.handle_default_gateway)
 
-        self.framework.observe(
-            self.on[DEFAULT_RELATION_NAME].relation_changed, self.handle_default_gateway
-        )
+        # FIXME: Calling handle_gateway_relation on update_status ensures gateway information is
+        # sent eventually to the related units, this is temporal and we should find a way to
+        # ensure all event handlers are called when they are supposed to.
+        for event in [self.on[RELATION_NAME].relation_changed, self.on.update_status]:
+            self.framework.observe(event, self.handle_gateway_info_relation)
         self.framework.observe(self.on["istio-pilot"].relation_changed, self.send_info)
         self.framework.observe(self.on['ingress'].relation_changed, self.handle_ingress)
         self.framework.observe(self.on['ingress'].relation_broken, self.handle_ingress)
@@ -150,16 +156,18 @@ class Operator(CharmBase):
             ssl_key=self.model.config["ssl-key"] or None,
             model_name=self.model.name,
             app_name=self.app.name,
+            gateway_http_port=GATEWAY_HTTP_PORT,
+            gateway_https_port=GATEWAY_HTTPS_PORT,
         )
         self._resource_handler.apply_manifest(manifest)
 
         # Update the ingress resources as they rely on the default_gateway
         self.handle_ingress(event)
 
-        # check if gateway is created
-        self.handle_gateway_relation(event)
-
-    def handle_gateway_relation(self, event):
+    def handle_gateway_info_relation(self, event):
+        if not self.model.relations["gateway-info"]:
+            self.log.info("No gateway-info relation found")
+            return
         is_gateway_created = self._resource_handler.validate_resource_exist(
             resource_type=self._resource_handler.get_custom_resource_class_from_filename(
                 "gateway.yaml.j2"
@@ -284,11 +292,17 @@ class Operator(CharmBase):
             )
             return
 
+        if self.model.config["ssl-crt"] and self.model.config["ssl-key"]:
+            gateway_port = GATEWAY_HTTPS_PORT
+        else:
+            gateway_port = GATEWAY_HTTP_PORT
+
         t = self.env.get_template('auth_filter.yaml.j2')
         auth_filters = ''.join(
             t.render(
                 namespace=self.model.name,
                 app_name=self.app.name,
+                gateway_port=gateway_port,
                 **{
                     'request_headers': yaml.safe_dump(
                         [{'exact': h} for h in r.get('allowed-request-headers', [])],
@@ -324,7 +338,21 @@ class Operator(CharmBase):
         svcs = self.lightkube_client.get(
             Service, name="istio-ingressgateway-workload", namespace=self.model.name
         )
-        return svcs.status.loadBalancer.ingress[0].ip
+
+        # return gateway address: hostname or IP; None if not set
+        gateway_address = None
+        if (
+            hasattr(svcs.status.loadBalancer.ingress[0], 'hostname')
+            and svcs.status.loadBalancer.ingress[0].hostname is not None
+        ):
+            gateway_address = svcs.status.loadBalancer.ingress[0].hostname
+        elif (
+            hasattr(svcs.status.loadBalancer.ingress[0], 'ip')
+            and svcs.status.loadBalancer.ingress[0].ip is not None
+        ):
+            gateway_address = svcs.status.loadBalancer.ingress[0].ip
+
+        return gateway_address
 
 
 if __name__ == "__main__":
