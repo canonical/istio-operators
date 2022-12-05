@@ -318,4 +318,4 @@ spec:
       targetPort: 8443
   selector:
     istio: {{ kind }}gateway
-  type: {{ 'ClusterIP' if kind == 'egress' else 'LoadBalancer' }}
+  type: {{ 'ClusterIP' if kind == 'egress' else gateway_service_type }}

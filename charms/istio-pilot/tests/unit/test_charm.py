@@ -479,7 +479,7 @@ def test_remove_exceptions(harness, mocked_client, mocker):
         harness.charm.on.remove.emit()
 
 
-def test_service(harness, subprocess, mocked_client, helpers, mocker, mocked_list):
+def test_loadbalancer_service(harness, subprocess, mocked_client, helpers, mocker, mocked_list):
     """Test that the charm._gateway_address correctly returns gateway service IP/hostname."""
 
     mocker.patch('resources_handler.load_in_cluster_generic_resources')
@@ -494,6 +494,7 @@ def test_service(harness, subprocess, mocked_client, helpers, mocker, mocked_lis
                 'apiVersion': 'v1',
                 'kind': 'Service',
                 'status': {'loadBalancer': {'ingress': [{}]}},
+                'spec': {'type': 'LoadBalancer', 'clusterIP': '10.10.10.10'},
             }
         )
     ]
@@ -506,6 +507,7 @@ def test_service(harness, subprocess, mocked_client, helpers, mocker, mocked_lis
                 'apiVersion': 'v1',
                 'kind': 'Service',
                 'status': {'loadBalancer': {'ingress': [{'ip': "127.0.0.1"}]}},
+                'spec': {'type': 'LoadBalancer', 'clusterIP': '10.10.10.10'},
             }
         )
     ]
@@ -518,7 +520,29 @@ def test_service(harness, subprocess, mocked_client, helpers, mocker, mocked_lis
                 'apiVersion': 'v1',
                 'kind': 'Service',
                 'status': {'loadBalancer': {'ingress': [{'hostname': "test.com"}]}},
+                'spec': {'type': 'LoadBalancer', 'clusterIP': '10.10.10.10'},
             }
         )
     ]
     assert harness.charm._gateway_address == "test.com"
+
+
+def test_clusterip_service(harness, subprocess, mocked_client, helpers, mocker, mocked_list):
+    """Test that the charm._gateway_address correctly returns gateway service IP/hostname."""
+
+    mocker.patch('resources_handler.load_in_cluster_generic_resources')
+    harness.set_leader(True)
+    harness.begin()
+
+    # Test retrieval of gateway address set in Service
+    harness.charm.lightkube_client.get.side_effect = [
+        codecs.from_dict(
+            {
+                'apiVersion': 'v1',
+                'kind': 'Service',
+                'status': {'loadBalancer': {}},
+                'spec': {'type': 'ClusterIP', 'clusterIP': '10.10.10.10'},
+            }
+        )
+    ]
+    assert harness.charm._gateway_address == '10.10.10.10'
