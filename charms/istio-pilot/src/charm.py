@@ -341,7 +341,10 @@ class Operator(CharmBase):
 
         # return gateway address: hostname or IP; None if not set
         gateway_address = None
-        if (
+
+        if svcs.spec.type == "ClusterIP":
+            gateway_address = svcs.spec.clusterIP
+        elif (
             hasattr(svcs.status.loadBalancer.ingress[0], "hostname")
             and svcs.status.loadBalancer.ingress[0].hostname is not None
         ):
