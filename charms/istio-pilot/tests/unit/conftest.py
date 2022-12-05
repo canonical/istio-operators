@@ -1,9 +1,10 @@
 from unittest.mock import MagicMock
 
 import pytest
-from charm import Operator
 from lightkube.core.exceptions import ApiError
 from ops.testing import Harness
+
+from charm import Operator
 
 
 class Helpers:
@@ -27,7 +28,7 @@ class Helpers:
     def calls_contain_namespace(calls, namespace):
         for call in calls:
             # Ensure the namespace is included in the call
-            if call.kwargs['namespace'] != namespace:
+            if call.kwargs["namespace"] != namespace:
                 return False
         return True
 
@@ -78,7 +79,7 @@ def mocked_charm_client(mocker):
 def mocked_get(mocked_charm_client, mocker):
     mocked_resource_obj = mocker.MagicMock()
     mocked_metadata = mocker.MagicMock()
-    mocked_metadata.status = 'status'
+    mocked_metadata.status = "status"
     mocked_resource_obj.metadata = mocked_metadata
 
     mocked_charm_client.return_value.get.side_effect = mocked_resource_obj

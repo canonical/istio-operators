@@ -4,10 +4,10 @@
 
 """Resources handling library using Lightkube."""
 import logging
-from typing import Tuple, TextIO, Union, Iterable
+from typing import Iterable, TextIO, Tuple, Union
 
-from jinja2 import Environment, FileSystemLoader
 import lightkube  # noqa F401  # Needed for patching in test_resources_handler.py
+from jinja2 import Environment, FileSystemLoader
 from lightkube import Client, codecs
 from lightkube.core.exceptions import ApiError
 from lightkube.core.resource import Resource
@@ -32,7 +32,7 @@ class ResourceHandler:
         self.lightkube_client = Client(namespace=self.model_name, field_manager="lightkube")
         load_in_cluster_generic_resources(self.lightkube_client)
 
-        self.env = Environment(loader=FileSystemLoader('src'))
+        self.env = Environment(loader=FileSystemLoader("src"))
 
     def delete_resource(
         self, obj, namespace=None, ignore_not_found=False, ignore_unauthorized=False
@@ -110,13 +110,13 @@ class ResourceHandler:
         # the manifest files. We should improve how we do this
         # and make it more generic.
         context = {
-            'namespace': 'namespace',
-            'app_name': 'name',
-            'name': 'generic_resource',
-            'request_headers': 'request_headers',
-            'response_headers': 'response_headers',
-            'port': 'port',
-            'service': 'service',
+            "namespace": "namespace",
+            "app_name": "name",
+            "name": "generic_resource",
+            "request_headers": "request_headers",
+            "response_headers": "response_headers",
+            "port": "port",
+            "service": "service",
         }
         manifest = self.env.get_template(filename).render(context)
         ns_resource = codecs.load_all_yaml(

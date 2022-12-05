@@ -1,12 +1,12 @@
+import unittest.mock as mock
 from contextlib import nullcontext as does_not_raise
 from unittest.mock import MagicMock
 
 import pytest
-
-from lightkube.resources.core_v1 import Pod
-from lightkube.models.meta_v1 import ObjectMeta
 from lightkube import ApiError
-import unittest.mock as mock
+from lightkube.models.meta_v1 import ObjectMeta
+from lightkube.resources.core_v1 import Pod
+
 from resources_handler import (
     ResourceHandler,
     in_left_not_right,
@@ -14,7 +14,6 @@ from resources_handler import (
     resources_to_dict_of_resources,
     select_resources_by_name,
 )
-
 from tests.unit.conftest import DeleteError
 
 APP_NAME = "app-name"
@@ -96,7 +95,7 @@ PODS_TO_DELETE = [
 def test_delete_existing_resource(mocked_client):
     with mock.patch(
         "resources_handler.ResourceHandler.delete_resource"
-    ) as mock_delete, mock.patch('resources_handler.load_in_cluster_generic_resources'):
+    ) as mock_delete, mock.patch("resources_handler.load_in_cluster_generic_resources"):
         mock_list = mocked_client.return_value.list
         mock_list.return_value = PODS_TO_DELETE
         ResourceHandler(APP_NAME, MODEL_NAME).delete_existing_resources(

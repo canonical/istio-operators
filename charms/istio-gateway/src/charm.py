@@ -3,12 +3,12 @@
 import logging
 
 from jinja2 import Environment, FileSystemLoader
-from ops.charm import CharmBase
-from ops.main import main
-from ops.model import ActiveStatus, BlockedStatus, WaitingStatus, StatusBase
-from serialized_data_interface import NoCompatibleVersions, NoVersionsListed, get_interfaces
 from lightkube import Client, codecs
 from lightkube.core.exceptions import ApiError
+from ops.charm import CharmBase
+from ops.main import main
+from ops.model import ActiveStatus, BlockedStatus, StatusBase, WaitingStatus
+from serialized_data_interface import NoCompatibleVersions, NoVersionsListed, get_interfaces
 
 
 class Operator(CharmBase):
@@ -39,11 +39,11 @@ class Operator(CharmBase):
             self.model.unit.status = error.status
             return
 
-        if self.model.config['kind'] not in ('ingress', 'egress'):
-            self.model.unit.status = BlockedStatus('Config item `kind` must be set')
+        if self.model.config["kind"] not in ("ingress", "egress"):
+            self.model.unit.status = BlockedStatus("Config item `kind` must be set")
             return
 
-        if not self.model.relations['istio-pilot']:
+        if not self.model.relations["istio-pilot"]:
             self.model.unit.status = BlockedStatus("Waiting for istio-pilot relation")
             return
 
@@ -56,13 +56,13 @@ class Operator(CharmBase):
 
         pilot = list(pilot.get_data().values())[0]
 
-        env = Environment(loader=FileSystemLoader('src'))
-        template = env.get_template('manifest.yaml')
+        env = Environment(loader=FileSystemLoader("src"))
+        template = env.get_template("manifest.yaml")
         rendered = template.render(
-            kind=self.model.config['kind'],
+            kind=self.model.config["kind"],
             namespace=self.model.name,
-            pilot_host=pilot['service-name'],
-            pilot_port=pilot['service-port'],
+            pilot_host=pilot["service-name"],
+            pilot_port=pilot["service-port"],
         )
 
         for obj in codecs.load_all_yaml(rendered):
@@ -74,13 +74,13 @@ class Operator(CharmBase):
     def remove(self, event):
         """Remove charm."""
 
-        env = Environment(loader=FileSystemLoader('src'))
-        template = env.get_template('manifest.yaml')
+        env = Environment(loader=FileSystemLoader("src"))
+        template = env.get_template("manifest.yaml")
         rendered = template.render(
-            kind=self.model.config['kind'],
+            kind=self.model.config["kind"],
             namespace=self.model.name,
-            pilot_host='foo',
-            pilot_port='foo',
+            pilot_host="foo",
+            pilot_port="foo",
         )
 
         try:

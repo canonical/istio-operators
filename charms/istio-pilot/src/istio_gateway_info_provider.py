@@ -1,4 +1,5 @@
 import logging
+
 from ops.framework import Object
 
 logger = logging.getLogger(__name__)
