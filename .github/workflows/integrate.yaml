@@ -52,7 +52,7 @@ jobs:
 
   integration:
     name: Integration Test
-    runs-on: ubuntu-latest
+    runs-on: F
 
     steps:
     - name: Check out repo
