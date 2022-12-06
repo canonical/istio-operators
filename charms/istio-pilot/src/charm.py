@@ -4,6 +4,9 @@ import logging
 import subprocess
 
 import yaml
+from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
+from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
+from istio_gateway_info_provider import RELATION_NAME, GatewayProvider
 from jinja2 import Environment, FileSystemLoader
 from lightkube import Client
 from lightkube.core.exceptions import ApiError
@@ -11,13 +14,13 @@ from lightkube.resources.core_v1 import Service
 from ops.charm import CharmBase, RelationBrokenEvent
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
+from resources_handler import ResourceHandler
 from serialized_data_interface import NoCompatibleVersions, NoVersionsListed, get_interfaces
 
-from istio_gateway_info_provider import RELATION_NAME, GatewayProvider
-from resources_handler import ResourceHandler
 
 GATEWAY_HTTP_PORT = 8080
 GATEWAY_HTTPS_PORT = 8443
+METRICS_PORT = 15014
 
 
 class Operator(CharmBase):
@@ -39,12 +42,20 @@ class Operator(CharmBase):
         else:
             self.model.unit.status = ActiveStatus()
 
+        self.lightkube_client = Client(namespace=self.model.name, field_manager="lightkube")
+
+        if self._istiod_svc:
+            self._scraping = MetricsEndpointProvider(
+                self,
+                relation_name="metrics-endpoint",
+                jobs=[{"static_configs": [{"targets": [f"{self._istiod_svc}:{METRICS_PORT}"]}]}],
+            )
+        self.grafana_dashboards = GrafanaDashboardProvider(self, relation_name="grafana-dashboard")
         self.log = logging.getLogger(__name__)
 
         self.env = Environment(loader=FileSystemLoader("src"))
         self._resource_handler = ResourceHandler(self.app.name, self.model.name)
 
-        self.lightkube_client = Client(namespace=self.model.name, field_manager="lightkube")
         self._resource_files = [
             "gateway.yaml.j2",
             "auth_filter.yaml.j2",
@@ -326,6 +337,20 @@ class Operator(CharmBase):
             namespace=self.model.name,
         )
         self._resource_handler.apply_manifest(auth_filters, namespace=self.model.name)
+
+    @property
+    def _istiod_svc(self):
+        try:
+            exporter_service = self.lightkube_client.get(
+                res=Service, name="istiod", namespace=self.model.name
+            )
+            exporter_ip = exporter_service.spec.clusterIP
+        except ApiError as e:
+            if e.status.code == 404:
+                return None
+            raise
+        else:
+            return exporter_ip
 
     @property
     def _gateway_address(self):
