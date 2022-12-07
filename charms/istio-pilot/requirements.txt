@@ -28,7 +28,7 @@ idna==2.10
     #   rfc3986
 jinja2==3.1.2
     # via -r ./charms/istio-pilot/requirements.in
-jsonschema==3.2.0
+jsonschema==4.17.3
     # via serialized-data-interface
 lightkube==0.11.0
     # via -r ./charms/istio-pilot/requirements.in
