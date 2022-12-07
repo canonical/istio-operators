@@ -1,0 +1,8 @@
+jinja2
+ops
+requests
+serialized-data-interface
+lightkube
+lightkube-models<1.23
+# We're trying to use a deprecated API and it needs to be fixed before KF 1.7 (because 1.7 must support k8s 1.25)
+oci-image

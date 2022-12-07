@@ -1,7 +1,8 @@
 import pytest
 import yaml
-from charm import Operator
 from ops.testing import Harness
+
+from charm import Operator
 
 
 @pytest.fixture
@@ -27,11 +28,11 @@ def kind(request):
 def configured_harness(harness, kind):
     harness.set_leader(True)
 
-    harness.update_config({'kind': kind})
+    harness.update_config({"kind": kind})
     rel_id = harness.add_relation("istio-pilot", "app")
 
     harness.add_relation_unit(rel_id, "app/0")
-    data = {"service-name": "service-name", "service-port": '6666'}
+    data = {"service-name": "service-name", "service-port": "6666"}
     harness.update_relation_data(
         rel_id,
         "app",
@@ -52,11 +53,11 @@ def gateway_service_type(request):
 def configured_harness_only_ingress(harness, gateway_service_type):
     harness.set_leader(True)
 
-    harness.update_config({'kind': 'ingress', 'gateway_service_type': gateway_service_type})
+    harness.update_config({"kind": "ingress", "gateway_service_type": gateway_service_type})
     rel_id = harness.add_relation("istio-pilot", "app")
 
     harness.add_relation_unit(rel_id, "app/0")
-    data = {"service-name": "service-name", "service-port": '6666'}
+    data = {"service-name": "service-name", "service-port": "6666"}
     harness.update_relation_data(
         rel_id,
         "app",

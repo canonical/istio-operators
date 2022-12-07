@@ -1,0 +1,6 @@
+aiohttp
+asyncio
+beautifulsoup4
+lightkube
+pytest-operator
+PyYAML

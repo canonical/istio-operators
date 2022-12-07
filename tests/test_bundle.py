@@ -1,16 +1,16 @@
 import json
 import logging
 from pathlib import Path
-import requests
 from time import sleep
-import yaml
 
 import aiohttp
-from bs4 import BeautifulSoup as BS
 import lightkube
+import pytest
+import requests
+import yaml
+from bs4 import BeautifulSoup
 from lightkube import codecs
 from lightkube.generic_resource import load_in_cluster_generic_resources
-import pytest
 from pytest_operator.plugin import OpsTest
 
 log = logging.getLogger(__name__)
@@ -29,9 +29,9 @@ PASSWORD = "user123"
 async def test_kubectl_access(ops_test: OpsTest):
     """Fails if kubectl not available or if no cluster context exists"""
     _, stdout, _ = await ops_test.run(
-        'kubectl',
-        'config',
-        'view',
+        "kubectl",
+        "config",
+        "view",
         check=True,
         fail_msg="Failed to execute kubectl - is kubectl installed?",
     )
@@ -61,12 +61,12 @@ async def test_deploy_istio_charms(ops_test: OpsTest):
     istio_charms = await ops_test.build_charms(f"{charms_path}-gateway", f"{charms_path}-pilot")
 
     await ops_test.model.deploy(
-        istio_charms['istio-pilot'], application_name=ISTIO_PILOT, trust=True
+        istio_charms["istio-pilot"], application_name=ISTIO_PILOT, trust=True
     )
     await ops_test.model.deploy(
-        istio_charms['istio-gateway'],
+        istio_charms["istio-gateway"],
         application_name=ISTIO_GATEWAY_APP_NAME,
-        config={'kind': 'ingress'},
+        config={"kind": "ingress"},
         trust=True,
     )
 
@@ -83,67 +83,67 @@ async def test_deploy_istio_charms(ops_test: OpsTest):
 
 @pytest.mark.abort_on_fail
 async def test_deploy_bookinfo_example(ops_test: OpsTest):
-    root_url = 'https://raw.githubusercontent.com/istio/istio/release-1.11/samples/bookinfo'
-    bookinfo_namespace = f'{ops_test.model_name}-bookinfo'
+    root_url = "https://raw.githubusercontent.com/istio/istio/release-1.11/samples/bookinfo"
+    bookinfo_namespace = f"{ops_test.model_name}-bookinfo"
 
     await ops_test.run(
-        'kubectl',
-        'create',
-        'namespace',
+        "kubectl",
+        "create",
+        "namespace",
         bookinfo_namespace,
     )
 
     await ops_test.run(
-        'kubectl',
-        'label',
-        'namespace',
+        "kubectl",
+        "label",
+        "namespace",
         bookinfo_namespace,
-        'istio-injection=enabled',
-        '--overwrite=true',
+        "istio-injection=enabled",
+        "--overwrite=true",
         check=True,
     )
     await ops_test.run(
-        'kubectl',
-        'apply',
-        '-f',
-        f'{root_url}/platform/kube/bookinfo.yaml',
-        '-f',
-        f'{root_url}/networking/bookinfo-gateway.yaml',
+        "kubectl",
+        "apply",
+        "-f",
+        f"{root_url}/platform/kube/bookinfo.yaml",
+        "-f",
+        f"{root_url}/networking/bookinfo-gateway.yaml",
         "--namespace",
         bookinfo_namespace,
         check=True,
     )
 
     await ops_test.run(
-        'kubectl',
-        'wait',
-        '--for=condition=available',
-        'deployment',
-        '--all',
-        '--all-namespaces',
-        '--timeout=5m',
+        "kubectl",
+        "wait",
+        "--for=condition=available",
+        "deployment",
+        "--all",
+        "--all-namespaces",
+        "--timeout=5m",
         check=True,
     )
 
     # Wait for the pods as well, since the Deployment can be considered
     # "complete" while the pods are still starting.
     await ops_test.run(
-        'kubectl',
-        'wait',
-        '--for=condition=ready',
-        'pod',
-        '--all',
-        f'-n={bookinfo_namespace}',
-        '--timeout=5m',
+        "kubectl",
+        "wait",
+        "--for=condition=ready",
+        "pod",
+        "--all",
+        f"-n={bookinfo_namespace}",
+        "--timeout=5m",
         check=True,
     )
 
     gateway_ip = await get_gateway_ip(ops_test)
     async with aiohttp.ClientSession(raise_for_status=True) as client:
-        results = await client.get(f'http://{gateway_ip}/productpage')
-        soup = BS(await results.text())
+        results = await client.get(f"http://{gateway_ip}/productpage")
+        soup = BeautifulSoup(await results.text())
 
-    assert soup.title.string == 'Simple Bookstore App'
+    assert soup.title.string == "Simple Bookstore App"
 
 
 async def test_ingress_auth(ops_test: OpsTest):
@@ -210,22 +210,28 @@ async def test_ingress_auth(ops_test: OpsTest):
     # Wait for the pods from our secondary workload, just in case.  This should be faster than
     # the charms but maybe not.
     await ops_test.run(
-        'kubectl',
-        'wait',
-        '--for=condition=ready',
-        'pod',
-        '--all',
-        f'-n={namespace}',
-        '--timeout=5m',
+        "kubectl",
+        "wait",
+        "--for=condition=ready",
+        "pod",
+        "--all",
+        f"-n={namespace}",
+        "--timeout=5m",
         check=True,
     )
 
     # Test that traffic over the restricted port (8080, the regular ingress) is redirected to dex
-    assert_url_get(f'http://{regular_ingress_gateway_ip}/productpage', allowed_statuses=[302], disallowed_statuses=[200])
+    assert_url_get(
+        f"http://{regular_ingress_gateway_ip}/productpage",
+        allowed_statuses=[302],
+        disallowed_statuses=[200],
+    )
 
     # Test that traffic over the secondary port (8081) is not redirected to dex
     secondary_gateway_ip = await get_gateway_ip(ops_test, f"{test_workload_name}-loadbalancer")
-    assert_url_get(f'http://{secondary_gateway_ip}/test', allowed_statuses=[200], disallowed_statuses=[302])
+    assert_url_get(
+        f"http://{secondary_gateway_ip}/test", allowed_statuses=[200], disallowed_statuses=[302]
+    )
 
 
 def deploy_workload_with_gateway(workload_name: str, gateway_port: int, namespace: str):
@@ -249,17 +255,17 @@ def deploy_workload_with_gateway(workload_name: str, gateway_port: int, namespac
 # TODO: Change this to use lightkube
 async def get_gateway_ip(ops_test: OpsTest, service_name: str = "istio-ingressgateway-workload"):
     gateway_json = await ops_test.run(
-        'kubectl',
-        'get',
-        f'services/{service_name}',
-        '-n',
+        "kubectl",
+        "get",
+        f"services/{service_name}",
+        "-n",
         ops_test.model_name,
-        '-ojson',
+        "-ojson",
         check=True,
     )
 
     gateway_obj = json.loads(gateway_json[1])
-    return gateway_obj['status']['loadBalancer']['ingress'][0]['ip']
+    return gateway_obj["status"]["loadBalancer"]["ingress"][0]["ip"]
 
 
 def assert_url_get(url, allowed_statuses: list, disallowed_statuses: list):
@@ -270,7 +276,8 @@ def assert_url_get(url, allowed_statuses: list, disallowed_statuses: list):
     i = 0
     max_attempts = 20
     while i < max_attempts:
-        # Test that traffic over the restricted port (8080, the regular ingress) is redirected to dex
+        # Test that traffic over the restricted port (8080, the regular ingress)
+        # is redirected to dex
         r = requests.get(url, allow_redirects=False)
         if r.status_code in allowed_statuses:
             return

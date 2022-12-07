@@ -1,12 +1,12 @@
 import pytest
 import yaml
-from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from lightkube.core.exceptions import ApiError
+from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 
 
 def test_events(configured_harness, mocker):
-    start = mocker.patch('charm.Operator.start')
-    remove = mocker.patch('charm.Operator.remove')
+    start = mocker.patch("charm.Operator.start")
+    remove = mocker.patch("charm.Operator.remove")
 
     configured_harness.charm.on.start.emit()
     start.assert_called_once()
@@ -32,21 +32,21 @@ def test_events(configured_harness, mocker):
 
 def test_install_not_leader(harness):
     harness.begin_with_initial_hooks()
-    assert harness.charm.model.unit.status == WaitingStatus('Waiting for leadership')
+    assert harness.charm.model.unit.status == WaitingStatus("Waiting for leadership")
 
 
 def test_install_no_kind(harness):
     harness.set_leader(True)
     harness.begin_with_initial_hooks()
-    assert harness.charm.model.unit.status == BlockedStatus('Config item `kind` must be set')
+    assert harness.charm.model.unit.status == BlockedStatus("Config item `kind` must be set")
 
 
 def test_install_no_rel(harness):
     harness.set_leader(True)
-    harness.update_config({'kind': 'ingress'})
+    harness.update_config({"kind": "ingress"})
     harness.begin_with_initial_hooks()
 
-    assert harness.charm.model.unit.status == BlockedStatus('Waiting for istio-pilot relation')
+    assert harness.charm.model.unit.status == BlockedStatus("Waiting for istio-pilot relation")
 
 
 def test_start_apply(configured_harness, kind, mocked_client):
@@ -55,18 +55,18 @@ def test_start_apply(configured_harness, kind, mocked_client):
 
     configured_harness.charm.on.start.emit()
     actual_objects = []
-    expected_objects = list(yaml.safe_load_all(open(f'tests/unit/data/{kind}-example.yaml')))
+    expected_objects = list(yaml.safe_load_all(open(f"tests/unit/data/{kind}-example.yaml")))
 
     # the apply method is called for every object in the manifest
     for call in mocked_client.return_value.apply.call_args_list:
         # Ensure the server side apply calls include the namespace kwarg
-        assert call.kwargs['namespace'] == 'None'
+        assert call.kwargs["namespace"] == "None"
         # The first (and only) argument to the apply method is the obj
         # Convert the object to a dictionary and add it to the list
         actual_objects.append(call.args[0].to_dict())
 
     assert expected_objects == actual_objects
-    assert configured_harness.charm.model.unit.status == ActiveStatus('')
+    assert configured_harness.charm.model.unit.status == ActiveStatus("")
 
 
 def test_removal(configured_harness, kind, mocked_client, mocker):
@@ -75,18 +75,18 @@ def test_removal(configured_harness, kind, mocked_client, mocker):
 
     # Ensure the objects that get deleted are the objects defined in the example yaml files
     actual_kind_name_list = []
-    expected_objects = list(yaml.safe_load_all(open(f'tests/unit/data/{kind}-example.yaml')))
+    expected_objects = list(yaml.safe_load_all(open(f"tests/unit/data/{kind}-example.yaml")))
     expected_kind_name_list = []
     for obj in expected_objects:
-        kind_name = {'kind': obj['kind'], 'name': obj['metadata']['name']}
+        kind_name = {"kind": obj["kind"], "name": obj["metadata"]["name"]}
         expected_kind_name_list.append(kind_name)
 
     for call in mocked_client.return_value.delete.call_args_list:
         # Ensure the delete calls include the namespace kwarg ('None' in the example yaml)
-        assert call.kwargs['namespace'] == 'None'
+        assert call.kwargs["namespace"] == "None"
         # The first argument is the resource class
         # The second argument is the object name
-        kind_name = {'kind': call.args[0].__name__, 'name': call.args[1]}
+        kind_name = {"kind": call.args[0].__name__, "name": call.args[1]}
         actual_kind_name_list.append(kind_name)
 
     assert expected_kind_name_list == actual_kind_name_list
@@ -125,16 +125,16 @@ def test_service_type_cluserip(
     # the apply method is called for every object in the manifest
     for call in mocked_client.return_value.apply.call_args_list:
         # Ensure the server side apply calls include the namespace kwarg
-        assert call.kwargs['namespace'] == 'None'
+        assert call.kwargs["namespace"] == "None"
         # The first (and only) argument to the apply method is the obj
         # Convert the object to a dictionary and add it to the list
         actual_objects.append(call.args[0].to_dict())
 
-    services = filter(lambda obj: obj.get('kind') == 'Service', actual_objects)
+    services = filter(lambda obj: obj.get("kind") == "Service", actual_objects)
     ingress_workloads = filter(
-        lambda obj: obj['metadata'].get('name') == "istio-ingressgateway-workload", services
+        lambda obj: obj["metadata"].get("name") == "istio-ingressgateway-workload", services
     )
     workload_service = list(ingress_workloads)[0]
 
-    assert workload_service['spec'].get('type') == gateway_service_type
-    assert configured_harness_only_ingress.charm.model.unit.status == ActiveStatus('')
+    assert workload_service["spec"].get("type") == gateway_service_type
+    assert configured_harness_only_ingress.charm.model.unit.status == ActiveStatus("")
