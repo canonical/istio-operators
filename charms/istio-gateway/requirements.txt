@@ -46,7 +46,7 @@ ops==1.5.4
     #   serialized-data-interface
 pyrsistent==0.19.2
     # via jsonschema
-pyyaml==5.4
+pyyaml==5.4.1
     # via
     #   lightkube
     #   ops
