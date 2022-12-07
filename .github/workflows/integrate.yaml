@@ -129,3 +129,31 @@ jobs:
       with:
         name: test-run-artifacts
         path: tmp
+
+  integration-observability:
+    name: Observability Integration Test
+    runs-on: ubuntu-20.04
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v2
+
+      - name: Setup operator environment
+        uses: charmed-kubernetes/actions-operator@main
+        with:
+          provider: microk8s
+          channel: 1.22/stable
+          # Pinned to 2.9.34 due to https://bugs.launchpad.net/juju/+bug/1992833
+          # This should be fixed on release of juju 2.9.36 + libjuju 3.0.3
+          bootstrap-options: --agent-version="2.9.34"
+      - run: sg microk8s -c "microk8s enable metallb:'10.64.140.43-10.64.140.49,192.168.0.105-192.168.0.111'"
+      - run: juju add-model cos-test
+
+      - name: Run observability integration tests
+
+        run: tox -vve cos-integration -- --model cos-test --destructive-mode
+        env:
+          KUBECONFIG: /home/runner/.kube/config
+
+      - run: kubectl get pod/prometheus-k8s-0 -n knative-test -o=jsonpath='{.status}'
+        if: failure()
