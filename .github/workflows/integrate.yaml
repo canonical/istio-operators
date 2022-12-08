@@ -11,7 +11,7 @@ jobs:
 
   lib-check:
     name: Check libraries
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     strategy:
       matrix:
         charm:
@@ -30,7 +30,7 @@ jobs:
         github-token: "${{ secrets.GITHUB_TOKEN }}"
   lint:
     name: Lint Code
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     strategy:
       matrix:
         charm: [pilot, gateway]
@@ -41,7 +41,7 @@ jobs:
 
   unit:
     name: Unit Test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     strategy:
       matrix:
         charm: [pilot, gateway]
