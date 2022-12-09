@@ -8,7 +8,7 @@ anyio==3.6.2
     # via httpcore
 attrs==22.1.0
     # via jsonschema
-certifi==2022.9.24
+certifi==2022.12.7
     # via
     #   httpcore
     #   httpx
@@ -27,22 +27,22 @@ idna==2.10
     #   requests
     #   rfc3986
 jinja2==3.1.2
-    # via -r ./charms/istio-gateway/requirements.in
-jsonschema==3.2.0
+    # via -r requirements.in
+jsonschema==3.2
     # via serialized-data-interface
 lightkube==0.11.0
-    # via -r ./charms/istio-gateway/requirements.in
+    # via -r requirements.in
 lightkube-models==1.22.0.4
     # via
-    #   -r ./charms/istio-gateway/requirements.in
+    #   -r requirements.in
     #   lightkube
 markupsafe==2.1.1
     # via jinja2
 oci-image==1.0.0
-    # via -r ./charms/istio-gateway/requirements.in
+    # via -r requirements.in
 ops==1.5.4
     # via
-    #   -r ./charms/istio-gateway/requirements.in
+    #   -r requirements.in
     #   serialized-data-interface
 pyrsistent==0.19.2
     # via jsonschema
@@ -51,14 +51,14 @@ pyyaml==5.4
     #   lightkube
     #   ops
     #   serialized-data-interface
-requests==2.25.0
+requests==2.25
     # via
-    #   -r ./charms/istio-gateway/requirements.in
+    #   -r requirements.in
     #   serialized-data-interface
 rfc3986[idna2008]==1.5.0
     # via httpx
 serialized-data-interface==0.4.0
-    # via -r ./charms/istio-gateway/requirements.in
+    # via -r requirements.in
 six==1.16.0
     # via jsonschema
 sniffio==1.3.0
