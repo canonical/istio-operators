@@ -38,7 +38,7 @@ cffi==1.15.1
     # via
     #   cryptography
     #   pynacl
-charset-normalizer==2.1.1
+charset-normalizer==3.0.1
     # via
     #   aiohttp
     #   requests
