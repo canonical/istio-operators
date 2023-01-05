@@ -12,6 +12,8 @@ from pytest_operator.plugin import OpsTest
 
 log = logging.getLogger(__name__)
 
+ISTIO_PILOT='istio-pilot'
+ISTIO_INGRESSGATEWAY='istio-ingressgateway'
 
 @pytest.mark.abort_on_fail
 async def test_deploy_istio_charms(ops_test: OpsTest):
@@ -24,13 +26,13 @@ async def test_deploy_istio_charms(ops_test: OpsTest):
     )
     await ops_test.model.deploy(
         istio_charms['istio-gateway'],
-        application_name=ISTIO_GATEWAY_APP_NAME,
+        application_name=ISTIO_INGRESSGATEWAY,
         config={'kind': 'ingress'},
         trust=True,
     )
 
     await ops_test.model.add_relation(
-        f"{ISTIO_PILOT}:istio-pilot", f"{ISTIO_GATEWAY_APP_NAME}:istio-pilot"
+        f"{ISTIO_PILOT}:istio-pilot", f"{ISTIO_INGRESSGATEWAY}:istio-pilot"
     )
 
     await ops_test.model.wait_for_idle(
@@ -45,13 +47,12 @@ async def test_prometheus_grafana_integration_istio_pilot(ops_test: OpsTest):
     prometheus = "prometheus-k8s"
     prometheus_scrape = "prometheus-scrape-config-k8s"
     scrape_config = {"scrape_interval": "30s"}
-    APP_NAME = 'istio-pilot'
 
     # Deploy and relate prometheus
     await ops_test.model.deploy(prometheus, channel="latest/stable", trust=True)
     await ops_test.model.deploy(prometheus_scrape, channel="latest/stable", config=scrape_config)
 
-    await ops_test.model.add_relation(APP_NAME, prometheus_scrape)
+    await ops_test.model.add_relation(ISTIO_PILOT, prometheus_scrape)
     await ops_test.model.add_relation(
         f"{prometheus}:metrics-endpoint", f"{prometheus_scrape}:metrics-endpoint"
     )
@@ -69,7 +70,7 @@ async def test_prometheus_grafana_integration_istio_pilot(ops_test: OpsTest):
         with attempt:
             r = requests.get(
                 f"http://{prometheus_unit_ip}:9090/api/v1/query?"
-                f'query=up{{juju_application="{APP_NAME}"}}'
+                f'query=up{{juju_application="{ISTIO_PILOT}"}}'
             )
             response = json.loads(r.content.decode("utf-8"))
             response_status = response["status"]
@@ -77,7 +78,7 @@ async def test_prometheus_grafana_integration_istio_pilot(ops_test: OpsTest):
             assert response_status == "success"
 
             response_metric = response["data"]["result"][0]["metric"]
-            assert response_metric["juju_application"] == APP_NAME
+            assert response_metric["juju_application"] == ISTIO_PILOT
             assert response_metric["juju_model"] == ops_test.model_name
 
 
