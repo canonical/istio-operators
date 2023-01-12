@@ -4,9 +4,8 @@ import logging
 import subprocess
 
 import yaml
-from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
-from istio_gateway_info_provider import RELATION_NAME, GatewayProvider
+from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from jinja2 import Environment, FileSystemLoader
 from lightkube import Client
 from lightkube.core.exceptions import ApiError
@@ -14,9 +13,10 @@ from lightkube.resources.core_v1 import Service
 from ops.charm import CharmBase, RelationBrokenEvent
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
-from resources_handler import ResourceHandler
 from serialized_data_interface import NoCompatibleVersions, NoVersionsListed, get_interfaces
 
+from istio_gateway_info_provider import RELATION_NAME, GatewayProvider
+from resources_handler import ResourceHandler
 
 GATEWAY_HTTP_PORT = 8080
 GATEWAY_HTTPS_PORT = 8443
