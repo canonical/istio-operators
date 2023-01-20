@@ -3,5 +3,5 @@ lightkube
 oci-image
 ops
 requests
-serialized-data-interface<0.4
+serialized-data-interface<0.5
 # Needs to be pinned else unit test failing 
