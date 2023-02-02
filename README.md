@@ -10,7 +10,7 @@ For more details of what is possible with Istio, see https://istio.io/
 This Juju charm bundle incorporates both
 
  - The [Istio pilot charm](https://charmhub.io/istio-pilot)
- - The [Istio ingressgateway charm](https://charmhub.io/istio-ingressgateway)
+ - The [Istio gateway charm](https://charmhub.io/istio-gateway)
 
 ## Example Deployment
 
