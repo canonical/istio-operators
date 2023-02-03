@@ -60,7 +60,8 @@ jobs:
 
     - uses: balchua/microk8s-actions@v0.2.2
       with:
-        channel: 'latest/stable'
+        # Pin microk8s 1.24 as istio 1.11 is not compatible with greater versions
+        channel: '1.24/stable'
         addons: '["dns", "storage", "rbac", "metallb:10.64.140.43-10.64.140.49"]'
 
     - name: Install dependencies
