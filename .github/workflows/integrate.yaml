@@ -81,7 +81,7 @@ jobs:
 
     - name: Bootstrap
       run: |
-        sg microk8s -c 'juju bootstrap microk8s uk8s'
+        sg microk8s -c 'juju bootstrap microk8s uk8s --agent-version=2.9.34'
         sg microk8s -c 'juju add-model istio-system'
 
     - run: sg microk8s -c 'KUBECONFIG=/home/runner/.kube/config tox -e integration
