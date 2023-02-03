@@ -23,7 +23,7 @@ chardet==3.0.4
     # via
     #   -r requirements.txt
     #   requests
-coverage==7.0.5
+coverage==7.1.0
     # via -r requirements-unit.in
 exceptiongroup==1.1.0
     # via pytest
