@@ -11,7 +11,7 @@ jobs:
 
   lib-check:
     name: Check libraries
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     strategy:
       matrix:
         charm:
@@ -30,7 +30,7 @@ jobs:
         github-token: "${{ secrets.GITHUB_TOKEN }}"
   lint:
     name: Lint Code
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     strategy:
       matrix:
         charm: [pilot, gateway]
@@ -41,7 +41,7 @@ jobs:
 
   unit:
     name: Unit Test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     strategy:
       matrix:
         charm: [pilot, gateway]
@@ -52,7 +52,7 @@ jobs:
 
   integration:
     name: Integration Test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
 
     steps:
     - name: Check out repo
@@ -60,7 +60,8 @@ jobs:
 
     - uses: balchua/microk8s-actions@v0.2.2
       with:
-        channel: 'latest/stable'
+        # Pin microk8s 1.24 as istio 1.11 is not compatible with greater versions
+        channel: '1.24/stable'
         addons: '["dns", "storage", "rbac", "metallb:10.64.140.43-10.64.140.49"]'
 
     - name: Install dependencies
@@ -81,7 +82,7 @@ jobs:
 
     - name: Bootstrap
       run: |
-        sg microk8s -c 'juju bootstrap microk8s uk8s'
+        sg microk8s -c 'juju bootstrap microk8s uk8s --agent-version=2.9.34'
         sg microk8s -c 'juju add-model istio-system'
 
     - run: sg microk8s -c 'KUBECONFIG=/home/runner/.kube/config tox -e integration
