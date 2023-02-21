@@ -604,24 +604,3 @@ def test_get_gateway_address_from_svc(mock_service_fixture, gateway_address, har
     mock_service = request.getfixturevalue(mock_service_fixture)
 
     assert _get_gateway_address_from_svc(svc=mock_service) is gateway_address
-
-
-def test_clusterip_service(harness, subprocess, mocked_client, helpers, mocker, mocked_list):
-    """Test that the charm._gateway_address correctly returns gateway service IP/hostname."""
-
-    mocker.patch("resources_handler.load_in_cluster_generic_resources")
-    harness.set_leader(True)
-    harness.begin()
-
-    # Test retrieval of gateway address set in Service
-    harness.charm.lightkube_client.get.side_effect = [
-        codecs.from_dict(
-            {
-                "apiVersion": "v1",
-                "kind": "Service",
-                "status": {"loadBalancer": {}},
-                "spec": {"type": "ClusterIP", "clusterIP": "10.10.10.10"},
-            }
-        )
-    ]
-    assert harness.charm._gateway_address == "10.10.10.10"
