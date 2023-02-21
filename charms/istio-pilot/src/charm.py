@@ -370,7 +370,8 @@ class Operator(CharmBase):
         # FIXME: service name is hardcoded and depends on the istio gateway application name being
         #  `istio-ingressgateway`.  This is very fragile
         # TODO: extract this from charm code
-        # TODO: What happens if this service does not exist?
+        # TODO: What happens if this service does not exist?  We should check on that and then add
+        #  tests to confirm this works
         svc = self.lightkube_client.get(
             Service, name=GATEWAY_WORKLOAD_SERVICE_NAME, namespace=self.model.name
         )
