@@ -595,6 +595,8 @@ def test_get_gateway_service():
     "mock_service_fixture, gateway_address",
     [
         # Pass fixtures by their names
+        ("mock_nodeport_service", None),
+        ("mock_clusterip_service", "10.10.10.10"),
         ("mock_loadbalancer_hostname_service", "test.com"),
         ("mock_loadbalancer_ip_service", "127.0.0.1"),
         ("mock_loadbalancer_hostname_service_not_ready", None),
@@ -606,25 +608,6 @@ def test_get_gateway_address_from_svc(mock_service_fixture, gateway_address, har
     mock_service = request.getfixturevalue(mock_service_fixture)
 
     assert _get_gateway_address_from_svc(svc=mock_service) is gateway_address
-
-
-def test_gateway_address_for_nodeport(harness, subprocess, mocked_client, mocker):
-    """Test that the charm._gateway_address correctly returns None for a nodeport service."""
-    mocker.patch("resources_handler.load_in_cluster_generic_resources")
-    harness.set_leader(True)
-    harness.begin()
-
-    harness.charm.lightkube_client.get.side_effect = [
-        codecs.from_dict(
-            {
-                "apiVersion": "v1",
-                "kind": "Service",
-                "status": {"loadBalancer": {}},
-                "spec": {"type": "NodePort", "clusterIP": "10.10.10.10"},
-            }
-        )
-    ]
-    assert harness.charm._gateway_address == None
 
 
 def test_clusterip_service(harness, subprocess, mocked_client, helpers, mocker, mocked_list):
