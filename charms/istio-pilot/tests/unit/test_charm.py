@@ -6,6 +6,7 @@ from lightkube import codecs
 from lightkube.core.exceptions import ApiError
 from lightkube.generic_resource import create_global_resource
 from ops.model import ActiveStatus, WaitingStatus
+from charm import _get_gateway_address_from_svc
 
 
 @pytest.fixture(autouse=True)
@@ -577,7 +578,7 @@ def mock_loadbalancer_hostname_service_not_ready():
         ("mock_loadbalancer_ip_service_not_ready", False),
     ]
 )
-def test_is_gateway_service_up_for_nodeport(mock_service_fixture, is_gateway_up, harness, request):
+def test_is_gateway_service_up(mock_service_fixture, is_gateway_up, harness, request):
     harness.begin()
 
     mock_get_gateway_service = MagicMock(return_value=request.getfixturevalue(mock_service_fixture))
@@ -590,52 +591,21 @@ def test_get_gateway_service():
     raise NotImplementedError("add error validation here, too")
 
 
-def test_gateway_address_for_loadbalancer(harness, subprocess, mocked_client, helpers, mocker, mocked_list):
+@pytest.mark.parametrize(
+    "mock_service_fixture, gateway_address",
+    [
+        # Pass fixtures by their names
+        ("mock_loadbalancer_hostname_service", "test.com"),
+        ("mock_loadbalancer_ip_service", "127.0.0.1"),
+        ("mock_loadbalancer_hostname_service_not_ready", None),
+        ("mock_loadbalancer_ip_service_not_ready", None),
+    ]
+)
+def test_get_gateway_address_from_svc(mock_service_fixture, gateway_address, harness, subprocess, mocked_client, helpers, mocker, mocked_list, request):
     """Test that the charm._gateway_address correctly returns gateway service IP/hostname."""
+    mock_service = request.getfixturevalue(mock_service_fixture)
 
-    mocker.patch("resources_handler.load_in_cluster_generic_resources")
-    harness.set_leader(True)
-    harness.begin()
-
-    # Test retrieval of gateway address set in Service
-    # verify None
-    harness.charm.lightkube_client.get.side_effect = [
-        codecs.from_dict(
-            {
-                "apiVersion": "v1",
-                "kind": "Service",
-                "status": {"loadBalancer": {"ingress": [{}]}},
-                "spec": {"type": "LoadBalancer", "clusterIP": "10.10.10.10"},
-            }
-        )
-    ]
-    assert harness.charm._gateway_address is None
-
-    # verify IP address
-    harness.charm.lightkube_client.get.side_effect = [
-        codecs.from_dict(
-            {
-                "apiVersion": "v1",
-                "kind": "Service",
-                "status": {"loadBalancer": {"ingress": [{"ip": "127.0.0.1"}]}},
-                "spec": {"type": "LoadBalancer", "clusterIP": "10.10.10.10"},
-            }
-        )
-    ]
-    assert harness.charm._gateway_address == "127.0.0.1"
-
-    # verify hostname
-    harness.charm.lightkube_client.get.side_effect = [
-        codecs.from_dict(
-            {
-                "apiVersion": "v1",
-                "kind": "Service",
-                "status": {"loadBalancer": {"ingress": [{"hostname": "test.com"}]}},
-                "spec": {"type": "LoadBalancer", "clusterIP": "10.10.10.10"},
-            }
-        )
-    ]
-    assert harness.charm._gateway_address == "test.com"
+    assert _get_gateway_address_from_svc(svc=mock_service) is gateway_address
 
 
 def test_gateway_address_for_nodeport(harness, subprocess, mocked_client, mocker):
