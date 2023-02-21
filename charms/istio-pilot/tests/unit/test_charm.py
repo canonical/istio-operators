@@ -1,4 +1,4 @@
-from unittest.mock import call as Call  # noqa: N812
+from unittest.mock import call as Call, MagicMock  # noqa: N812
 
 import pytest
 import yaml
@@ -480,7 +480,110 @@ def test_remove_exceptions(harness, mocked_client, mocker):
         harness.charm.on.remove.emit()
 
 
-def test_loadbalancer_service(harness, subprocess, mocked_client, helpers, mocker, mocked_list):
+@pytest.fixture()
+def mock_nodeport_service():
+    mock_nodeport_service = codecs.from_dict(
+        {
+            "apiVersion": "v1",
+            "kind": "Service",
+            "status": {"loadBalancer": {"ingress": [{}]}},
+            "spec": {"type": "NodePort", "clusterIP": "10.10.10.10"},
+        }
+    )
+    return mock_nodeport_service
+
+
+@pytest.fixture()
+def mock_clusterip_service():
+    mock_nodeport_service = codecs.from_dict(
+        {
+            "apiVersion": "v1",
+            "kind": "Service",
+            "status": {"loadBalancer": {"ingress": [{}]}},
+            "spec": {"type": "ClusterIP", "clusterIP": "10.10.10.10"},
+        }
+    )
+    return mock_nodeport_service
+
+
+@pytest.fixture()
+def mock_loadbalancer_ip_service():
+    mock_nodeport_service = codecs.from_dict(
+        {
+            "apiVersion": "v1",
+            "kind": "Service",
+            "status": {"loadBalancer": {"ingress": [{"ip": "127.0.0.1"}]}},
+            "spec": {"type": "LoadBalancer", "clusterIP": "10.10.10.10"},
+        }
+    )
+    return mock_nodeport_service
+
+
+@pytest.fixture()
+def mock_loadbalancer_hostname_service():
+    mock_nodeport_service = codecs.from_dict(
+        {
+            "apiVersion": "v1",
+            "kind": "Service",
+            "status": {"loadBalancer": {"ingress": [{"hostname": "test.com"}]}},
+            "spec": {"type": "LoadBalancer", "clusterIP": "10.10.10.10"},
+        }
+    )
+    return mock_nodeport_service
+
+
+@pytest.fixture()
+def mock_loadbalancer_ip_service_not_ready():
+    mock_nodeport_service = codecs.from_dict(
+        {
+            "apiVersion": "v1",
+            "kind": "Service",
+            "status": {"loadBalancer": {"ingress": []}},
+            "spec": {"type": "LoadBalancer", "clusterIP": "10.10.10.10"},
+        }
+    )
+    return mock_nodeport_service
+
+
+@pytest.fixture()
+def mock_loadbalancer_hostname_service_not_ready():
+    mock_nodeport_service = codecs.from_dict(
+        {
+            "apiVersion": "v1",
+            "kind": "Service",
+            "status": {"loadBalancer": {"ingress": []}},
+            "spec": {"type": "LoadBalancer", "clusterIP": "10.10.10.10"},
+        }
+    )
+    return mock_nodeport_service
+
+
+@pytest.mark.parametrize(
+    "mock_service_fixture, is_gateway_up",
+    [
+        # Pass fixtures by their names
+        ("mock_nodeport_service", True),
+        ("mock_clusterip_service", True),
+        ("mock_loadbalancer_hostname_service", True),
+        ("mock_loadbalancer_ip_service", True),
+        ("mock_loadbalancer_hostname_service_not_ready", False),
+        ("mock_loadbalancer_ip_service_not_ready", False),
+    ]
+)
+def test_is_gateway_service_up_for_nodeport(mock_service_fixture, is_gateway_up, harness, request):
+    harness.begin()
+
+    mock_get_gateway_service = MagicMock(return_value=request.getfixturevalue(mock_service_fixture))
+
+    harness.charm._get_gateway_service = mock_get_gateway_service
+    assert harness.charm._is_gateway_service_up() is is_gateway_up
+
+
+def test_get_gateway_service():
+    raise NotImplementedError("add error validation here, too")
+
+
+def test_gateway_address_for_loadbalancer(harness, subprocess, mocked_client, helpers, mocker, mocked_list):
     """Test that the charm._gateway_address correctly returns gateway service IP/hostname."""
 
     mocker.patch("resources_handler.load_in_cluster_generic_resources")
@@ -526,6 +629,25 @@ def test_loadbalancer_service(harness, subprocess, mocked_client, helpers, mocke
         )
     ]
     assert harness.charm._gateway_address == "test.com"
+
+
+def test_gateway_address_for_nodeport(harness, subprocess, mocked_client, mocker):
+    """Test that the charm._gateway_address correctly returns None for a nodeport service."""
+    mocker.patch("resources_handler.load_in_cluster_generic_resources")
+    harness.set_leader(True)
+    harness.begin()
+
+    harness.charm.lightkube_client.get.side_effect = [
+        codecs.from_dict(
+            {
+                "apiVersion": "v1",
+                "kind": "Service",
+                "status": {"loadBalancer": {}},
+                "spec": {"type": "NodePort", "clusterIP": "10.10.10.10"},
+            }
+        )
+    ]
+    assert harness.charm._gateway_address == None
 
 
 def test_clusterip_service(harness, subprocess, mocked_client, helpers, mocker, mocked_list):
