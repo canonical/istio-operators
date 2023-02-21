@@ -113,9 +113,7 @@ def test_removal(configured_harness, kind, mocked_client, mocker):
         configured_harness.charm.on.remove.emit()
 
 
-def test_service_type(
-    configured_harness_only_ingress, gateway_service_type, mocked_client
-):
+def test_service_type(configured_harness_only_ingress, gateway_service_type, mocked_client):
     # Reset the mock so that the calls list does not include any calls from other hooks
     mocked_client.reset_mock()
 

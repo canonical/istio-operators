@@ -1,4 +1,5 @@
-from unittest.mock import call as Call, MagicMock  # noqa: N812
+from unittest.mock import MagicMock
+from unittest.mock import call as Call  # noqa: N812
 
 import pytest
 import yaml
@@ -6,6 +7,7 @@ from lightkube import codecs
 from lightkube.core.exceptions import ApiError
 from lightkube.generic_resource import create_global_resource
 from ops.model import ActiveStatus, WaitingStatus
+
 from charm import _get_gateway_address_from_svc
 
 
@@ -576,12 +578,14 @@ def mock_loadbalancer_hostname_service_not_ready():
         ("mock_loadbalancer_ip_service", True),
         ("mock_loadbalancer_hostname_service_not_ready", False),
         ("mock_loadbalancer_ip_service_not_ready", False),
-    ]
+    ],
 )
 def test_is_gateway_service_up(mock_service_fixture, is_gateway_up, harness, request):
     harness.begin()
 
-    mock_get_gateway_service = MagicMock(return_value=request.getfixturevalue(mock_service_fixture))
+    mock_get_gateway_service = MagicMock(
+        return_value=request.getfixturevalue(mock_service_fixture)
+    )
 
     harness.charm._get_gateway_service = mock_get_gateway_service
     assert harness.charm._is_gateway_service_up() is is_gateway_up
@@ -597,9 +601,19 @@ def test_is_gateway_service_up(mock_service_fixture, is_gateway_up, harness, req
         ("mock_loadbalancer_ip_service", "127.0.0.1"),
         ("mock_loadbalancer_hostname_service_not_ready", None),
         ("mock_loadbalancer_ip_service_not_ready", None),
-    ]
+    ],
 )
-def test_get_gateway_address_from_svc(mock_service_fixture, gateway_address, harness, subprocess, mocked_client, helpers, mocker, mocked_list, request):
+def test_get_gateway_address_from_svc(
+    mock_service_fixture,
+    gateway_address,
+    harness,
+    subprocess,
+    mocked_client,
+    helpers,
+    mocker,
+    mocked_list,
+    request,
+):
     """Test that the charm._gateway_address correctly returns gateway service IP/hostname."""
     mock_service = request.getfixturevalue(mock_service_fixture)
 

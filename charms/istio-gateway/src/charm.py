@@ -10,7 +10,6 @@ from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, StatusBase, WaitingStatus
 from serialized_data_interface import NoCompatibleVersions, NoVersionsListed, get_interfaces
 
-
 SUPPORTED_GATEWAY_SERVICE_TYPES = ["LoadBalancer", "ClusterIP", "NodePort"]
 
 
