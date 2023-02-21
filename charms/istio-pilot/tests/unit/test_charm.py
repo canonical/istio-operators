@@ -587,10 +587,6 @@ def test_is_gateway_service_up(mock_service_fixture, is_gateway_up, harness, req
     assert harness.charm._is_gateway_service_up() is is_gateway_up
 
 
-def test_get_gateway_service():
-    raise NotImplementedError("add error validation here, too")
-
-
 @pytest.mark.parametrize(
     "mock_service_fixture, gateway_address",
     [
