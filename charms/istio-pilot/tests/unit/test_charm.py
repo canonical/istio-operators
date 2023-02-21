@@ -97,6 +97,10 @@ def test_basic(harness, subprocess, mocker):
     mocker.patch("lightkube.codecs.load_all_yaml")
     mocker.patch("resources_handler.load_in_cluster_generic_resources")
     check_call = subprocess.check_call
+
+    # Mock _is_gateway_service_up() to simulate that we do see a gateway from istio-ingressgateway
+    mocker.patch("charm.Operator._is_gateway_service_up", return_value=True)
+
     harness.set_leader(True)
     harness.begin_with_initial_hooks()
 
@@ -119,6 +123,9 @@ def test_basic(harness, subprocess, mocker):
 
 def test_with_ingress_relation(harness, subprocess, mocked_client, helpers, mocker, mocked_list):
     check_call = subprocess.check_call
+    # Mock _is_gateway_service_up() to simulate that we do see a gateway from istio-ingressgateway
+    mocker.patch("charm.Operator._is_gateway_service_up", return_value=True)
+
     harness.set_leader(True)
 
     rel_id = harness.add_relation("ingress", "app")
