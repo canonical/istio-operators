@@ -7,4 +7,4 @@ options:
     default: 'LoadBalancer'
     type: string
     description: |
-      Type of service for the ingress gateway out of: 'ClusterIP', 'LoadBalancer', or "NodePort".
+      Type of service for the ingress gateway out of: 'ClusterIP', 'LoadBalancer', or 'NodePort'.
