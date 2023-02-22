@@ -354,17 +354,15 @@ class Operator(CharmBase):
             return exporter_ip
 
     def _is_gateway_service_up(self):
-        """Returns True if the gateway is up, else False."""
+        """Returns True if the ingress gateway service is up, else False."""
         svc = self._get_gateway_service()
 
         if svc.spec.type == "NodePort":
             # TODO: do we need to interrogate this further for status?
             return True
-        else:
-            if _get_gateway_address_from_svc(svc) is not None:
-                return True
-            else:
-                return False
+        if _get_gateway_address_from_svc(svc) is not None:
+            return True
+        return False
 
     def _get_gateway_service(self):
         """Returns a lightkube Service object for the gateway service."""
