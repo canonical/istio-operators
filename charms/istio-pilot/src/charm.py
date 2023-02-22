@@ -367,6 +367,7 @@ class Operator(CharmBase):
                 return False
 
     def _get_gateway_service(self):
+        """Returns a lightkube Service object for the gateway service."""
         # FIXME: service name is hardcoded and depends on the istio gateway application name being
         #  `istio-ingressgateway`.  This is very fragile
         # TODO: extract this from charm code
@@ -379,9 +380,17 @@ class Operator(CharmBase):
 
 
 def _get_gateway_address_from_svc(svc):
-    """Look up the load balancer address for the ingress gateway.
+    """Returns the gateway service address from a kubernetes Service.
+
     If the gateway isn't available or doesn't have a load balancer address yet,
     returns None.
+
+
+    Args:
+        svc: The lightkube Service object to interrogate
+
+    Returns:
+        (str): The hostname or IP address of the gateway service (or None)
     """
     # return gateway address: hostname or IP; None if not set
     gateway_address = None
@@ -389,12 +398,20 @@ def _get_gateway_address_from_svc(svc):
     if svc.spec.type == "ClusterIP":
         gateway_address = svc.spec.clusterIP
     elif svc.spec.type == "LoadBalancer":
-        gateway_address = _get_gateway_from_loadbalancer(svc)
+        gateway_address = _get_address_from_loadbalancer(svc)
 
     return gateway_address
 
 
-def _get_gateway_from_loadbalancer(svc):
+def _get_address_from_loadbalancer(svc):
+    """Returns a hostname or IP address from a LoadBalancer service.
+
+    Args:
+        svc: The lightkube Service object to interrogate
+
+    Returns:
+          (str): The hostname or IP address of the LoadBalancer service
+    """
     ingresses = svc.status.loadBalancer.ingress
     if len(ingresses) != 1:
         if len(ingresses) == 0:
