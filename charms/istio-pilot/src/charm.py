@@ -354,7 +354,7 @@ class Operator(CharmBase):
             return exporter_ip
 
     def _is_gateway_service_up(self):
-        """Returns True if the gateway is up, else False."""
+        """Returns True if the ingress gateway service is up, else False."""
         svc = self._get_gateway_service()
 
         if svc.spec.type == "NodePort":
