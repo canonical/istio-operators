@@ -360,11 +360,9 @@ class Operator(CharmBase):
         if svc.spec.type == "NodePort":
             # TODO: do we need to interrogate this further for status?
             return True
-        else:
-            if _get_gateway_address_from_svc(svc) is not None:
-                return True
-            else:
-                return False
+        if _get_gateway_address_from_svc(svc) is not None:
+            return True
+        return False
 
     def _get_gateway_service(self):
         # FIXME: service name is hardcoded and depends on the istio gateway application name being
