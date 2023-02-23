@@ -12,8 +12,14 @@ from ops.charm import CharmBase, RelationBrokenEvent
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from serialized_data_interface import NoCompatibleVersions, NoVersionsListed, get_interfaces
+
+from istio_gateway_info_provider import RELATION_NAME, GatewayProvider
 from resources_handler import ResourceHandler
-from istio_gateway_info_provider import GatewayProvider, RELATION_NAME
+
+GATEWAY_HTTP_PORT = 8080
+GATEWAY_HTTPS_PORT = 8443
+METRICS_PORT = 15014
+GATEWAY_WORKLOAD_SERVICE_NAME = "istio-ingressgateway-workload"
 
 
 class Operator(CharmBase):
@@ -60,11 +66,11 @@ class Operator(CharmBase):
         for event in [self.on[RELATION_NAME].relation_changed, self.on.update_status]:
             self.framework.observe(event, self.handle_gateway_info_relation)
         self.framework.observe(self.on["istio-pilot"].relation_changed, self.send_info)
-        self.framework.observe(self.on['ingress'].relation_changed, self.handle_ingress)
-        self.framework.observe(self.on['ingress'].relation_broken, self.handle_ingress)
-        self.framework.observe(self.on['ingress'].relation_departed, self.handle_ingress)
-        self.framework.observe(self.on['ingress-auth'].relation_changed, self.handle_ingress_auth)
-        self.framework.observe(self.on['ingress-auth'].relation_departed, self.handle_ingress_auth)
+        self.framework.observe(self.on["ingress"].relation_changed, self.handle_ingress)
+        self.framework.observe(self.on["ingress"].relation_broken, self.handle_ingress)
+        self.framework.observe(self.on["ingress"].relation_departed, self.handle_ingress)
+        self.framework.observe(self.on["ingress-auth"].relation_changed, self.handle_ingress_auth)
+        self.framework.observe(self.on["ingress-auth"].relation_departed, self.handle_ingress_auth)
 
     def install(self, event):
         """Install charm."""
@@ -119,15 +125,15 @@ class Operator(CharmBase):
         # Clean-up resources
         self._resource_handler.delete_existing_resources(
             resource=self._resource_handler.get_custom_resource_class_from_filename(
-                filename='gateway.yaml.j2'
+                filename="gateway.yaml.j2"
             ),
             labels={
                 f"app.{self.app.name}.io/is-workload-entity": "true",
             },
             namespace=self.model.name,
         )
-        t = self.env.get_template('gateway.yaml.j2')
-        gateway = self.model.config['default-gateway']
+        t = self.env.get_template("gateway.yaml.j2")
+        gateway = self.model.config["default-gateway"]
         secret_name = (
             f"{self.app.name}-gateway-secret"
             if self.model.config["ssl-crt"] and self.model.config["ssl-key"]
@@ -135,7 +141,7 @@ class Operator(CharmBase):
         )
         manifest = None
         if secret_name:
-            secret = self.env.get_template('gateway-secret.yaml.j2')
+            secret = self.env.get_template("gateway-secret.yaml.j2")
             manifest_secret = secret.render(
                 secret_name=secret_name,
                 ssl_crt=self.model.config["ssl-crt"],
@@ -152,6 +158,8 @@ class Operator(CharmBase):
             ssl_key=self.model.config["ssl-key"] or None,
             model_name=self.model.name,
             app_name=self.app.name,
+            gateway_http_port=GATEWAY_HTTP_PORT,
+            gateway_https_port=GATEWAY_HTTPS_PORT,
         )
         self._resource_handler.apply_manifest(manifest)
 
@@ -166,12 +174,12 @@ class Operator(CharmBase):
             resource_type=self._resource_handler.get_custom_resource_class_from_filename(
                 "gateway.yaml.j2"
             ),
-            resource_name=self.model.config['default-gateway'],
+            resource_name=self.model.config["default-gateway"],
             resource_namespace=self.model.name,
         )
         if is_gateway_created:
             self.gateway.send_gateway_relation_data(
-                self.app, self.model.config['default-gateway'], self.model.name
+                self.app, self.model.config["default-gateway"], self.model.name
             )
         else:
             self.log.info("Gateway is not created yet. Skip sending gateway relation data.")
@@ -179,7 +187,7 @@ class Operator(CharmBase):
     def send_info(self, event):
         if self.interfaces["istio-pilot"]:
             self.interfaces["istio-pilot"].send_data(
-                {"service-name": f'istiod.{self.model.name}.svc', "service-port": '15012'}
+                {"service-name": f"istiod.{self.model.name}.svc", "service-port": "15012"}
             )
         else:
             self.log.debug(f"Unable to send data, deferring event: {event}")
@@ -192,7 +200,7 @@ class Operator(CharmBase):
         self.send_info(event)
 
         try:
-            if not self._gateway_address:
+            if not self._is_gateway_service_up():
                 self.log.info(
                     "No gateway address returned - this may be transitory, but "
                     "if it persists it is likely an unexpected error. "
@@ -219,7 +227,7 @@ class Operator(CharmBase):
                 self.log.exception(e)
             return
 
-        ingress = self.interfaces['ingress']
+        ingress = self.interfaces["ingress"]
 
         if ingress:
             # Filter out data we sent back.
@@ -238,8 +246,8 @@ class Operator(CharmBase):
             # shouldn't be keeping the VirtualService for that related app.
             del routes[(event.relation, event.app)]
 
-        t = self.env.get_template('virtual_service.yaml.j2')
-        gateway = self.model.config['default-gateway']
+        t = self.env.get_template("virtual_service.yaml.j2")
+        gateway = self.model.config["default-gateway"]
 
         self.unit.status = ActiveStatus()
 
@@ -248,29 +256,29 @@ class Operator(CharmBase):
 
             v1 ingress schema doesn't allow sending over a namespace.
             """
-            kwargs = {'gateway': gateway, 'app_name': self.app.name, **route}
+            kwargs = {"gateway": gateway, "app_name": self.app.name, **route}
 
-            if 'namespace' not in kwargs:
-                kwargs['namespace'] = self.model.name
+            if "namespace" not in kwargs:
+                kwargs["namespace"] = self.model.name
 
             return kwargs
 
         # TODO: we could probably extract the rendering bits from the charm code
-        virtual_services = '\n---'.join(
+        virtual_services = "\n---".join(
             t.render(**get_kwargs(ingress.versions[app.name], route)).strip().strip("---")
             for ((_, app), route) in routes.items()
         )
 
         self._resource_handler.reconcile_desired_resources(
             resource=self._resource_handler.get_custom_resource_class_from_filename(
-                filename='virtual_service.yaml.j2'
+                filename="virtual_service.yaml.j2"
             ),
             namespace=self.model.name,
             desired_resources=virtual_services,
         )
 
     def handle_ingress_auth(self, event):
-        auth_routes = self.interfaces['ingress-auth']
+        auth_routes = self.interfaces["ingress-auth"]
         if auth_routes:
             auth_routes = list(auth_routes.get_data().values())
         else:
@@ -286,22 +294,28 @@ class Operator(CharmBase):
             )
             return
 
-        t = self.env.get_template('auth_filter.yaml.j2')
-        auth_filters = ''.join(
+        if self.model.config["ssl-crt"] and self.model.config["ssl-key"]:
+            gateway_port = GATEWAY_HTTPS_PORT
+        else:
+            gateway_port = GATEWAY_HTTP_PORT
+
+        t = self.env.get_template("auth_filter.yaml.j2")
+        auth_filters = "".join(
             t.render(
                 namespace=self.model.name,
                 app_name=self.app.name,
+                gateway_port=gateway_port,
                 **{
-                    'request_headers': yaml.safe_dump(
-                        [{'exact': h} for h in r.get('allowed-request-headers', [])],
+                    "request_headers": yaml.safe_dump(
+                        [{"exact": h} for h in r.get("allowed-request-headers", [])],
                         default_flow_style=True,
                     ),
-                    'response_headers': yaml.safe_dump(
-                        [{'exact': h} for h in r.get('allowed-response-headers', [])],
+                    "response_headers": yaml.safe_dump(
+                        [{"exact": h} for h in r.get("allowed-response-headers", [])],
                         default_flow_style=True,
                     ),
-                    'port': r['port'],
-                    'service': r['service'],
+                    "port": r["port"],
+                    "service": r["service"],
                 },
             )
             for r in auth_routes
@@ -309,41 +323,97 @@ class Operator(CharmBase):
 
         self._resource_handler.delete_existing_resources(
             self._resource_handler.get_custom_resource_class_from_filename(
-                filename='auth_filter.yaml.j2'
+                filename="auth_filter.yaml.j2"
             ),
             namespace=self.model.name,
         )
         self._resource_handler.apply_manifest(auth_filters, namespace=self.model.name)
 
     @property
-    def _gateway_address(self):
-        """Look up the load balancer address for the ingress gateway.
-        If the gateway isn't available or doesn't have a load balancer address yet,
-        returns None.
-        """
-        # FIXME: service name is hardcoded
+    def _istiod_svc(self):
+        try:
+            exporter_service = self.lightkube_client.get(
+                res=Service, name="istiod", namespace=self.model.name
+            )
+            exporter_ip = exporter_service.spec.clusterIP
+        except ApiError as e:
+            if e.status.code == 404:
+                return None
+            raise
+        else:
+            return exporter_ip
+
+    def _is_gateway_service_up(self):
+        """Returns True if the ingress gateway service is up, else False."""
+        svc = self._get_gateway_service()
+
+        if svc.spec.type == "NodePort":
+            # TODO: do we need to interrogate this further for status?
+            return True
+        if _get_gateway_address_from_svc(svc) is not None:
+            return True
+        return False
+
+    def _get_gateway_service(self):
+        """Returns a lightkube Service object for the gateway service."""
+        # FIXME: service name is hardcoded and depends on the istio gateway application name being
+        #  `istio-ingressgateway`.  This is very fragile
         # TODO: extract this from charm code
-        svcs = self.lightkube_client.get(
-            Service, name="istio-ingressgateway-workload", namespace=self.model.name
+        # TODO: What happens if this service does not exist?  We should check on that and then add
+        #  tests to confirm this works
+        svc = self.lightkube_client.get(
+            Service, name=GATEWAY_WORKLOAD_SERVICE_NAME, namespace=self.model.name
         )
+        return svc
 
-        # return gateway address: hostname or IP; None if not set
-        gateway_address = None
 
-        if svcs.spec.type == 'ClusterIP':
-            gateway_address = svcs.spec.clusterIP
-        elif (
-            hasattr(svcs.status.loadBalancer.ingress[0], 'hostname')
-            and svcs.status.loadBalancer.ingress[0].hostname is not None
-        ):
-            gateway_address = svcs.status.loadBalancer.ingress[0].hostname
-        elif (
-            hasattr(svcs.status.loadBalancer.ingress[0], 'ip')
-            and svcs.status.loadBalancer.ingress[0].ip is not None
-        ):
-            gateway_address = svcs.status.loadBalancer.ingress[0].ip
+def _get_gateway_address_from_svc(svc):
+    """Returns the gateway service address from a kubernetes Service.
 
-        return gateway_address
+    If the gateway isn't available or doesn't have a load balancer address yet,
+    returns None.
+
+
+    Args:
+        svc: The lightkube Service object to interrogate
+
+    Returns:
+        (str): The hostname or IP address of the gateway service (or None)
+    """
+    # return gateway address: hostname or IP; None if not set
+    gateway_address = None
+
+    if svc.spec.type == "ClusterIP":
+        gateway_address = svc.spec.clusterIP
+    elif svc.spec.type == "LoadBalancer":
+        gateway_address = _get_address_from_loadbalancer(svc)
+
+    return gateway_address
+
+
+def _get_address_from_loadbalancer(svc):
+    """Returns a hostname or IP address from a LoadBalancer service.
+
+    Args:
+        svc: The lightkube Service object to interrogate
+
+    Returns:
+          (str): The hostname or IP address of the LoadBalancer service
+    """
+    ingresses = svc.status.loadBalancer.ingress
+    if len(ingresses) != 1:
+        if len(ingresses) == 0:
+            return None
+        else:
+            raise ValueError("Unknown situation - LoadBalancer service has more than one ingress")
+
+    ingress = svc.status.loadBalancer.ingress[0]
+    if getattr(ingress, "hostname", None) is not None:
+        return svc.status.loadBalancer.ingress[0].hostname
+    elif getattr(ingress, "ip", None) is not None:
+        return svc.status.loadBalancer.ingress[0].ip
+    else:
+        raise ValueError("Unknown situation - LoadBalancer service has no hostname or IP")
 
 
 if __name__ == "__main__":
