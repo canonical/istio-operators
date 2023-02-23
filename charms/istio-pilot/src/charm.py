@@ -294,17 +294,11 @@ class Operator(CharmBase):
             )
             return
 
-        if self.model.config["ssl-crt"] and self.model.config["ssl-key"]:
-            gateway_port = GATEWAY_HTTPS_PORT
-        else:
-            gateway_port = GATEWAY_HTTP_PORT
-
         t = self.env.get_template("auth_filter.yaml.j2")
         auth_filters = "".join(
             t.render(
                 namespace=self.model.name,
                 app_name=self.app.name,
-                gateway_port=gateway_port,
                 **{
                     "request_headers": yaml.safe_dump(
                         [{"exact": h} for h in r.get("allowed-request-headers", [])],
@@ -328,20 +322,6 @@ class Operator(CharmBase):
             namespace=self.model.name,
         )
         self._resource_handler.apply_manifest(auth_filters, namespace=self.model.name)
-
-    @property
-    def _istiod_svc(self):
-        try:
-            exporter_service = self.lightkube_client.get(
-                res=Service, name="istiod", namespace=self.model.name
-            )
-            exporter_ip = exporter_service.spec.clusterIP
-        except ApiError as e:
-            if e.status.code == 404:
-                return None
-            raise
-        else:
-            return exporter_ip
 
     def _is_gateway_service_up(self):
         """Returns True if the ingress gateway service is up, else False."""
