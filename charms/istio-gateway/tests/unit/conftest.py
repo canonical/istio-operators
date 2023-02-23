@@ -44,7 +44,7 @@ def configured_harness(harness, kind):
     return harness
 
 
-@pytest.fixture(params=["LoadBalancer", "ClusterIP"])
+@pytest.fixture(params=["LoadBalancer", "ClusterIP", "NodePort"])
 def gateway_service_type(request):
     return request.param
 

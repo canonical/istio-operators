@@ -21,6 +21,7 @@ from resources_handler import ResourceHandler
 GATEWAY_HTTP_PORT = 8080
 GATEWAY_HTTPS_PORT = 8443
 METRICS_PORT = 15014
+GATEWAY_WORKLOAD_SERVICE_NAME = "istio-ingressgateway-workload"
 
 
 class Operator(CharmBase):
@@ -209,7 +210,7 @@ class Operator(CharmBase):
         self.send_info(event)
 
         try:
-            if not self._gateway_address:
+            if not self._is_gateway_service_up():
                 self.log.info(
                     "No gateway address returned - this may be transitory, but "
                     "if it persists it is likely an unexpected error. "
@@ -352,35 +353,77 @@ class Operator(CharmBase):
         else:
             return exporter_ip
 
-    @property
-    def _gateway_address(self):
-        """Look up the load balancer address for the ingress gateway.
-        If the gateway isn't available or doesn't have a load balancer address yet,
-        returns None.
-        """
-        # FIXME: service name is hardcoded
+    def _is_gateway_service_up(self):
+        """Returns True if the ingress gateway service is up, else False."""
+        svc = self._get_gateway_service()
+
+        if svc.spec.type == "NodePort":
+            # TODO: do we need to interrogate this further for status?
+            return True
+        if _get_gateway_address_from_svc(svc) is not None:
+            return True
+        return False
+
+    def _get_gateway_service(self):
+        """Returns a lightkube Service object for the gateway service."""
+        # FIXME: service name is hardcoded and depends on the istio gateway application name being
+        #  `istio-ingressgateway`.  This is very fragile
         # TODO: extract this from charm code
-        svcs = self.lightkube_client.get(
-            Service, name="istio-ingressgateway-workload", namespace=self.model.name
+        # TODO: What happens if this service does not exist?  We should check on that and then add
+        #  tests to confirm this works
+        svc = self.lightkube_client.get(
+            Service, name=GATEWAY_WORKLOAD_SERVICE_NAME, namespace=self.model.name
         )
+        return svc
 
-        # return gateway address: hostname or IP; None if not set
-        gateway_address = None
 
-        if svcs.spec.type == "ClusterIP":
-            gateway_address = svcs.spec.clusterIP
-        elif (
-            hasattr(svcs.status.loadBalancer.ingress[0], "hostname")
-            and svcs.status.loadBalancer.ingress[0].hostname is not None
-        ):
-            gateway_address = svcs.status.loadBalancer.ingress[0].hostname
-        elif (
-            hasattr(svcs.status.loadBalancer.ingress[0], "ip")
-            and svcs.status.loadBalancer.ingress[0].ip is not None
-        ):
-            gateway_address = svcs.status.loadBalancer.ingress[0].ip
+def _get_gateway_address_from_svc(svc):
+    """Returns the gateway service address from a kubernetes Service.
 
-        return gateway_address
+    If the gateway isn't available or doesn't have a load balancer address yet,
+    returns None.
+
+
+    Args:
+        svc: The lightkube Service object to interrogate
+
+    Returns:
+        (str): The hostname or IP address of the gateway service (or None)
+    """
+    # return gateway address: hostname or IP; None if not set
+    gateway_address = None
+
+    if svc.spec.type == "ClusterIP":
+        gateway_address = svc.spec.clusterIP
+    elif svc.spec.type == "LoadBalancer":
+        gateway_address = _get_address_from_loadbalancer(svc)
+
+    return gateway_address
+
+
+def _get_address_from_loadbalancer(svc):
+    """Returns a hostname or IP address from a LoadBalancer service.
+
+    Args:
+        svc: The lightkube Service object to interrogate
+
+    Returns:
+          (str): The hostname or IP address of the LoadBalancer service
+    """
+    ingresses = svc.status.loadBalancer.ingress
+    if len(ingresses) != 1:
+        if len(ingresses) == 0:
+            return None
+        else:
+            raise ValueError("Unknown situation - LoadBalancer service has more than one ingress")
+
+    ingress = svc.status.loadBalancer.ingress[0]
+    if getattr(ingress, "hostname", None) is not None:
+        return svc.status.loadBalancer.ingress[0].hostname
+    elif getattr(ingress, "ip", None) is not None:
+        return svc.status.loadBalancer.ingress[0].ip
+    else:
+        raise ValueError("Unknown situation - LoadBalancer service has no hostname or IP")
 
 
 if __name__ == "__main__":
