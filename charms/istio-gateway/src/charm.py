@@ -10,6 +10,8 @@ from serialized_data_interface import NoCompatibleVersions, NoVersionsListed, ge
 from lightkube import Client, codecs
 from lightkube.core.exceptions import ApiError
 
+SUPPORTED_GATEWAY_SERVICE_TYPES = ["LoadBalancer", "ClusterIP", "NodePort"]
+
 
 class Operator(CharmBase):
     def __init__(self, *args):
@@ -54,9 +56,9 @@ class Operator(CharmBase):
             event.defer()
             return
 
-        if self.model.config["gateway_service_type"] not in ("LoadBalancer", "ClusterIP"):
+        if self.model.config["gateway_service_type"] not in SUPPORTED_GATEWAY_SERVICE_TYPES:
             self.model.unit.status = BlockedStatus(
-                "Ingress GW svc must be of type: LoadBalancer, ClusterIP"
+                f"Ingress Gateway Service must one of type: {SUPPORTED_GATEWAY_SERVICE_TYPES}"
             )
             return
 

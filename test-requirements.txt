@@ -1,3 +1,4 @@
+juju<3.1
 pytest-operator<1.0
 aiohttp<3.8
 asyncio<3.5

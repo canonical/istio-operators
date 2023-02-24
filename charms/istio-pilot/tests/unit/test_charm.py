@@ -1,10 +1,14 @@
-from unittest.mock import call as Call
+from unittest.mock import MagicMock
+from unittest.mock import call as Call  # noqa: N812
+
 import pytest
 import yaml
-from ops.model import ActiveStatus, WaitingStatus
+from lightkube import codecs
 from lightkube.core.exceptions import ApiError
 from lightkube.generic_resource import create_global_resource
-from lightkube import codecs
+from ops.model import ActiveStatus, WaitingStatus
+
+from charm import _get_gateway_address_from_svc
 
 
 @pytest.fixture(autouse=True)
@@ -29,17 +33,17 @@ def mocked_list(mocked_client, mocker):
 
 
 def test_events(harness, mocker):
-    mocker.patch('lightkube.codecs.load_all_yaml')
-    mocker.patch('resources_handler.load_in_cluster_generic_resources')
+    mocker.patch("lightkube.codecs.load_all_yaml")
+    mocker.patch("resources_handler.load_in_cluster_generic_resources")
 
     harness.set_leader(True)
     harness.begin_with_initial_hooks()
 
-    install = mocker.patch('charm.Operator.install')
-    remove = mocker.patch('charm.Operator.remove')
-    send_info = mocker.patch('charm.Operator.send_info')
-    handle_ingress = mocker.patch('charm.Operator.handle_ingress')
-    handle_ingress_auth = mocker.patch('charm.Operator.handle_ingress_auth')
+    install = mocker.patch("charm.Operator.install")
+    remove = mocker.patch("charm.Operator.remove")
+    send_info = mocker.patch("charm.Operator.send_info")
+    handle_ingress = mocker.patch("charm.Operator.handle_ingress")
+    handle_ingress_auth = mocker.patch("charm.Operator.handle_ingress_auth")
 
     harness.charm.on.install.emit()
     install.assert_called_once()
@@ -89,35 +93,42 @@ def test_events(harness, mocker):
 
 def test_not_leader(harness):
     harness.begin()
-    assert harness.charm.model.unit.status == WaitingStatus('Waiting for leadership')
+    assert harness.charm.model.unit.status == WaitingStatus("Waiting for leadership")
 
 
 def test_basic(harness, subprocess, mocker):
-    mocker.patch('lightkube.codecs.load_all_yaml')
-    mocker.patch('resources_handler.load_in_cluster_generic_resources')
+    mocker.patch("lightkube.codecs.load_all_yaml")
+    mocker.patch("resources_handler.load_in_cluster_generic_resources")
     check_call = subprocess.check_call
+
+    # Mock _is_gateway_service_up() to simulate that we do see a gateway from istio-ingressgateway
+    mocker.patch("charm.Operator._is_gateway_service_up", return_value=True)
+
     harness.set_leader(True)
     harness.begin_with_initial_hooks()
 
     expected_args = [
-        './istioctl',
-        'install',
-        '-y',
-        '-s',
-        'profile=minimal',
-        '-s',
-        'values.global.istioNamespace=None',
+        "./istioctl",
+        "install",
+        "-y",
+        "-s",
+        "profile=minimal",
+        "-s",
+        "values.global.istioNamespace=None",
     ]
 
     assert len(check_call.call_args_list) == 1
     assert check_call.call_args_list[0].args == (expected_args,)
     assert check_call.call_args_list[0].kwargs == {}
 
-    assert harness.charm.model.unit.status == ActiveStatus('')
+    assert harness.charm.model.unit.status == ActiveStatus("")
 
 
 def test_with_ingress_relation(harness, subprocess, mocked_client, helpers, mocker, mocked_list):
     check_call = subprocess.check_call
+    # Mock _is_gateway_service_up() to simulate that we do see a gateway from istio-ingressgateway
+    mocker.patch("charm.Operator._is_gateway_service_up", return_value=True)
+
     harness.set_leader(True)
 
     rel_id = harness.add_relation("ingress", "app")
@@ -131,20 +142,20 @@ def test_with_ingress_relation(harness, subprocess, mocked_client, helpers, mock
 
     # No need to begin with all initial hooks. This will prevent
     # us from mocking all event handlers that run initially.
-    mocker.patch('resources_handler.load_in_cluster_generic_resources')
+    mocker.patch("resources_handler.load_in_cluster_generic_resources")
     harness.begin()
     harness.charm.on.install.emit()
 
     assert check_call.call_args_list == [
         Call(
             [
-                './istioctl',
-                'install',
-                '-y',
-                '-s',
-                'profile=minimal',
-                '-s',
-                'values.global.istioNamespace=None',
+                "./istioctl",
+                "install",
+                "-y",
+                "-s",
+                "profile=minimal",
+                "-s",
+                "values.global.istioNamespace=None",
             ]
         )
     ]
@@ -163,24 +174,24 @@ def test_with_ingress_relation(harness, subprocess, mocked_client, helpers, mock
 
     apply_expected = [
         {
-            'apiVersion': 'networking.istio.io/v1alpha3',
-            'kind': 'VirtualService',
-            'metadata': {
-                'name': 'service-name',
-                'labels': {'app.istio-pilot.io/is-workload-entity': 'true'},
+            "apiVersion": "networking.istio.io/v1alpha3",
+            "kind": "VirtualService",
+            "metadata": {
+                "name": "service-name",
+                "labels": {"app.istio-pilot.io/is-workload-entity": "true"},
             },
-            'spec': {
-                'gateways': ['None/istio-gateway'],
-                'hosts': ['*'],
-                'http': [
+            "spec": {
+                "gateways": ["None/istio-gateway"],
+                "hosts": ["*"],
+                "http": [
                     {
-                        'match': [{'uri': {'prefix': '/'}}],
-                        'rewrite': {'uri': '/'},
-                        'route': [
+                        "match": [{"uri": {"prefix": "/"}}],
+                        "rewrite": {"uri": "/"},
+                        "route": [
                             {
-                                'destination': {
-                                    'host': 'service-name.None.svc.cluster.local',
-                                    'port': {'number': 6666},
+                                "destination": {
+                                    "host": "service-name.None.svc.cluster.local",
+                                    "port": {"number": 6666},
                                 }
                             }
                         ],
@@ -191,7 +202,7 @@ def test_with_ingress_relation(harness, subprocess, mocked_client, helpers, mock
     ]
 
     # Mocks `in_left_not_right`
-    mocked_ilnr = mocker.patch('resources_handler.in_left_not_right')
+    mocked_ilnr = mocker.patch("resources_handler.in_left_not_right")
     mocked_ilnr.return_value = [codecs.from_dict(apply_expected[0])]
 
     harness.update_relation_data(
@@ -204,7 +215,7 @@ def test_with_ingress_relation(harness, subprocess, mocked_client, helpers, mock
     assert helpers.calls_contain_namespace(delete_calls, harness.model.name)
     actual_res_names = helpers.get_deleted_resource_types(delete_calls)
 
-    expected_res_names = ['service-name']
+    expected_res_names = ["service-name"]
     assert helpers.compare_deleted_resource_names(actual_res_names, expected_res_names)
 
     apply_calls = mocked_client.return_value.apply.call_args_list
@@ -227,8 +238,8 @@ def test_with_ingress_auth_relation(harness, subprocess, helpers, mocked_client,
     data = {
         "service": "service-name",
         "port": 6666,
-        "allowed-request-headers": ['foo'],
-        "allowed-response-headers": ['bar'],
+        "allowed-request-headers": ["foo"],
+        "allowed-response-headers": ["bar"],
     }
     harness.update_relation_data(
         rel_id,
@@ -238,19 +249,19 @@ def test_with_ingress_auth_relation(harness, subprocess, helpers, mocked_client,
 
     # No need to begin with all initial hooks. This will prevent
     # us from mocking all event handlers that run initially.
-    mocker.patch('resources_handler.load_in_cluster_generic_resources')
+    mocker.patch("resources_handler.load_in_cluster_generic_resources")
     harness.begin()
     harness.charm.on.install.emit()
     assert check_call.call_args_list == [
         Call(
             [
-                './istioctl',
-                'install',
-                '-y',
-                '-s',
-                'profile=minimal',
-                '-s',
-                'values.global.istioNamespace=None',
+                "./istioctl",
+                "install",
+                "-y",
+                "-s",
+                "profile=minimal",
+                "-s",
+                "values.global.istioNamespace=None",
             ]
         )
     ]
@@ -268,46 +279,46 @@ def test_with_ingress_auth_relation(harness, subprocess, helpers, mocked_client,
 
     expected = [
         {
-            'apiVersion': 'networking.istio.io/v1alpha3',
-            'kind': 'EnvoyFilter',
-            'metadata': {
-                'name': 'authn-filter',
-                'labels': {'app.istio-pilot.io/is-workload-entity': 'true'},
+            "apiVersion": "networking.istio.io/v1alpha3",
+            "kind": "EnvoyFilter",
+            "metadata": {
+                "name": "authn-filter",
+                "labels": {"app.istio-pilot.io/is-workload-entity": "true"},
             },
-            'spec': {
-                'configPatches': [
+            "spec": {
+                "configPatches": [
                     {
-                        'applyTo': 'HTTP_FILTER',
-                        'match': {
-                            'context': 'GATEWAY',
-                            'listener': {
-                                'filterChain': {
-                                    'filter': {
-                                        'name': 'envoy.filters.network.http_connection_manager'
+                        "applyTo": "HTTP_FILTER",
+                        "match": {
+                            "context": "GATEWAY",
+                            "listener": {
+                                "filterChain": {
+                                    "filter": {
+                                        "name": "envoy.filters.network.http_connection_manager"
                                     }
-                                }
+                                },
                             },
                         },
-                        'patch': {
-                            'operation': 'INSERT_BEFORE',
-                            'value': {
-                                'name': 'envoy.filters.http.ext_authz',
-                                'typed_config': {
-                                    '@type': 'type.googleapis.com/envoy.extensions.filters.http.'
-                                    'ext_authz.v3.ExtAuthz',
-                                    'http_service': {
-                                        'server_uri': {
-                                            'uri': 'http://service-name.None.svc.cluster.local:6666',  # noqa: E501
-                                            'cluster': 'outbound|6666||service-name.None.svc.'
-                                            'cluster.local',
-                                            'timeout': '10s',
+                        "patch": {
+                            "operation": "INSERT_BEFORE",
+                            "value": {
+                                "name": "envoy.filters.http.ext_authz",
+                                "typed_config": {
+                                    "@type": "type.googleapis.com/envoy.extensions.filters.http."
+                                    "ext_authz.v3.ExtAuthz",
+                                    "http_service": {
+                                        "server_uri": {
+                                            "uri": "http://service-name.None.svc.cluster.local:6666",  # noqa: E501
+                                            "cluster": "outbound|6666||service-name.None.svc."
+                                            "cluster.local",
+                                            "timeout": "10s",
                                         },
-                                        'authorization_request': {
-                                            'allowed_headers': {'patterns': [{'exact': 'foo'}]}
+                                        "authorization_request": {
+                                            "allowed_headers": {"patterns": [{"exact": "foo"}]}
                                         },
-                                        'authorization_response': {
-                                            'allowed_upstream_headers': {
-                                                'patterns': [{'exact': 'bar'}]
+                                        "authorization_response": {
+                                            "allowed_upstream_headers": {
+                                                "patterns": [{"exact": "bar"}]
                                             }
                                         },
                                     },
@@ -316,13 +327,13 @@ def test_with_ingress_auth_relation(harness, subprocess, helpers, mocked_client,
                         },
                     }
                 ],
-                'workloadSelector': {'labels': {'istio': 'ingressgateway'}},
+                "workloadSelector": {"labels": {"istio": "ingressgateway"}},
             },
         }
     ]
 
     # Mocks `in_left_not_right`
-    mocked_ilnr = mocker.patch('resources_handler.in_left_not_right')
+    mocked_ilnr = mocker.patch("resources_handler.in_left_not_right")
     mocked_ilnr.return_value = [codecs.from_dict(expected[0])]
     harness.update_relation_data(
         rel_id,
@@ -332,7 +343,7 @@ def test_with_ingress_auth_relation(harness, subprocess, helpers, mocked_client,
     delete_calls = mocked_client.return_value.delete.call_args_list
     assert helpers.calls_contain_namespace(delete_calls, harness.model.name)
     actual_res_names = helpers.get_deleted_resource_types(delete_calls)
-    expected_res_names = ['EnvoyFilter']
+    expected_res_names = ["EnvoyFilter"]
     assert helpers.compare_deleted_resource_names(actual_res_names, expected_res_names)
 
     apply_calls = mocked_client.return_value.apply.call_args_list
@@ -362,7 +373,7 @@ def test_correct_data_in_gateway_info_relation(harness, mocker, mocked_client):
     mocked_validate_gateway.return_value = True
 
     harness.set_model_name("test-model")
-    mocker.patch('resources_handler.load_in_cluster_generic_resources')
+    mocker.patch("resources_handler.load_in_cluster_generic_resources")
 
     rel_id = harness.add_relation("gateway-info", "app")
     harness.add_relation_unit(rel_id, "app/0")
@@ -380,7 +391,7 @@ def test_removal(harness, subprocess, mocked_client, helpers, mocker):
     check_output = subprocess.check_output
 
     # Mock this method to avoid an error when passing mocked manifests
-    mocker.patch('resources_handler.load_in_cluster_generic_resources')
+    mocker.patch("resources_handler.load_in_cluster_generic_resources")
 
     # Mock delete_manifest to avoid loading a mocked manifest when calling load_all_yaml
     # inside delete manifest.
@@ -391,7 +402,7 @@ def test_removal(harness, subprocess, mocked_client, helpers, mocker):
     # this method could be found nowhere else in the resources_handler code, due to recent
     # changes in Lightkube's API, we use `load_all_yaml` other places, which makes conflicts
     # with other parts of this test if mocked.
-    mocker.patch('resources_handler.ResourceHandler.delete_manifest')
+    mocker.patch("resources_handler.ResourceHandler.delete_manifest")
 
     harness.set_leader(True)
 
@@ -423,9 +434,9 @@ def test_removal(harness, subprocess, mocked_client, helpers, mocker):
     actual_res_names = helpers.get_deleted_resource_types(delete_calls)
 
     expected_res_names = [
-        'Gateway',
-        'EnvoyFilter',
-        'VirtualService',
+        "Gateway",
+        "EnvoyFilter",
+        "VirtualService",
     ]
     assert helpers.compare_deleted_resource_names(actual_res_names, expected_res_names)
 
@@ -435,12 +446,12 @@ def test_remove_exceptions(harness, mocked_client, mocker):
     mocked_metadata.name = "ResourceObjectFromYaml"
     mocked_yaml_object = mocker.MagicMock(metadata=mocked_metadata)
     mocker.patch(
-        'resources_handler.codecs.load_all_yaml',
+        "resources_handler.codecs.load_all_yaml",
         return_value=[mocked_yaml_object, mocked_yaml_object],
     )
 
     # Mock this method to avoid an error when passing mocked manifests
-    mocker.patch('resources_handler.load_in_cluster_generic_resources')
+    mocker.patch("resources_handler.load_in_cluster_generic_resources")
 
     harness.set_leader(True)
     harness.begin()
@@ -455,7 +466,7 @@ def test_remove_exceptions(harness, mocked_client, mocker):
     mocked_client.return_value.delete.side_effect = api_error
     # mock out the _delete_existing_resources method since we dont want the ApiError
     # to be thrown there
-    mocker.patch('resources_handler.ResourceHandler.delete_existing_resources')
+    mocker.patch("resources_handler.ResourceHandler.delete_existing_resources")
     # Ensure we DO NOT raise the exception
     harness.charm.on.remove.emit()
 
@@ -478,70 +489,131 @@ def test_remove_exceptions(harness, mocked_client, mocker):
         harness.charm.on.remove.emit()
 
 
-def test_loadbalancer_service(harness, subprocess, mocked_client, helpers, mocker, mocked_list):
-    """Test that the charm._gateway_address correctly returns gateway service IP/hostname."""
+@pytest.fixture()
+def mock_nodeport_service():
+    mock_nodeport_service = codecs.from_dict(
+        {
+            "apiVersion": "v1",
+            "kind": "Service",
+            "status": {"loadBalancer": {"ingress": [{}]}},
+            "spec": {"type": "NodePort", "clusterIP": "10.10.10.10"},
+        }
+    )
+    return mock_nodeport_service
 
-    mocker.patch('resources_handler.load_in_cluster_generic_resources')
-    harness.set_leader(True)
+
+@pytest.fixture()
+def mock_clusterip_service():
+    mock_nodeport_service = codecs.from_dict(
+        {
+            "apiVersion": "v1",
+            "kind": "Service",
+            "status": {"loadBalancer": {"ingress": [{}]}},
+            "spec": {"type": "ClusterIP", "clusterIP": "10.10.10.10"},
+        }
+    )
+    return mock_nodeport_service
+
+
+@pytest.fixture()
+def mock_loadbalancer_ip_service():
+    mock_nodeport_service = codecs.from_dict(
+        {
+            "apiVersion": "v1",
+            "kind": "Service",
+            "status": {"loadBalancer": {"ingress": [{"ip": "127.0.0.1"}]}},
+            "spec": {"type": "LoadBalancer", "clusterIP": "10.10.10.10"},
+        }
+    )
+    return mock_nodeport_service
+
+
+@pytest.fixture()
+def mock_loadbalancer_hostname_service():
+    mock_nodeport_service = codecs.from_dict(
+        {
+            "apiVersion": "v1",
+            "kind": "Service",
+            "status": {"loadBalancer": {"ingress": [{"hostname": "test.com"}]}},
+            "spec": {"type": "LoadBalancer", "clusterIP": "10.10.10.10"},
+        }
+    )
+    return mock_nodeport_service
+
+
+@pytest.fixture()
+def mock_loadbalancer_ip_service_not_ready():
+    mock_nodeport_service = codecs.from_dict(
+        {
+            "apiVersion": "v1",
+            "kind": "Service",
+            "status": {"loadBalancer": {"ingress": []}},
+            "spec": {"type": "LoadBalancer", "clusterIP": "10.10.10.10"},
+        }
+    )
+    return mock_nodeport_service
+
+
+@pytest.fixture()
+def mock_loadbalancer_hostname_service_not_ready():
+    mock_nodeport_service = codecs.from_dict(
+        {
+            "apiVersion": "v1",
+            "kind": "Service",
+            "status": {"loadBalancer": {"ingress": []}},
+            "spec": {"type": "LoadBalancer", "clusterIP": "10.10.10.10"},
+        }
+    )
+    return mock_nodeport_service
+
+
+@pytest.mark.parametrize(
+    "mock_service_fixture, is_gateway_up",
+    [
+        # Pass fixtures by their names
+        ("mock_nodeport_service", True),
+        ("mock_clusterip_service", True),
+        ("mock_loadbalancer_hostname_service", True),
+        ("mock_loadbalancer_ip_service", True),
+        ("mock_loadbalancer_hostname_service_not_ready", False),
+        ("mock_loadbalancer_ip_service_not_ready", False),
+    ],
+)
+def test_is_gateway_service_up(mock_service_fixture, is_gateway_up, harness, request):
     harness.begin()
 
-    # Test retrieval of gateway address set in Service
-    # verify None
-    harness.charm.lightkube_client.get.side_effect = [
-        codecs.from_dict(
-            {
-                'apiVersion': 'v1',
-                'kind': 'Service',
-                'status': {'loadBalancer': {'ingress': [{}]}},
-                'spec': {'type': 'LoadBalancer', 'clusterIP': '10.10.10.10'},
-            }
-        )
-    ]
-    assert harness.charm._gateway_address is None
+    mock_get_gateway_service = MagicMock(
+        return_value=request.getfixturevalue(mock_service_fixture)
+    )
 
-    # verify IP address
-    harness.charm.lightkube_client.get.side_effect = [
-        codecs.from_dict(
-            {
-                'apiVersion': 'v1',
-                'kind': 'Service',
-                'status': {'loadBalancer': {'ingress': [{'ip': "127.0.0.1"}]}},
-                'spec': {'type': 'LoadBalancer', 'clusterIP': '10.10.10.10'},
-            }
-        )
-    ]
-    assert harness.charm._gateway_address == "127.0.0.1"
-
-    # verify hostname
-    harness.charm.lightkube_client.get.side_effect = [
-        codecs.from_dict(
-            {
-                'apiVersion': 'v1',
-                'kind': 'Service',
-                'status': {'loadBalancer': {'ingress': [{'hostname': "test.com"}]}},
-                'spec': {'type': 'LoadBalancer', 'clusterIP': '10.10.10.10'},
-            }
-        )
-    ]
-    assert harness.charm._gateway_address == "test.com"
+    harness.charm._get_gateway_service = mock_get_gateway_service
+    assert harness.charm._is_gateway_service_up() is is_gateway_up
 
 
-def test_clusterip_service(harness, subprocess, mocked_client, helpers, mocker, mocked_list):
+@pytest.mark.parametrize(
+    "mock_service_fixture, gateway_address",
+    [
+        # Pass fixtures by their names
+        ("mock_nodeport_service", None),
+        ("mock_clusterip_service", "10.10.10.10"),
+        ("mock_loadbalancer_hostname_service", "test.com"),
+        ("mock_loadbalancer_ip_service", "127.0.0.1"),
+        ("mock_loadbalancer_hostname_service_not_ready", None),
+        ("mock_loadbalancer_ip_service_not_ready", None),
+    ],
+)
+def test_get_gateway_address_from_svc(
+    mock_service_fixture,
+    gateway_address,
+    harness,
+    subprocess,
+    mocked_client,
+    helpers,
+    mocker,
+    mocked_list,
+    request,
+):
     """Test that the charm._gateway_address correctly returns gateway service IP/hostname."""
+    mock_service = request.getfixturevalue(mock_service_fixture)
 
-    mocker.patch('resources_handler.load_in_cluster_generic_resources')
-    harness.set_leader(True)
-    harness.begin()
-
-    # Test retrieval of gateway address set in Service
-    harness.charm.lightkube_client.get.side_effect = [
-        codecs.from_dict(
-            {
-                'apiVersion': 'v1',
-                'kind': 'Service',
-                'status': {'loadBalancer': {}},
-                'spec': {'type': 'ClusterIP', 'clusterIP': '10.10.10.10'},
-            }
-        )
-    ]
-    assert harness.charm._gateway_address == '10.10.10.10'
+    assert _get_gateway_address_from_svc(svc=mock_service) is gateway_address
