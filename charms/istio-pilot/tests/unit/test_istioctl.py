@@ -25,7 +25,7 @@ def test_istioctl_install(mocked_check_call):
         "install",
         "-y",
         "-s",
-        PROFILE,
+        f"profile={PROFILE}",
         "-s",
         f"values.global.istioNamespace={NAMESPACE}",
     ]
@@ -71,7 +71,7 @@ def test_istioctl_manifest(mocked_check_output):
         "manifest",
         "generate",
         "-s",
-        PROFILE,
+        f"profile={PROFILE}",
         "-s",
         f"values.global.istioNamespace={NAMESPACE}",
     ]
@@ -95,7 +95,7 @@ def test_istioctl_manifest_error(mocked_check_output_failing):
 @pytest.fixture()
 def mocked_lightkube_client(mocker):
     mocked_lightkube_client = MagicMock()
-    mocked_lightkube_client_class = mocker.patch("istioctl.lightkube.Client")
+    mocked_lightkube_client_class = mocker.patch("istioctl.Client")
     mocked_lightkube_client_class.return_value = mocked_lightkube_client
 
     yield mocked_lightkube_client
@@ -151,8 +151,9 @@ def test_istioctl_upgrade(mocker, mocked_check_output):
         [
             ISTIOCTL_BINARY,
             "upgrade",
+            "-y",
             "-s",
-            PROFILE,
+            f"profile={PROFILE}",
             "-s",
             f"values.global.istioNamespace={NAMESPACE}",
         ]

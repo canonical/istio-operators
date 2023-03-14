@@ -1,7 +1,7 @@
 import logging
 import subprocess
 
-import lightkube
+from lightkube import Client, codecs
 from charmed_kubeflow_chisme.lightkube.batch import delete_many
 
 
@@ -18,7 +18,9 @@ class UpgradeFailedError(Exception):
 
 
 class Istioctl:
-    def __init__(self, istioctl_path: str, namespace: str = "istio-system", profile: str = "minimal"):
+    def __init__(
+        self, istioctl_path: str, namespace: str = "istio-system", profile: str = "minimal"
+    ):
         """Wrapper for the istioctl binary
 
         Args:
@@ -32,22 +34,15 @@ class Istioctl:
     def _istioctl_flags(self):
         return [
             "-s",
-            self._profile,
+            f"profile={self._profile}",
             "-s",
-            f"values.global.istioNamespace={self._namespace}"
+            f"values.global.istioNamespace={self._namespace}",
         ]
 
     def install(self):
         """Wrapper for the `istioctl install` command."""
         try:
-            subprocess.check_call(
-                [
-                    self._istioctl_path,
-                    "install",
-                    "-y",
-                    *self._istioctl_flags
-                ]
-            )
+            subprocess.check_call([self._istioctl_path, "install", "-y", *self._istioctl_flags])
         except subprocess.CalledProcessError as cpe:
             error_msg = f"Failed to install istio using istioctl.  Exit code: {cpe.returncode}."
             logging.error(error_msg)
@@ -55,7 +50,6 @@ class Istioctl:
             logging.error(f"stderr: {cpe.stderr}")
 
             raise InstallFailedError(error_msg) from cpe
-
 
     def manifest(self) -> str:
         """Wrapper for the `istioctl manifest generate` command.
@@ -65,16 +59,13 @@ class Istioctl:
         """
         try:
             manifests = subprocess.check_output(
-                [
-                    self._istioctl_path,
-                    "manifest",
-                    "generate",
-                    *self._istioctl_flags
-                ]
+                [self._istioctl_path, "manifest", "generate", *self._istioctl_flags]
             )
         except subprocess.CalledProcessError as cpe:
-            error_msg = f"Failed to generate manifests for istio using istioctl. " \
-                        f"Exit code: {cpe.returncode}."
+            error_msg = (
+                f"Failed to generate manifests for istio using istioctl. "
+                f"Exit code: {cpe.returncode}."
+            )
             logging.error(error_msg)
             logging.error(f"stdout: {cpe.stdout}")
             logging.error(f"stderr: {cpe.stderr}")
@@ -97,7 +88,6 @@ class Istioctl:
             ]
         )
 
-
     def remove(self):
         """Removes the Istio installation using istioctl and Lightkube.
 
@@ -107,33 +97,30 @@ class Istioctl:
         manifest = self.manifest()
 
         # Render YAML into Lightkube Objects
-        k8s_objects = lightkube.codecs.load_all_yaml(
-            manifest, create_resources_for_crds=True
-        )
+        k8s_objects = codecs.load_all_yaml(manifest, create_resources_for_crds=True)
 
-        client = lightkube.Client()
-        delete_many(
-            client=client,
-            objs=k8s_objects
-        )
+        client = Client()
+        delete_many(client=client, objs=k8s_objects)
 
     def upgrade(self):
         """Upgrades the Istio installation using istioctl."""
         try:
             self.precheck()
         except subprocess.CalledProcessError as cpe:
-            raise UpgradeFailedError("Upgrade failed during `istio precheck` with error code"
-                                     f" {cpe.returncode}") from cpe
+            raise UpgradeFailedError(
+                "Upgrade failed during `istio precheck` with error code" f" {cpe.returncode}"
+            ) from cpe
 
         try:
             subprocess.check_output(
                 [
                     self._istioctl_path,
                     "upgrade",
+                    "-y",
                     *self._istioctl_flags,
                 ]
             )
         except subprocess.CalledProcessError as cpe:
-            raise UpgradeFailedError("Upgrade failed during `istioctl upgrade` with error code"
-                                     f" {cpe.returncode}") from cpe
-
+            raise UpgradeFailedError(
+                "Upgrade failed during `istioctl upgrade` with error code" f" {cpe.returncode}"
+            ) from cpe
