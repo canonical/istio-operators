@@ -1,7 +1,7 @@
 """Library for sharing istio gateway information
 
 This library wraps the relation endpoints using the `istio-gateway-name`
-interface. It provides a Python API for both requesting and providing 
+interface. It provides a Python API for both requesting and providing
 gateway information.
 
 ## Getting Started
@@ -106,7 +106,10 @@ class GatewayRequirer(Object):
         data = gateway[0].data[remote_app]
 
         if "gateway_name" not in data:
-            err_msg = "Missing gateway name in gateway-info relation data. Waiting for gateway creation in istio-pilot"
+            err_msg = (
+                "Missing gateway name in gateway-info relation data. "
+                "Waiting for gateway creation in istio-pilot"
+            )
             logger.error(err_msg)
             raise GatewayRelationDataMissingError(err_msg)
 
