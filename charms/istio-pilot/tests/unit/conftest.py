@@ -88,16 +88,22 @@ def mocked_get(mocked_charm_client, mocker):
 # autouse to ensure we don't accidentally call out, but
 # can also be used explicitly to get access to the mock.
 @pytest.fixture(autouse=True)
-def subprocess(mocker):
-    subprocess = mocker.patch("charm.subprocess")
-    for method_name in ("check_call", "check_output"):
-        method = getattr(subprocess, method_name)
-        method.return_value.returncode = 0
-        method.return_value.stdout = b""
-        method.return_value.stderr = b""
-        method.return_value.output = b""
-        mocker.patch(f"subprocess.{method_name}", method)
-    yield subprocess
+def mocked_check_call(mocker):
+    mocked_check_call = mocker.patch("charm.subprocess.check_call")
+    mocked_check_call.return_value = 0
+
+    yield mocked_check_call
+
+
+# autouse to ensure we don't accidentally call out, but
+# can also be used explicitly to get access to the mock.
+@pytest.fixture(autouse=True)
+def mocked_check_output(mocker):
+    mocked_check_output = mocker.patch("charm.subprocess.check_output")
+    mocked_check_output.return_value = "stdout"
+
+    yield mocked_check_output
+
 
 
 @pytest.fixture

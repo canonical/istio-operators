@@ -96,10 +96,9 @@ def test_not_leader(harness):
     assert harness.charm.model.unit.status == WaitingStatus("Waiting for leadership")
 
 
-def test_basic(harness, subprocess, mocker):
+def test_basic(harness, mocked_check_call, mocker):
     mocker.patch("lightkube.codecs.load_all_yaml")
     mocker.patch("resources_handler.load_in_cluster_generic_resources")
-    check_call = subprocess.check_call
 
     # Mock _is_gateway_service_up() to simulate that we do see a gateway from istio-ingressgateway
     mocker.patch("charm.Operator._is_gateway_service_up", return_value=True)
@@ -117,15 +116,14 @@ def test_basic(harness, subprocess, mocker):
         "values.global.istioNamespace=None",
     ]
 
-    assert len(check_call.call_args_list) == 1
-    assert check_call.call_args_list[0].args == (expected_args,)
-    assert check_call.call_args_list[0].kwargs == {}
+    assert len(mocked_check_call.call_args_list) == 1
+    assert mocked_check_call.call_args_list[0].args == (expected_args,)
+    assert mocked_check_call.call_args_list[0].kwargs == {}
 
     assert harness.charm.model.unit.status == ActiveStatus("")
 
 
-def test_with_ingress_relation(harness, subprocess, mocked_client, helpers, mocker, mocked_list):
-    check_call = subprocess.check_call
+def test_with_ingress_relation(harness, mocked_check_call, mocked_client, helpers, mocker, mocked_list):
     # Mock _is_gateway_service_up() to simulate that we do see a gateway from istio-ingressgateway
     mocker.patch("charm.Operator._is_gateway_service_up", return_value=True)
 
@@ -146,7 +144,7 @@ def test_with_ingress_relation(harness, subprocess, mocked_client, helpers, mock
     harness.begin()
     harness.charm.on.install.emit()
 
-    assert check_call.call_args_list == [
+    assert mocked_check_call.call_args_list == [
         Call(
             [
                 "./istioctl",
@@ -228,9 +226,7 @@ def test_with_ingress_relation(harness, subprocess, mocked_client, helpers, mock
     assert isinstance(harness.charm.model.unit.status, ActiveStatus)
 
 
-def test_with_ingress_auth_relation(harness, subprocess, helpers, mocked_client, mocker):
-    check_call = subprocess.check_call
-
+def test_with_ingress_auth_relation(harness, mocked_check_call, helpers, mocked_client, mocker):
     harness.set_leader(True)
     rel_id = harness.add_relation("ingress-auth", "app")
 
@@ -252,7 +248,7 @@ def test_with_ingress_auth_relation(harness, subprocess, helpers, mocked_client,
     mocker.patch("resources_handler.load_in_cluster_generic_resources")
     harness.begin()
     harness.charm.on.install.emit()
-    assert check_call.call_args_list == [
+    assert mocked_check_call.call_args_list == [
         Call(
             [
                 "./istioctl",
@@ -388,9 +384,7 @@ def test_correct_data_in_gateway_info_relation(harness, mocker, mocked_client):
     assert istio_relation_data["gateway_namespace"] == model.name
 
 
-def test_removal(harness, subprocess, mocked_client, helpers, mocker):
-    check_output = subprocess.check_output
-
+def test_removal(harness, mocked_check_output, mocked_client, helpers, mocker):
     # Mock this method to avoid an error when passing mocked manifests
     mocker.patch("resources_handler.load_in_cluster_generic_resources")
 
@@ -426,9 +420,9 @@ def test_removal(harness, subprocess, mocked_client, helpers, mocker):
     ]
 
     harness.charm.on.remove.emit()
-    assert len(check_output.call_args_list) == 1
-    assert check_output.call_args_list[0].args == (expected_args,)
-    assert check_output.call_args_list[0].kwargs == {}
+    assert len(mocked_check_output.call_args_list) == 1
+    assert mocked_check_output.call_args_list[0].args == (expected_args,)
+    assert mocked_check_output.call_args_list[0].kwargs == {}
 
     delete_calls = mocked_client.return_value.delete.call_args_list
     assert helpers.calls_contain_namespace(delete_calls, harness.model.name)
@@ -607,7 +601,7 @@ def test_get_gateway_address_from_svc(
     mock_service_fixture,
     gateway_address,
     harness,
-    subprocess,
+    mocked_check_output,
     mocked_client,
     helpers,
     mocker,
