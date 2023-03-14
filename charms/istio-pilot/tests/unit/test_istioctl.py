@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 from lightkube import ApiError
 import pytest
 
-from istioctl import Istioctl, InstallFailedError, ManifestFailedError
+from istioctl import Istioctl, InstallFailedError, ManifestFailedError, UpgradeFailedError
 
 ISTIOCTL_BINARY = "not_really_istioctl"
 NAMESPACE = "dummy-namespace"
@@ -35,12 +35,7 @@ def test_istioctl_install(mocked_check_call):
 
 @pytest.fixture()
 def mocked_check_call_failing(mocked_check_call):
-    cpe = CalledProcessError(
-        cmd="",
-        returncode=1,
-        stderr="stderr",
-        output="stdout"
-    )
+    cpe = CalledProcessError(cmd="", returncode=1, stderr="stderr", output="stdout")
     mocked_check_call.return_value = None
     mocked_check_call.side_effect = cpe
 
@@ -49,12 +44,7 @@ def mocked_check_call_failing(mocked_check_call):
 
 @pytest.fixture()
 def mocked_check_output_failing(mocked_check_output):
-    cpe = CalledProcessError(
-        cmd="",
-        returncode=1,
-        stderr="stderr",
-        output="stdout"
-    )
+    cpe = CalledProcessError(cmd="", returncode=1, stderr="stderr", output="stdout")
     mocked_check_output.return_value = None
     mocked_check_output.side_effect = cpe
 
@@ -145,9 +135,47 @@ def test_istioctl_precheck(mocked_check_call):
 def test_istioctl_precheck_error(mocked_check_call_failing):
     ictl = Istioctl(istioctl_path=ISTIOCTL_BINARY, namespace=NAMESPACE, profile=PROFILE)
 
-    with pytest.raises(subprocess.CalledProcessError):
+    with pytest.raises(CalledProcessError):
         ictl.precheck()
 
 
-def test_istioctl_upgrade():
-    raise NotImplementedError()
+def test_istioctl_upgrade(mocker, mocked_check_output):
+    mocked_precheck = mocker.patch("istioctl.Istioctl.precheck")
+
+    ictl = Istioctl(istioctl_path=ISTIOCTL_BINARY, namespace=NAMESPACE, profile=PROFILE)
+
+    ictl.upgrade()
+
+    assert mocked_precheck.call_count == 1
+    mocked_check_output.assert_called_once_with(
+        [
+            ISTIOCTL_BINARY,
+            "upgrade",
+            "-s",
+            PROFILE,
+            "-s",
+            f"values.global.istioNamespace={NAMESPACE}",
+        ]
+    )
+
+
+def test_istioctl_upgrade_error(mocker, mocked_check_output_failing):
+    mocked_precheck = mocker.patch("istioctl.Istioctl.precheck")
+
+    ictl = Istioctl(istioctl_path=ISTIOCTL_BINARY, namespace=NAMESPACE, profile=PROFILE)
+
+    with pytest.raises(UpgradeFailedError) as exception_info:
+        ictl.upgrade()
+
+    # Check if we failed for the right reason
+    assert "istioctl upgrade" in exception_info.value.args[0]
+
+
+def test_istioctl_upgrade_error_in_precheck(mocker):
+    mocked_precheck = mocker.patch("istioctl.Istioctl.precheck")
+    mocked_precheck.side_effect = CalledProcessError(returncode=1, cmd="")
+
+    ictl = Istioctl(istioctl_path=ISTIOCTL_BINARY, namespace=NAMESPACE, profile=PROFILE)
+
+    with pytest.raises(UpgradeFailedError):
+        ictl.upgrade()

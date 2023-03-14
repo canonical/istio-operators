@@ -13,6 +13,10 @@ class ManifestFailedError(Exception):
     pass
 
 
+class UpgradeFailedError(Exception):
+    pass
+
+
 class Istioctl:
     def __init__(self, istioctl_path: str, namespace: str = "istio-system", profile: str = "minimal"):
         """Wrapper for the istioctl binary
@@ -115,7 +119,21 @@ class Istioctl:
 
     def upgrade(self):
         """Upgrades the Istio installation using istioctl."""
-        # TODO: Include the precheck here too
-        # TODO: Robust error raising
-        # TODO: Really test this one for the failure conditions.
-        raise NotImplementedError()
+        try:
+            self.precheck()
+        except subprocess.CalledProcessError as cpe:
+            raise UpgradeFailedError("Upgrade failed during `istio precheck` with error code"
+                                     f" {cpe.returncode}") from cpe
+
+        try:
+            subprocess.check_output(
+                [
+                    self._istioctl_path,
+                    "upgrade",
+                    *self._istioctl_flags,
+                ]
+            )
+        except subprocess.CalledProcessError as cpe:
+            raise UpgradeFailedError("Upgrade failed during `istioctl upgrade` with error code"
+                                     f" {cpe.returncode}") from cpe
+
