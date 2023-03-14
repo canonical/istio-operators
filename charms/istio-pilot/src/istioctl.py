@@ -76,3 +76,9 @@ class Istioctl:
         """Removes the istio installation using istioctl and Lightkube."""
         raise NotImplementedError()
 
+    def upgrade(self):
+        """Upgrades the Istio installation using istioctl."""
+        # TODO: Include the precheck here too
+        # TODO: Robust error raising
+        # TODO: Really test this one for the failure conditions.
+        raise NotImplementedError()

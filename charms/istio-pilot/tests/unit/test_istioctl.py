@@ -100,3 +100,7 @@ def test_istioctl_manifest_error(mocked_check_output_failing):
 
 def test_istioctl_remove():
     raise NotImplementedError()
+
+
+def test_istioctl_upgrade():
+    raise NotImplementedError()
