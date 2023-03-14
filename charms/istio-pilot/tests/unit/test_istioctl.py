@@ -9,7 +9,7 @@ NAMESPACE = "dummy-namespace"
 PROFILE = "my-profile"
 
 
-def test_istioctl_install(subprocess):
+def test_istioctl_install(mocked_check_call):
     """Tests that istioctl.install() calls the binary successfully with the expected arguments."""
     ictl = Istioctl(istioctl_path=ISTIOCTL_BINARY, namespace=NAMESPACE, profile=PROFILE)
 
@@ -26,25 +26,38 @@ def test_istioctl_install(subprocess):
         f"values.global.istioNamespace={NAMESPACE}",
     ]
 
-    subprocess.check_call.assert_called_once_with(expected_call_args)
+    mocked_check_call.assert_called_once_with(expected_call_args)
 
 
 @pytest.fixture()
-def subprocess_failing(subprocess):
+def mocked_check_call_failing(mocked_check_call):
     cpe = CalledProcessError(
         cmd="",
         returncode=1,
         stderr="stderr",
         output="stdout"
     )
+    mocked_check_call.return_value = None
+    mocked_check_call.side_effect = cpe
 
-    for method_name in ("check_call", "check_output"):
-        method = getattr(subprocess, method_name)
-        method.side_effect = cpe
-    yield subprocess
+    yield mocked_check_call
 
 
-def test_istioctl_install_error(subprocess_failing):
+@pytest.fixture()
+def mocked_check_output_failing(mocked_check_output):
+    cpe = CalledProcessError(
+        cmd="",
+        returncode=1,
+        stderr="stderr",
+        output="stdout"
+    )
+    mocked_check_output.return_value = None
+    mocked_check_output.side_effect = cpe
+
+    yield mocked_check_output
+
+
+def test_istioctl_install_error(mocked_check_call_failing):
     """Tests that istioctl.install() calls the binary successfully with the expected arguments."""
     ictl = Istioctl(istioctl_path=ISTIOCTL_BINARY, namespace=NAMESPACE, profile=PROFILE)
 
