@@ -4,12 +4,12 @@
 import glob
 import json
 import logging
-import yaml
 from pathlib import Path
 
 import pytest
 import requests
 import tenacity
+import yaml
 from pytest_operator.plugin import OpsTest
 
 log = logging.getLogger(__name__)

@@ -24,7 +24,7 @@ requires:
 ```python
 from charms.istio_pilot.v0.istio_gateway_info import GatewayProvider, GatewayRelationError
 
-Class SomeCharm(CharmBase):
+class SomeCharm(CharmBase):
     def __init__(self, *args):
         self.gateway = GatewayProvider(self)
         self.framework.observe(self.on.some_event_emitted, self.some_event_function)
@@ -33,12 +33,13 @@ Class SomeCharm(CharmBase):
         # use the getter function wherever the info is needed
         try:
             gateway_data = self.gateway_relation.get_relation_data()
-            except GatewayRelationError as error:
-            ...
+        except GatewayRelationError as error:
+            "your error handler goes here"
 ```
 """
 
 import logging
+
 from ops.framework import Object
 from ops.model import Application
 
@@ -104,22 +105,17 @@ class GatewayRequirer(Object):
 
         data = gateway[0].data[remote_app]
 
-        if not "gateway_name" in data:
-            logger.error(
-                "Missing gateway name in gateway-info relation data. Waiting for gateway creation in istio-pilot"
-            )
-            raise GatewayRelationDataMissingError(
-                "Missing gateway name in gateway-info relation data. Waiting for gateway creation in istio-pilot"
-            )
+        if "gateway_name" not in data:
+            err_msg = "Missing gateway name in gateway-info relation data. Waiting for gateway creation in istio-pilot"
+            logger.error(err_msg)
+            raise GatewayRelationDataMissingError(err_msg)
 
-        if not "gateway_namespace" in data:
-            logger.error("Missing gateway namespace in gateway-info relation data")
-            raise GatewayRelationDataMissingError(
-                "Missing gateway namespace in gateway-info relation data"
-            )
+        if "gateway_namespace" not in data:
+            err_msg = "Missing gateway namespace in gateway-info relation data"
+            logger.error(err_msg)
+            raise GatewayRelationDataMissingError(err_msg)
 
         return {
             "gateway_name": data["gateway_name"],
             "gateway_namespace": data["gateway_namespace"],
         }
-
