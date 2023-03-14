@@ -24,6 +24,15 @@ class Istioctl:
         self._namespace = namespace
         self._profile = profile
 
+    @property
+    def _istioctl_flags(self):
+        return [
+            "-s",
+            self._profile,
+            "-s",
+            f"values.global.istioNamespace={self._namespace}"
+        ]
+
     def install(self):
         """Wrapper for the `istioctl install` command."""
         try:
@@ -32,10 +41,7 @@ class Istioctl:
                     self._istioctl_path,
                     "install",
                     "-y",
-                    "-s",
-                    self._profile,
-                    "-s",
-                    f"values.global.istioNamespace={self._namespace}",
+                    *self._istioctl_flags
                 ]
             )
         except subprocess.CalledProcessError as cpe:
@@ -59,10 +65,7 @@ class Istioctl:
                     self._istioctl_path,
                     "manifest",
                     "generate",
-                    "-s",
-                    self._profile,
-                    "-s",
-                    f"values.global.istioNamespace={self._namespace}",
+                    *self._istioctl_flags
                 ]
             )
         except subprocess.CalledProcessError as cpe:
