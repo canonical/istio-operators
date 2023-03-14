@@ -1,9 +1,13 @@
 import logging
 import subprocess
 
+import lightkube
+from charmed_kubeflow_chisme.lightkube.batch import delete_many
+
 
 class InstallFailedError(Exception):
     pass
+
 
 class ManifestFailedError(Exception):
     pass
@@ -73,8 +77,23 @@ class Istioctl:
         return manifests
 
     def remove(self):
-        """Removes the istio installation using istioctl and Lightkube."""
-        raise NotImplementedError()
+        """Removes the Istio installation using istioctl and Lightkube.
+
+        TODO: Should we use `istioctl x uninstall` here instead of lightkube?  It is an
+        experimental feature but included in all istioctl versions we support.
+        """
+        manifest = self.manifest()
+
+        # Render YAML into Lightkube Objects
+        k8s_objects = lightkube.codecs.load_all_yaml(
+            manifest, create_resources_for_crds=True
+        )
+
+        client = lightkube.Client()
+        delete_many(
+            client=client,
+            objs=k8s_objects
+        )
 
     def upgrade(self):
         """Upgrades the Istio installation using istioctl."""

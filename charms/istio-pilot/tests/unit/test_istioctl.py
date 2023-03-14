@@ -1,5 +1,8 @@
+from pathlib import Path
 from subprocess import CalledProcessError
+from unittest.mock import MagicMock
 
+from lightkube import ApiError
 import pytest
 
 from istioctl import Istioctl, InstallFailedError, ManifestFailedError
@@ -7,6 +10,7 @@ from istioctl import Istioctl, InstallFailedError, ManifestFailedError
 ISTIOCTL_BINARY = "not_really_istioctl"
 NAMESPACE = "dummy-namespace"
 PROFILE = "my-profile"
+EXAMPLE_MANIFEST = "./tests/unit/example_manifest.yaml"
 
 
 def test_istioctl_install(mocked_check_call):
@@ -98,8 +102,36 @@ def test_istioctl_manifest_error(mocked_check_output_failing):
         ictl.manifest()
 
 
-def test_istioctl_remove():
-    raise NotImplementedError()
+@pytest.fixture()
+def mocked_lightkube_client(mocker):
+    mocked_lightkube_client = MagicMock()
+    mocked_lightkube_client_class = mocker.patch("istioctl.lightkube.Client")
+    mocked_lightkube_client_class.return_value = mocked_lightkube_client
+
+    yield mocked_lightkube_client
+
+
+def test_istioctl_remove(mocked_check_output, mocked_lightkube_client):
+    mocked_check_output.return_value = Path(EXAMPLE_MANIFEST).read_text()
+
+    ictl = Istioctl(istioctl_path=ISTIOCTL_BINARY, namespace=NAMESPACE, profile=PROFILE)
+
+    ictl.remove()
+
+    assert mocked_lightkube_client.delete.call_count == 3
+
+
+def test_istioctl_remove_error(mocked_check_output, mocked_lightkube_client, mocker):
+    mocked_check_output.return_value = Path(EXAMPLE_MANIFEST).read_text()
+
+    api_error = ApiError(response=mocker.MagicMock())
+    mocked_lightkube_client.delete.return_value = None
+    mocked_lightkube_client.delete.side_effect = api_error
+
+    ictl = Istioctl(istioctl_path=ISTIOCTL_BINARY, namespace=NAMESPACE, profile=PROFILE)
+
+    with pytest.raises(ApiError):
+        ictl.remove()
 
 
 def test_istioctl_upgrade():
