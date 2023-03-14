@@ -79,6 +79,21 @@ class Istioctl:
 
         return manifests
 
+    def precheck(self) -> str:
+        """Executes `istioctl x precheck` to validate whether the environment can be updated.
+
+        Raises:
+            subprocess.CalledProcessError: if the precheck command fails.
+        """
+        subprocess.check_call(
+            [
+                self._istioctl_path,
+                "x",
+                "precheck",
+            ]
+        )
+
+
     def remove(self):
         """Removes the Istio installation using istioctl and Lightkube.
 

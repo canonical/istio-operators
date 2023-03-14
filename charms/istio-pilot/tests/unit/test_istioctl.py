@@ -134,5 +134,20 @@ def test_istioctl_remove_error(mocked_check_output, mocked_lightkube_client, moc
         ictl.remove()
 
 
+def test_istioctl_precheck(mocked_check_call):
+    ictl = Istioctl(istioctl_path=ISTIOCTL_BINARY, namespace=NAMESPACE, profile=PROFILE)
+
+    ictl.precheck()
+
+    mocked_check_call.assert_called_once_with([ISTIOCTL_BINARY, "x", "precheck"])
+
+
+def test_istioctl_precheck_error(mocked_check_call_failing):
+    ictl = Istioctl(istioctl_path=ISTIOCTL_BINARY, namespace=NAMESPACE, profile=PROFILE)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        ictl.precheck()
+
+
 def test_istioctl_upgrade():
     raise NotImplementedError()
