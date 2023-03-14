@@ -1,8 +1,8 @@
 import logging
 import subprocess
 
-from lightkube import Client, codecs
 from charmed_kubeflow_chisme.lightkube.batch import delete_many
+from lightkube import Client, codecs
 
 
 class InstallFailedError(Exception):

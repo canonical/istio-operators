@@ -123,7 +123,9 @@ def test_basic(harness, mocked_check_call, mocker):
     assert harness.charm.model.unit.status == ActiveStatus("")
 
 
-def test_with_ingress_relation(harness, mocked_check_call, mocked_client, helpers, mocker, mocked_list):
+def test_with_ingress_relation(
+    harness, mocked_check_call, mocked_client, helpers, mocker, mocked_list
+):
     # Mock _is_gateway_service_up() to simulate that we do see a gateway from istio-ingressgateway
     mocker.patch("charm.Operator._is_gateway_service_up", return_value=True)
 

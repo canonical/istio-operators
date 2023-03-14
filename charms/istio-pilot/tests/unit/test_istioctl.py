@@ -2,10 +2,10 @@ from pathlib import Path
 from subprocess import CalledProcessError
 from unittest.mock import MagicMock
 
-from lightkube import ApiError
 import pytest
+from lightkube import ApiError
 
-from istioctl import Istioctl, InstallFailedError, ManifestFailedError, UpgradeFailedError
+from istioctl import InstallFailedError, Istioctl, ManifestFailedError, UpgradeFailedError
 
 ISTIOCTL_BINARY = "not_really_istioctl"
 NAMESPACE = "dummy-namespace"
@@ -161,7 +161,7 @@ def test_istioctl_upgrade(mocker, mocked_check_output):
 
 
 def test_istioctl_upgrade_error(mocker, mocked_check_output_failing):
-    mocked_precheck = mocker.patch("istioctl.Istioctl.precheck")
+    mocker.patch("istioctl.Istioctl.precheck")
 
     ictl = Istioctl(istioctl_path=ISTIOCTL_BINARY, namespace=NAMESPACE, profile=PROFILE)
 

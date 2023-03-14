@@ -105,7 +105,6 @@ def mocked_check_output(mocker):
     yield mocked_check_output
 
 
-
 @pytest.fixture
 def harness():
     return Harness(Operator)
