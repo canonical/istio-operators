@@ -66,8 +66,36 @@ def test_istioctl_install_error(mocked_check_call_failing):
         ictl.install()
 
 
-def test_istioctl_manifest(subprocess):
-    raise NotImplementedError()
+def test_istioctl_manifest(mocked_check_output):
+    ictl = Istioctl(istioctl_path=ISTIOCTL_BINARY, namespace=NAMESPACE, profile=PROFILE)
+
+    manifest = ictl.manifest()
+
+    # Assert that we call istioctl with the expected arguments
+    expected_call_args = [
+        ISTIOCTL_BINARY,
+        "manifest",
+        "generate",
+        "-s",
+        PROFILE,
+        "-s",
+        f"values.global.istioNamespace={NAMESPACE}",
+    ]
+
+    mocked_check_output.assert_called_once_with(expected_call_args)
+
+    # Assert that we received the expected manifests from istioctl
+    expected_manifest = "stdout"
+    assert manifest == expected_manifest
+
+
+def test_istioctl_manifest_error(mocked_check_output_failing):
+    """Tests that istioctl.install() calls the binary successfully with the expected arguments."""
+    ictl = Istioctl(istioctl_path=ISTIOCTL_BINARY, namespace=NAMESPACE, profile=PROFILE)
+
+    # Assert that we raise an error when istioctl fails
+    with pytest.raises(ManifestFailedError):
+        ictl.manifest()
 
 
 def test_istioctl_remove():

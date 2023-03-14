@@ -43,9 +43,34 @@ class Istioctl:
             raise InstallFailedError(error_msg) from cpe
 
 
-    def manifest(self):
-        """Wrapper for the `istioctl manifest generate` command."""
-        raise NotImplementedError()
+    def manifest(self) -> str:
+        """Wrapper for the `istioctl manifest generate` command.
+
+        Returns:
+            (str) a YAML string of the Kubernetes manifest for Istio
+        """
+        try:
+            manifests = subprocess.check_output(
+                [
+                    self._istioctl_path,
+                    "manifest",
+                    "generate",
+                    "-s",
+                    self._profile,
+                    "-s",
+                    f"values.global.istioNamespace={self._namespace}",
+                ]
+            )
+        except subprocess.CalledProcessError as cpe:
+            error_msg = f"Failed to generate manifests for istio using istioctl. " \
+                        f"Exit code: {cpe.returncode}."
+            logging.error(error_msg)
+            logging.error(f"stdout: {cpe.stdout}")
+            logging.error(f"stderr: {cpe.stderr}")
+
+            raise ManifestFailedError(error_msg) from cpe
+
+        return manifests
 
     def remove(self):
         """Removes the istio installation using istioctl and Lightkube."""
