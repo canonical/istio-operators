@@ -1,3 +1,4 @@
+from contextlib import nullcontext as does_not_raise
 from pathlib import Path
 from subprocess import CalledProcessError
 from unittest.mock import MagicMock
@@ -180,3 +181,13 @@ def test_istioctl_upgrade_error_in_precheck(mocker):
 
     with pytest.raises(UpgradeFailedError):
         ictl.upgrade()
+
+
+def test_istioctl_upgrade_error_in_precheck_with_precheck_disabled(mocker):
+    mocked_precheck = mocker.patch("istioctl.Istioctl.precheck")
+    mocked_precheck.side_effect = CalledProcessError(returncode=1, cmd="")
+
+    ictl = Istioctl(istioctl_path=ISTIOCTL_BINARY, namespace=NAMESPACE, profile=PROFILE)
+
+    with does_not_raise():
+        ictl.upgrade(precheck=False)

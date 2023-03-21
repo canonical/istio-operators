@@ -102,14 +102,19 @@ class Istioctl:
         client = Client()
         delete_many(client=client, objs=k8s_objects)
 
-    def upgrade(self):
-        """Upgrades the Istio installation using istioctl."""
-        try:
-            self.precheck()
-        except subprocess.CalledProcessError as cpe:
-            raise UpgradeFailedError(
-                "Upgrade failed during `istio precheck` with error code" f" {cpe.returncode}"
-            ) from cpe
+    def upgrade(self, precheck: bool = True):
+        """Upgrades the Istio installation using istioctl.
+
+        Args:
+            precheck (bool): Whether to run `self.precheck()` before upgrading
+        """
+        if precheck:
+            try:
+                self.precheck()
+            except subprocess.CalledProcessError as cpe:
+                raise UpgradeFailedError(
+                    "Upgrade failed during `istio precheck` with error code" f" {cpe.returncode}"
+                ) from cpe
 
         try:
             subprocess.check_output(
