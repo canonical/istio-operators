@@ -21,6 +21,10 @@ class UpgradeFailedError(Exception):
     pass
 
 
+class VersionCheckError(Exception):
+    pass
+
+
 class Istioctl:
     def __init__(
         self, istioctl_path: str, namespace: str = "istio-system", profile: str = "minimal"
@@ -133,3 +137,53 @@ class Istioctl:
             raise UpgradeFailedError(
                 "Upgrade failed during `istioctl upgrade` with error code" f" {cpe.returncode}"
             ) from cpe
+
+
+def get_client_version(version_dict: dict) -> str:
+    """Returns the client version from a dict of `istioctl version` output
+
+    Args:
+        version_dict (dict): A dict of the version output from `istioctl version -o yaml`
+
+    Returns:
+        (str) The client version
+    """
+    try:
+        version = version_dict["clientVersion"]["version"]
+    except KeyError:
+        raise VersionCheckError("Failed to get client version - no version found in output")
+    return version
+
+
+def get_control_plane_version(version_dict: dict) -> str:
+    """Returns the control plane version from a dict of `istioctl version` output
+
+    Args:
+        version_dict (dict): A dict of the version output from `istioctl version -o yaml`
+
+    Returns:
+        (str) The control plane version
+    """
+    # Assert that we have only one mesh and it says it is a pilot.  Not sure how we can handle
+    # multiple meshes here.
+    error_message_template = "Failed to get control plane version - {message}"
+    try:
+        meshes = version_dict["meshVersion"]
+    except KeyError:
+        raise VersionCheckError(error_message_template.format(message="no control plane found"))
+
+    if len(meshes) == 0:
+        raise VersionCheckError(error_message_template.format(message="no mesh found"))
+    if len(meshes) > 1:
+        raise VersionCheckError(error_message_template.format(message="too many meshes found"))
+
+    mesh = meshes[0]
+
+    try:
+        if mesh["Component"] != "pilot":
+            raise VersionCheckError(error_message_template.format(message="no control plane found"))
+        version = mesh["Info"]["version"]
+    except KeyError:
+        raise VersionCheckError(error_message_template.format(message="no control plane found"))
+
+    return version
