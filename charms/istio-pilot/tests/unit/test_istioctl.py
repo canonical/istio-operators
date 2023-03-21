@@ -136,7 +136,7 @@ def test_istioctl_precheck(mocked_check_call):
 def test_istioctl_precheck_error(mocked_check_call_failing):
     ictl = Istioctl(istioctl_path=ISTIOCTL_BINARY, namespace=NAMESPACE, profile=PROFILE)
 
-    with pytest.raises(CalledProcessError):
+    with pytest.raises(PrecheckFailedError):
         ictl.precheck()
 
 
@@ -175,7 +175,7 @@ def test_istioctl_upgrade_error(mocker, mocked_check_output_failing):
 
 def test_istioctl_upgrade_error_in_precheck(mocker):
     mocked_precheck = mocker.patch("istioctl.Istioctl.precheck")
-    mocked_precheck.side_effect = CalledProcessError(returncode=1, cmd="")
+    mocked_precheck.side_effect = PrecheckFailedError()
 
     ictl = Istioctl(istioctl_path=ISTIOCTL_BINARY, namespace=NAMESPACE, profile=PROFILE)
 

@@ -78,19 +78,24 @@ class Istioctl:
 
         return manifests
 
-    def precheck(self) -> str:
+    def precheck(self):
         """Executes `istioctl x precheck` to validate whether the environment can be updated.
 
         Raises:
-            subprocess.CalledProcessError: if the precheck command fails.
+            PrecheckFailedError: if the precheck command fails.
         """
-        subprocess.check_call(
-            [
-                self._istioctl_path,
-                "x",
-                "precheck",
-            ]
-        )
+        try:
+            subprocess.check_call(
+                [
+                    self._istioctl_path,
+                    "x",
+                    "precheck",
+                ]
+            )
+        except subprocess.CalledProcessError as cpe:
+            raise PrecheckFailedError(
+                "Upgrade failed during `istio precheck` with error code" f" {cpe.returncode}"
+            ) from cpe
 
     def remove(self):
         """Removes the Istio installation using istioctl and Lightkube.
@@ -113,12 +118,7 @@ class Istioctl:
             precheck (bool): Whether to run `self.precheck()` before upgrading
         """
         if precheck:
-            try:
-                self.precheck()
-            except subprocess.CalledProcessError as cpe:
-                raise PrecheckFailedError(
-                    "Upgrade failed during `istio precheck` with error code" f" {cpe.returncode}"
-                ) from cpe
+            self.precheck()
 
         try:
             subprocess.check_output(
