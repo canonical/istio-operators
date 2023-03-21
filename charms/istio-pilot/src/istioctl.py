@@ -1,6 +1,7 @@
 import logging
 import subprocess
 
+import yaml
 from charmed_kubeflow_chisme.lightkube.batch import delete_many
 from lightkube import Client, codecs
 
@@ -138,6 +139,26 @@ class Istioctl:
                 "Upgrade failed during `istioctl upgrade` with error code" f" {cpe.returncode}"
             ) from cpe
 
+    def version(self) -> dict:
+        """Returns istio client and control plane versions."""
+        try:
+            version_string = subprocess.check_output(
+                [
+                    self._istioctl_path,
+                    "version",
+                    f"-i {self._namespace}",
+                    "-o yaml",
+                ]
+            )
+        except subprocess.CalledProcessError as cpe:
+            raise VersionCheckError("Failed to get Istio version") from cpe
+
+        version_dict = yaml.safe_load(version_string)
+        return {
+            "client": get_client_version(version_dict),
+            "control_plane": get_control_plane_version(version_dict)
+        }
+
 
 def get_client_version(version_dict: dict) -> str:
     """Returns the client version from a dict of `istioctl version` output
@@ -150,7 +171,8 @@ def get_client_version(version_dict: dict) -> str:
     """
     try:
         version = version_dict["clientVersion"]["version"]
-    except KeyError:
+    except (KeyError, TypeError):
+        # TypeError in case version_dict is None
         raise VersionCheckError("Failed to get client version - no version found in output")
     return version
 

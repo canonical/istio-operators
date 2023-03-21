@@ -197,6 +197,54 @@ def test_istioctl_upgrade_error_in_precheck_with_precheck_disabled(mocker):
         ictl.upgrade(precheck=False)
 
 
+def test_istioctl_version(mocked_check_output):
+    """Tests that istioctl.version() returns successfully when expected"""
+    expected_client_version = "1.2.3"
+    expected_control_version = "4.5.6"
+    environment = Environment(loader=FileSystemLoader("./tests/unit/data/"))
+    template = environment.get_template("istioctl_version_output_template.yaml.j2")
+    istioctl_version_output_str = template.render(
+        client_version=expected_client_version,
+        control_version=expected_control_version,
+    )
+    mocked_check_output.return_value = istioctl_version_output_str
+
+    ictl = Istioctl(istioctl_path=ISTIOCTL_BINARY, namespace=NAMESPACE, profile=PROFILE)
+
+    version_data = ictl.version()
+
+    mocked_check_output.assert_called_once_with(
+        [
+            ISTIOCTL_BINARY,
+            "version",
+            f"-i {NAMESPACE}",
+            "-o yaml",
+        ]
+    )
+
+    assert version_data["client"] == expected_client_version
+    assert version_data["control_plane"] == expected_control_version
+
+
+def test_istioctl_version_no_versions(mocked_check_output):
+    """Tests that istioctl.version() returns successfully when expected"""
+    # Mock with empty return
+    mocked_check_output.return_value = ""
+
+    ictl = Istioctl(istioctl_path=ISTIOCTL_BINARY, namespace=NAMESPACE, profile=PROFILE)
+
+    with pytest.raises(VersionCheckError):
+        ictl.version()
+
+
+def test_istioctl_version_istioctl_command_fails(mocked_check_output_failing):
+    """Tests that istioctl.version() returns successfully when expected"""
+    ictl = Istioctl(istioctl_path=ISTIOCTL_BINARY, namespace=NAMESPACE, profile=PROFILE)
+
+    with pytest.raises(VersionCheckError):
+        ictl.version()
+
+
 def test_get_client_version():
     client_version = "1.2.3"
 
