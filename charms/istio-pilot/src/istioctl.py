@@ -13,6 +13,10 @@ class ManifestFailedError(Exception):
     pass
 
 
+class PrecheckFailedError(Exception):
+    pass
+
+
 class UpgradeFailedError(Exception):
     pass
 
@@ -112,7 +116,7 @@ class Istioctl:
             try:
                 self.precheck()
             except subprocess.CalledProcessError as cpe:
-                raise UpgradeFailedError(
+                raise PrecheckFailedError(
                     "Upgrade failed during `istio precheck` with error code" f" {cpe.returncode}"
                 ) from cpe
 

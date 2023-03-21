@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 from lightkube import ApiError
 
-from istioctl import InstallFailedError, Istioctl, ManifestFailedError, UpgradeFailedError
+from istioctl import InstallFailedError, Istioctl, ManifestFailedError, PrecheckFailedError, UpgradeFailedError
 
 ISTIOCTL_BINARY = "not_really_istioctl"
 NAMESPACE = "dummy-namespace"
@@ -179,7 +179,7 @@ def test_istioctl_upgrade_error_in_precheck(mocker):
 
     ictl = Istioctl(istioctl_path=ISTIOCTL_BINARY, namespace=NAMESPACE, profile=PROFILE)
 
-    with pytest.raises(UpgradeFailedError):
+    with pytest.raises(PrecheckFailedError):
         ictl.upgrade()
 
 
