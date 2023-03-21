@@ -3,15 +3,19 @@ from pathlib import Path
 from subprocess import CalledProcessError
 from unittest.mock import MagicMock
 
+from jinja2 import Environment, FileSystemLoader
 import pytest
 from lightkube import ApiError
+import yaml
 
-from istioctl import InstallFailedError, Istioctl, ManifestFailedError, PrecheckFailedError, UpgradeFailedError
+from istioctl import InstallFailedError, Istioctl, ManifestFailedError, PrecheckFailedError, UpgradeFailedError, \
+    get_client_version, VersionCheckError, get_control_plane_version
 
 ISTIOCTL_BINARY = "not_really_istioctl"
 NAMESPACE = "dummy-namespace"
 PROFILE = "my-profile"
 EXAMPLE_MANIFEST = "./tests/unit/example_manifest.yaml"
+TEST_DATA_PATH = Path("./tests/unit/data/")
 
 
 def test_istioctl_install(mocked_check_call):
@@ -191,3 +195,107 @@ def test_istioctl_upgrade_error_in_precheck_with_precheck_disabled(mocker):
 
     with does_not_raise():
         ictl.upgrade(precheck=False)
+
+
+def test_istioctl_version(mocked_check_output):
+    """Tests that istioctl.version() returns successfully when expected"""
+    expected_client_version = "1.2.3"
+    expected_control_version = "4.5.6"
+    environment = Environment(loader=FileSystemLoader("./tests/unit/data/"))
+    template = environment.get_template("istioctl_version_output_template.yaml.j2")
+    istioctl_version_output_str = template.render(
+        client_version=expected_client_version,
+        control_version=expected_control_version,
+    )
+    mocked_check_output.return_value = istioctl_version_output_str
+
+    ictl = Istioctl(istioctl_path=ISTIOCTL_BINARY, namespace=NAMESPACE, profile=PROFILE)
+
+    version_data = ictl.version()
+
+    mocked_check_output.assert_called_once_with(
+        [
+            ISTIOCTL_BINARY,
+            "version",
+            f"-i {NAMESPACE}",
+            "-o yaml",
+        ]
+    )
+
+    assert version_data["client"] == expected_client_version
+    assert version_data["control_plane"] == expected_control_version
+
+
+def test_istioctl_version_no_versions(mocked_check_output):
+    """Tests that istioctl.version() returns successfully when expected"""
+    # Mock with empty return
+    mocked_check_output.return_value = ""
+
+    ictl = Istioctl(istioctl_path=ISTIOCTL_BINARY, namespace=NAMESPACE, profile=PROFILE)
+
+    with pytest.raises(VersionCheckError):
+        ictl.version()
+
+
+def test_istioctl_version_istioctl_command_fails(mocked_check_output_failing):
+    """Tests that istioctl.version() returns successfully when expected"""
+    ictl = Istioctl(istioctl_path=ISTIOCTL_BINARY, namespace=NAMESPACE, profile=PROFILE)
+
+    with pytest.raises(VersionCheckError):
+        ictl.version()
+
+
+def test_get_client_version():
+    client_version = "1.2.3"
+
+    environment = Environment(loader=FileSystemLoader("./tests/unit/data/"))
+    template = environment.get_template("istioctl_version_output_template.yaml.j2")
+    istioctl_version_output_str = template.render(
+        client_version=client_version,
+        control_version="None",
+    )
+
+    istioctl_version_output = yaml.safe_load(istioctl_version_output_str)
+
+    assert get_client_version(istioctl_version_output) == client_version
+
+
+def test_get_client_version_no_version():
+    """Asserts that get_client_version raises when input does not have correct keys."""
+    with pytest.raises(VersionCheckError):
+        get_client_version({})
+
+
+def test_get_control_plane_version():
+    control_plane_version = "3.2.1"
+
+    environment = Environment(loader=FileSystemLoader(TEST_DATA_PATH))
+    template = environment.get_template("istioctl_version_output_template.yaml.j2")
+    istioctl_version_output_str = template.render(
+        client_version="None",
+        control_version=control_plane_version,
+    )
+
+    istioctl_version_output = yaml.safe_load(istioctl_version_output_str)
+
+    assert get_control_plane_version(istioctl_version_output) == control_plane_version
+
+
+def test_get_control_plane_version_no_version():
+    """Asserts that get_client_version raises when input does not have correct keys."""
+    with pytest.raises(VersionCheckError):
+        get_control_plane_version({})
+
+
+def test_get_control_plane_version_too_many_meshes():
+    istioctl_version_output = yaml.safe_load((TEST_DATA_PATH / "istioctl_version_output_too_many_meshes.yaml").read_text())
+
+    with pytest.raises(VersionCheckError):
+        get_control_plane_version(istioctl_version_output)
+
+
+def test_get_control_plane_version_no_pilot_in_meshes():
+    istioctl_version_output = yaml.safe_load((TEST_DATA_PATH / "istioctl_version_output_no_pilot_in_control.yaml").read_text())
+    with pytest.raises(VersionCheckError):
+        get_control_plane_version(istioctl_version_output)
+
