@@ -12,22 +12,30 @@ from lightkube.core.exceptions import ApiError
 from lightkube.resources.core_v1 import Service
 from ops.charm import CharmBase, RelationBrokenEvent
 from ops.main import main
-from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
+from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from serialized_data_interface import NoCompatibleVersions, NoVersionsListed, get_interfaces
 
+# TODO: Use directly from Chisme when the pyyaml version conflict between ops and sdi is solved by
+#  [this pr](https://github.com/canonical/serialized-data-interface/pull/45)
+from generic_runtime_error import GenericCharmRuntimeError
 from istio_gateway_info_provider import RELATION_NAME, GatewayProvider
+from istioctl import Istioctl, PrecheckFailedError, UpgradeFailedError
 from resources_handler import ResourceHandler
 
 GATEWAY_HTTP_PORT = 8080
 GATEWAY_HTTPS_PORT = 8443
 METRICS_PORT = 15014
 GATEWAY_WORKLOAD_SERVICE_NAME = "istio-ingressgateway-workload"
+ISTIOCTL_PATH = "./istioctl"
+ISTIOCTL_DEPOYMENT_PROFILE = "minimal"
+UPGRADE_FAILED_MSG = "Failed to upgrade Istio. {message}"
 
 
 class Operator(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
 
+        # TODO: https://github.com/canonical/istio-operators/issues/196
         if not self.unit.is_leader():
             # We can't do anything useful when not the leader, so do nothing.
             self.model.unit.status = WaitingStatus("Waiting for leadership")
@@ -66,6 +74,7 @@ class Operator(CharmBase):
 
         self.framework.observe(self.on.install, self.install)
         self.framework.observe(self.on.remove, self.remove)
+        self.framework.observe(self.on.upgrade_charm, self.upgrade_charm)
 
         for event in [self.on.config_changed, self.on["ingress"].relation_created]:
             self.framework.observe(event, self.handle_default_gateway)
@@ -125,6 +134,41 @@ class Operator(CharmBase):
         self._resource_handler.delete_manifest(
             manifests, namespace=self.model.name, ignore_not_found=True, ignore_unauthorized=True
         )
+
+    def upgrade_charm(self, event):
+        """Upgrade charm.
+
+        Supports upgrade of exactly one minor version at a time.
+        """
+        istioctl = Istioctl(ISTIOCTL_PATH, self.model.name, ISTIOCTL_DEPOYMENT_PROFILE)
+        self._log_and_set_status(MaintenanceStatus("Upgrading Istio"))
+
+        # TODO Check versions
+
+        try:
+            self._log_and_set_status(MaintenanceStatus("Excecuting `istioctl precheck`"))
+            istioctl.precheck()
+        except PrecheckFailedError as e:
+            # TODO: Expand this message.  Give user any output of the failed command
+            self.log.error(UPGRADE_FAILED_MSG.format(message="`istioctl precheck` failed."))
+            raise GenericCharmRuntimeError("Failed to upgrade.  See `juju debug-log` for details.") from e
+        except Exception as e:
+            self.log.error(UPGRADE_FAILED_MSG.format(message="An unknown error occurred."))
+            raise GenericCharmRuntimeError("Failed to upgrade.  See `juju debug-log` for details.") from e
+
+        try:
+            self._log_and_set_status(MaintenanceStatus("Excecuting `istioctl upgrade` for our configuration"))
+            istioctl.upgrade(precheck=False)
+        except UpgradeFailedError as e:
+            # TODO: Expand this message.  Give user any output of the failed command
+            self.log.error(UPGRADE_FAILED_MSG.format(message="`istioctl upgrade` failed."))
+            raise GenericCharmRuntimeError("Failed to upgrade.  See `juju debug-log` for details.") from e
+        except Exception as e:
+            self.log.error(UPGRADE_FAILED_MSG.format(message="An unknown error occurred."))
+            raise GenericCharmRuntimeError("Failed to upgrade.  See `juju debug-log` for details.") from e
+
+        self.log.info("Upgrade complete.")
+        self.unit.status = ActiveStatus()
 
     def handle_default_gateway(self, event):
         """Handles creating gateways from charm config
@@ -375,6 +419,28 @@ class Operator(CharmBase):
             Service, name=GATEWAY_WORKLOAD_SERVICE_NAME, namespace=self.model.name
         )
         return svc
+
+    def _log_and_set_status(self, status):
+        """Sets the status of the charm and logs the status message.
+
+        TODO: Move this to Chisme
+
+        Args:
+            status: The status to set
+        """
+        self.unit.status = status
+
+        # For some reason during unit tests, self.log is not available.  Workaround this for now
+        logger = logging.getLogger(__name__)
+
+        log_destination_map = {
+            ActiveStatus: logger.info,
+            BlockedStatus: logger.warning,
+            MaintenanceStatus: logger.info,
+            WaitingStatus: logger.info,
+        }
+
+        log_destination_map[type(status)](status.message)
 
 
 def _get_gateway_address_from_svc(svc):

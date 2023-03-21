@@ -1,4 +1,5 @@
-from unittest.mock import MagicMock
+from subprocess import CalledProcessError
+from unittest.mock import MagicMock, patch
 from unittest.mock import call as Call  # noqa: N812
 
 import pytest
@@ -9,6 +10,8 @@ from lightkube.generic_resource import create_global_resource
 from ops.model import ActiveStatus, WaitingStatus
 
 from charm import _get_gateway_address_from_svc
+from generic_runtime_error import GenericCharmRuntimeError
+from istioctl import PrecheckFailedError, UpgradeFailedError
 
 
 @pytest.fixture(autouse=True)
@@ -44,6 +47,7 @@ def test_events(harness, mocker):
     send_info = mocker.patch("charm.Operator.send_info")
     handle_ingress = mocker.patch("charm.Operator.handle_ingress")
     handle_ingress_auth = mocker.patch("charm.Operator.handle_ingress_auth")
+    upgrade_charm = mocker.patch("charm.Operator.upgrade_charm")
 
     harness.charm.on.install.emit()
     install.assert_called_once()
@@ -52,6 +56,10 @@ def test_events(harness, mocker):
     harness.charm.on.remove.emit()
     remove.assert_called_once()
     remove.reset_mock()
+
+    harness.charm.on.upgrade_charm.emit()
+    upgrade_charm.assert_called_once()
+    upgrade_charm.reset_mock()
 
     rel_id = harness.add_relation("istio-pilot", "app")
     harness.update_relation_data(
@@ -614,3 +622,77 @@ def test_get_gateway_address_from_svc(
     mock_service = request.getfixturevalue(mock_service_fixture)
 
     assert _get_gateway_address_from_svc(svc=mock_service) is gateway_address
+
+
+@pytest.fixture()
+def mocked_istioctl_class(mocker):
+    mocked_istioctl_class = mocker.patch("charm.Istioctl")
+    mocked_istioctl_class.return_value = mocked_istioctl
+    yield mocked_istioctl_class
+
+
+@pytest.fixture()
+def mocked_istioctl(mocked_istioctl_class):
+    mocked_istioctl = MagicMock()
+    mocked_istioctl_class.return_value = mocked_istioctl
+    yield mocked_istioctl
+
+
+def test_upgrade_successful(harness, mocked_istioctl, mocked_istioctl_class, mocker):
+    """Tests that charm.upgrade_charm works successfully when expected."""
+    model_name = "test-model"
+    harness.set_model_name(model_name)
+    harness.set_leader(True)
+    # Avoid initialising the resource handler
+    mocker.patch("resources_handler.load_in_cluster_generic_resources")
+
+    harness.begin()
+
+    harness.charm.upgrade_charm("mock_event")
+
+    mocked_istioctl_class.assert_called_with("./istioctl", model_name, "minimal")
+    mocked_istioctl.upgrade.assert_called_with(precheck=False)
+
+
+@pytest.fixture()
+def mocked_istioctl_precheck(mocker):
+    mocker.patch(
+        "charm.Istioctl.precheck",
+        side_effect=PrecheckFailedError()
+    )
+
+
+def test_upgrade_failed_precheck(harness, mocked_istioctl_precheck, mocker):
+    """Tests that charm.upgrade_charm fails when precheck fails."""
+    model_name = "test-model"
+    harness.set_model_name(model_name)
+    harness.set_leader(True)
+    # Avoid initialising the resource handler
+    mocker.patch("resources_handler.load_in_cluster_generic_resources")
+
+    harness.begin()
+
+    with pytest.raises(GenericCharmRuntimeError):
+        harness.charm.upgrade_charm("mock_event")
+
+
+@pytest.fixture()
+def mocked_istioctl_upgrade(mocker):
+    mocker.patch(
+        "charm.Istioctl.upgrade",
+        side_effect=UpgradeFailedError()
+    )
+
+
+def test_upgrade_failed_during_upgrade(harness, mocked_istioctl_upgrade, mocker):
+    """Tests that charm.upgrade_charm fails when upgrade process fails."""
+    model_name = "test-model"
+    harness.set_model_name(model_name)
+    harness.set_leader(True)
+    # Avoid initialising the resource handler
+    mocker.patch("resources_handler.load_in_cluster_generic_resources")
+
+    harness.begin()
+
+    with pytest.raises(GenericCharmRuntimeError):
+        harness.charm.upgrade_charm("mock_event")
