@@ -55,6 +55,8 @@ ordered-set==4.1.0
     # via deepdiff
 orjson==3.8.7
     # via deepdiff
+packaging==23.0
+    # via packaging
 pyrsistent==0.19.3
     # via jsonschema
 pyyaml==5.4

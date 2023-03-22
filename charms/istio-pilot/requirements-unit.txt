@@ -89,7 +89,9 @@ orjson==3.8.7
     #   -r requirements.txt
     #   deepdiff
 packaging==23.0
-    # via pytest
+    # via
+    #  -r requirements.txt
+    #  pytest
 pluggy==1.0.0
     # via pytest
 pyrsistent==0.19.3

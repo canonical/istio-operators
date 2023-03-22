@@ -14,6 +14,8 @@ from ops.charm import CharmBase, RelationBrokenEvent
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from serialized_data_interface import NoCompatibleVersions, NoVersionsListed, get_interfaces
+from packaging.version import Version
+import yaml
 
 # TODO: Use directly from Chisme when the pyyaml version conflict between ops and sdi is solved by
 #  [this pr](https://github.com/canonical/serialized-data-interface/pull/45)
@@ -490,6 +492,41 @@ def _get_address_from_loadbalancer(svc):
         return svc.status.loadBalancer.ingress[0].ip
     else:
         raise ValueError("Unknown situation - LoadBalancer service has no hostname or IP")
+
+
+def _validate_upgrade_version(versions) -> bool:
+    """Validates that the version of istioctl can upgrade the currently deployed Istio.
+
+    This asserts that the istioctl version is equal to or at most greater than the current Istio
+    control plane by no more than one minor version.
+
+    Args:
+        versions (dict): A dictionary containing:
+                            client: the client version (eg: istioctl)
+                            control_plane: the control plane version (eg: istiod)
+
+    Returns True if this is the case, else raises an exception with details.
+    """
+    client_version = Version(versions["client"])
+    control_plane_version = Version(versions["control_plane"])
+
+    if client_version < control_plane_version:
+        raise ValueError(
+            "Client version is older than control plane version.  "
+            "This is not supported by this charm."
+        )
+    elif client_version.minor - control_plane_version.minor > 1:
+        raise ValueError(
+            "Client version is more than one minor version ahead of control plane version.  "
+            "This is not supported by this charm."
+        )
+    elif client_version.major != control_plane_version.major:
+        raise ValueError(
+            "Client version is a different major version to control plane version.  "
+            "This is not supported by this charm."
+        )
+
+    return True
 
 
 if __name__ == "__main__":

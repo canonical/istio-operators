@@ -1,5 +1,5 @@
-from subprocess import CalledProcessError
-from unittest.mock import MagicMock, patch
+from contextlib import nullcontext as does_not_raise
+from unittest.mock import MagicMock
 from unittest.mock import call as Call  # noqa: N812
 
 import pytest
@@ -9,7 +9,7 @@ from lightkube.core.exceptions import ApiError
 from lightkube.generic_resource import create_global_resource
 from ops.model import ActiveStatus, WaitingStatus
 
-from charm import _get_gateway_address_from_svc
+from charm import _get_gateway_address_from_svc, _validate_upgrade_version
 from generic_runtime_error import GenericCharmRuntimeError
 from istioctl import PrecheckFailedError, UpgradeFailedError
 
@@ -696,3 +696,19 @@ def test_upgrade_failed_during_upgrade(harness, mocked_istioctl_upgrade, mocker)
 
     with pytest.raises(GenericCharmRuntimeError):
         harness.charm.upgrade_charm("mock_event")
+
+@pytest.mark.parametrize(
+    "versions, context_raised",
+    [
+        ({"client": "1.1.0", "control_plane": "1.1.0"}, does_not_raise()),
+        ({"client": "1.1.1", "control_plane": "1.1.0"}, does_not_raise()),
+        ({"client": "1.2.10", "control_plane": "1.1.0"}, does_not_raise()),
+
+        ({"client": "2.1.0", "control_plane": "1.1.0"}, pytest.raises(ValueError)),
+        ({"client": "1.1.0", "control_plane": "1.2.0"}, pytest.raises(ValueError)),
+        ({"client": "1.1.0", "control_plane": "2.1.0"}, pytest.raises(ValueError)),
+    ]
+)
+def test_validate_upgrade_version(versions, context_raised):
+    with context_raised:
+        _validate_upgrade_version(versions)
