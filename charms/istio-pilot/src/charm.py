@@ -3,7 +3,6 @@
 import logging
 import subprocess
 
-import yaml
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from jinja2 import Environment, FileSystemLoader
@@ -21,7 +20,7 @@ import yaml
 #  [this pr](https://github.com/canonical/serialized-data-interface/pull/45)
 from generic_runtime_error import GenericCharmRuntimeError
 from istio_gateway_info_provider import RELATION_NAME, GatewayProvider
-from istioctl import Istioctl, PrecheckFailedError, UpgradeFailedError
+from istioctl import Istioctl, PrecheckFailedError, UpgradeFailedError, VersionCheckError
 from resources_handler import ResourceHandler
 
 GATEWAY_HTTP_PORT = 8080
@@ -30,7 +29,10 @@ METRICS_PORT = 15014
 GATEWAY_WORKLOAD_SERVICE_NAME = "istio-ingressgateway-workload"
 ISTIOCTL_PATH = "./istioctl"
 ISTIOCTL_DEPOYMENT_PROFILE = "minimal"
-UPGRADE_FAILED_MSG = "Failed to upgrade Istio. {message}"
+UPGRADE_FAILED_MSG = "Failed to upgrade Istio.  {message}  To recover Istio, use istioctl to " \
+                     "restore the deployed Istio to a working state no more than one minor " \
+                     "version behind this install, then use `juju resolved` to try the upgrade" \
+                     " again.  Or, remove the charm and re-deploy."
 
 
 class Operator(CharmBase):
@@ -145,8 +147,24 @@ class Operator(CharmBase):
         istioctl = Istioctl(ISTIOCTL_PATH, self.model.name, ISTIOCTL_DEPOYMENT_PROFILE)
         self._log_and_set_status(MaintenanceStatus("Upgrading Istio"))
 
-        # TODO Check versions
+        # Check for version compatability for the upgrade
+        try:
+            versions = istioctl.version()
+        except VersionCheckError as e:
+            self.log.error(UPGRADE_FAILED_MSG.format(message=str(e)))
+            raise GenericCharmRuntimeError("Failed to upgrade.  See `juju debug-log` for details.") from e
 
+        try:
+            _validate_upgrade_version(versions)
+        except ValueError as e:
+            self.log.error(UPGRADE_FAILED_MSG.format(message=str(e)))
+            raise GenericCharmRuntimeError("Failed to upgrade.  See `juju debug-log` for details.") from e
+
+        # TODO: Add an override that can be set by config, eg:
+        #  `juju config istio-pilot skip-upgrade=true`, so we can get out of really sticky
+        #  situations like if our version parsing is wrong54
+
+        # Use istioctl precheck to confirm the upgrade should be safe
         try:
             self._log_and_set_status(MaintenanceStatus("Excecuting `istioctl precheck`"))
             istioctl.precheck()
@@ -158,6 +176,7 @@ class Operator(CharmBase):
             self.log.error(UPGRADE_FAILED_MSG.format(message="An unknown error occurred."))
             raise GenericCharmRuntimeError("Failed to upgrade.  See `juju debug-log` for details.") from e
 
+        # Execute the upgrade
         try:
             self._log_and_set_status(MaintenanceStatus("Excecuting `istioctl upgrade` for our configuration"))
             istioctl.upgrade(precheck=False)

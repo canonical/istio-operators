@@ -11,7 +11,7 @@ from ops.model import ActiveStatus, WaitingStatus
 
 from charm import _get_gateway_address_from_svc, _validate_upgrade_version
 from generic_runtime_error import GenericCharmRuntimeError
-from istioctl import PrecheckFailedError, UpgradeFailedError
+from istioctl import PrecheckFailedError, UpgradeFailedError, VersionCheckError
 
 
 @pytest.fixture(autouse=True)
@@ -645,6 +645,8 @@ def test_upgrade_successful(harness, mocked_istioctl, mocked_istioctl_class, moc
     harness.set_leader(True)
     # Avoid initialising the resource handler
     mocker.patch("resources_handler.load_in_cluster_generic_resources")
+    # Do not validate versions
+    mocker.patch("charm._validate_upgrade_version")
 
     harness.begin()
 
@@ -675,6 +677,43 @@ def test_upgrade_failed_precheck(harness, mocked_istioctl_precheck, mocker):
     with pytest.raises(GenericCharmRuntimeError):
         harness.charm.upgrade_charm("mock_event")
 
+
+@pytest.fixture()
+def mocked_istioctl_version(mocker):
+    mocker.patch(
+        "charm.Istioctl.precheck",
+        side_effect=VersionCheckError()
+    )
+
+
+def test_upgrade_failed_getting_version(harness, mocked_istioctl_version, mocker):
+    """Tests that charm.upgrade_charm fails when precheck fails."""
+    model_name = "test-model"
+    harness.set_model_name(model_name)
+    harness.set_leader(True)
+    # Avoid initialising the resource handler
+    mocker.patch("resources_handler.load_in_cluster_generic_resources")
+
+    harness.begin()
+
+    with pytest.raises(GenericCharmRuntimeError):
+        harness.charm.upgrade_charm("mock_event")
+
+
+def test_upgrade_failed_version_check(harness, mocker):
+    """Tests that charm.upgrade_charm fails when precheck fails."""
+    model_name = "test-model"
+    harness.set_model_name(model_name)
+    harness.set_leader(True)
+    # Avoid initialising the resource handler
+    mocker.patch("resources_handler.load_in_cluster_generic_resources")
+    # Mock _validate_upgrade_version to raise a failure
+    mocker.patch("charm._validate_upgrade_version", side_effect=ValueError())
+
+    harness.begin()
+
+    with pytest.raises(GenericCharmRuntimeError):
+        harness.charm.upgrade_charm("mock_event")
 
 @pytest.fixture()
 def mocked_istioctl_upgrade(mocker):
