@@ -149,8 +149,8 @@ class Istioctl:
                 [
                     self._istioctl_path,
                     "version",
-                    f"-i {self._namespace}",
-                    "-o yaml",
+                    f"-i={self._namespace}",
+                    "-o=yaml",
                 ]
             )
         except subprocess.CalledProcessError as cpe:
