@@ -2,8 +2,8 @@ charmed-kubeflow-chisme
 jinja2
 lightkube
 oci-image
-ops
+ops<2
 packaging
 requests
-serialized-data-interface<0.4
+serialized-data-interface
 # Needs to be pinned else unit test failing 
