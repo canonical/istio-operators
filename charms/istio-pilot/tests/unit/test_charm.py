@@ -4,13 +4,13 @@ from unittest.mock import call as Call  # noqa: N812
 
 import pytest
 import yaml
+from charmed_kubeflow_chisme.exceptions import GenericCharmRuntimeError
 from lightkube import codecs
 from lightkube.core.exceptions import ApiError
 from lightkube.generic_resource import create_global_resource
 from ops.model import ActiveStatus, WaitingStatus
 
 from charm import _get_gateway_address_from_svc, _validate_upgrade_version
-from charmed_kubeflow_chisme.exceptions import GenericCharmRuntimeError
 from istioctl import PrecheckFailedError, UpgradeFailedError, VersionCheckError
 
 
@@ -658,10 +658,7 @@ def test_upgrade_successful(harness, mocked_istioctl, mocked_istioctl_class, moc
 
 @pytest.fixture()
 def mocked_istioctl_precheck(mocker):
-    mocker.patch(
-        "charm.Istioctl.precheck",
-        side_effect=PrecheckFailedError()
-    )
+    mocker.patch("charm.Istioctl.precheck", side_effect=PrecheckFailedError())
 
 
 def test_upgrade_failed_precheck(harness, mocked_istioctl_precheck, mocker):
@@ -680,10 +677,7 @@ def test_upgrade_failed_precheck(harness, mocked_istioctl_precheck, mocker):
 
 @pytest.fixture()
 def mocked_istioctl_version(mocker):
-    mocker.patch(
-        "charm.Istioctl.precheck",
-        side_effect=VersionCheckError()
-    )
+    mocker.patch("charm.Istioctl.precheck", side_effect=VersionCheckError())
 
 
 def test_upgrade_failed_getting_version(harness, mocked_istioctl_version, mocker):
@@ -715,12 +709,10 @@ def test_upgrade_failed_version_check(harness, mocker):
     with pytest.raises(GenericCharmRuntimeError):
         harness.charm.upgrade_charm("mock_event")
 
+
 @pytest.fixture()
 def mocked_istioctl_upgrade(mocker):
-    mocker.patch(
-        "charm.Istioctl.upgrade",
-        side_effect=UpgradeFailedError()
-    )
+    mocker.patch("charm.Istioctl.upgrade", side_effect=UpgradeFailedError())
 
 
 def test_upgrade_failed_during_upgrade(harness, mocked_istioctl_upgrade, mocker):
@@ -736,17 +728,17 @@ def test_upgrade_failed_during_upgrade(harness, mocked_istioctl_upgrade, mocker)
     with pytest.raises(GenericCharmRuntimeError):
         harness.charm.upgrade_charm("mock_event")
 
+
 @pytest.mark.parametrize(
     "versions, context_raised",
     [
         ({"client": "1.1.0", "control_plane": "1.1.0"}, does_not_raise()),
         ({"client": "1.1.1", "control_plane": "1.1.0"}, does_not_raise()),
         ({"client": "1.2.10", "control_plane": "1.1.0"}, does_not_raise()),
-
         ({"client": "2.1.0", "control_plane": "1.1.0"}, pytest.raises(ValueError)),
         ({"client": "1.1.0", "control_plane": "1.2.0"}, pytest.raises(ValueError)),
         ({"client": "1.1.0", "control_plane": "2.1.0"}, pytest.raises(ValueError)),
-    ]
+    ],
 )
 def test_validate_upgrade_version(versions, context_raised):
     with context_raised:

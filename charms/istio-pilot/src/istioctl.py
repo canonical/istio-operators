@@ -159,7 +159,7 @@ class Istioctl:
         version_dict = yaml.safe_load(version_string)
         return {
             "client": get_client_version(version_dict),
-            "control_plane": get_control_plane_version(version_dict)
+            "control_plane": get_control_plane_version(version_dict),
         }
 
 
@@ -206,7 +206,9 @@ def get_control_plane_version(version_dict: dict) -> str:
 
     try:
         if mesh["Component"] != "pilot":
-            raise VersionCheckError(error_message_template.format(message="no control plane found"))
+            raise VersionCheckError(
+                error_message_template.format(message="no control plane found")
+            )
         version = mesh["Info"]["version"]
     except KeyError:
         raise VersionCheckError(error_message_template.format(message="no control plane found"))

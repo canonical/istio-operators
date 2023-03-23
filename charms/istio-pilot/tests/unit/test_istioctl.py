@@ -3,13 +3,21 @@ from pathlib import Path
 from subprocess import CalledProcessError
 from unittest.mock import MagicMock
 
-from jinja2 import Environment, FileSystemLoader
 import pytest
-from lightkube import ApiError
 import yaml
+from jinja2 import Environment, FileSystemLoader
+from lightkube import ApiError
 
-from istioctl import InstallFailedError, Istioctl, ManifestFailedError, PrecheckFailedError, UpgradeFailedError, \
-    get_client_version, VersionCheckError, get_control_plane_version
+from istioctl import (
+    InstallFailedError,
+    Istioctl,
+    ManifestFailedError,
+    PrecheckFailedError,
+    UpgradeFailedError,
+    VersionCheckError,
+    get_client_version,
+    get_control_plane_version,
+)
 
 ISTIOCTL_BINARY = "not_really_istioctl"
 NAMESPACE = "dummy-namespace"
@@ -288,14 +296,17 @@ def test_get_control_plane_version_no_version():
 
 
 def test_get_control_plane_version_too_many_meshes():
-    istioctl_version_output = yaml.safe_load((TEST_DATA_PATH / "istioctl_version_output_too_many_meshes.yaml").read_text())
+    istioctl_version_output = yaml.safe_load(
+        (TEST_DATA_PATH / "istioctl_version_output_too_many_meshes.yaml").read_text()
+    )
 
     with pytest.raises(VersionCheckError):
         get_control_plane_version(istioctl_version_output)
 
 
 def test_get_control_plane_version_no_pilot_in_meshes():
-    istioctl_version_output = yaml.safe_load((TEST_DATA_PATH / "istioctl_version_output_no_pilot_in_control.yaml").read_text())
+    istioctl_version_output = yaml.safe_load(
+        (TEST_DATA_PATH / "istioctl_version_output_no_pilot_in_control.yaml").read_text()
+    )
     with pytest.raises(VersionCheckError):
         get_control_plane_version(istioctl_version_output)
-
