@@ -326,7 +326,7 @@ class Operator(CharmBase):
 
         self.unit.status = ActiveStatus()
 
-        def get_kwargs(version, route):
+        def get_kwargs(route):
             """Handles both v1 and v2 ingress relations.
 
             v1 ingress schema doesn't allow sending over a namespace.
@@ -340,7 +340,7 @@ class Operator(CharmBase):
 
         # TODO: we could probably extract the rendering bits from the charm code
         virtual_services = "\n---".join(
-            t.render(**get_kwargs(ingress.versions[app.name], route)).strip().strip("---")
+            t.render(**get_kwargs(route)).strip().strip("---")
             for ((_, app), route) in routes.items()
         )
 
