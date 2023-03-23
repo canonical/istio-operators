@@ -171,10 +171,6 @@ class Operator(CharmBase):
                 "Failed to upgrade.  See `juju debug-log` for details."
             ) from e
 
-        # TODO: Add an override that can be set by config, eg:
-        #  `juju config istio-pilot skip-upgrade=true`, so we can get out of really sticky
-        #  situations like if our version parsing is wrong54
-
         # Use istioctl precheck to confirm the upgrade should be safe
         try:
             self._log_and_set_status(MaintenanceStatus("Executing `istioctl precheck`"))
