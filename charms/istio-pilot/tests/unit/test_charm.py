@@ -10,7 +10,7 @@ from lightkube.generic_resource import create_global_resource
 from ops.model import ActiveStatus, WaitingStatus
 
 from charm import _get_gateway_address_from_svc, _validate_upgrade_version
-from generic_runtime_error import GenericCharmRuntimeError
+from charmed_kubeflow_chisme.exceptions import GenericCharmRuntimeError
 from istioctl import PrecheckFailedError, UpgradeFailedError, VersionCheckError
 
 

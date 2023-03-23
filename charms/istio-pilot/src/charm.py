@@ -3,8 +3,6 @@
 import logging
 import subprocess
 
-from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
-from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from jinja2 import Environment, FileSystemLoader
 from lightkube import Client
 from lightkube.core.exceptions import ApiError
@@ -16,12 +14,13 @@ from serialized_data_interface import NoCompatibleVersions, NoVersionsListed, ge
 from packaging.version import Version
 import yaml
 
-# TODO: Use directly from Chisme when the pyyaml version conflict between ops and sdi is solved by
-#  [this pr](https://github.com/canonical/serialized-data-interface/pull/45)
-from generic_runtime_error import GenericCharmRuntimeError
+from charmed_kubeflow_chisme.exceptions import GenericCharmRuntimeError
+from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
+from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from istio_gateway_info_provider import RELATION_NAME, GatewayProvider
 from istioctl import Istioctl, PrecheckFailedError, UpgradeFailedError, VersionCheckError
 from resources_handler import ResourceHandler
+
 
 GATEWAY_HTTP_PORT = 8080
 GATEWAY_HTTPS_PORT = 8443
