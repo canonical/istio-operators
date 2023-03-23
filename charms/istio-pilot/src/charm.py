@@ -28,10 +28,17 @@ GATEWAY_WORKLOAD_SERVICE_NAME = "istio-ingressgateway-workload"
 ISTIOCTL_PATH = "./istioctl"
 ISTIOCTL_DEPOYMENT_PROFILE = "minimal"
 UPGRADE_FAILED_MSG = (
-    "Failed to upgrade Istio.  {message}  To recover Istio, use istioctl to "
-    "restore the deployed Istio to a working state no more than one minor "
-    "version behind this install, then use `juju resolved` to try the upgrade"
-    " again.  Or, remove the charm and re-deploy."
+    "Failed to upgrade Istio.  {message}  To recover Istio, see [the upgrade docs]"
+    "(https://github.com/canonical/istio-operators/blob/main/charms/istio-pilot/README.md) for "
+    "recommendations."
+)
+
+UPGRADE_FAILED_VERSION_ERROR_MSG = (
+    "Failed to upgrade Istio because of an error retrieving version information about istio.  "
+    "Got message: '{message}' when trying to retrieve version information.  To recover Istio, see"
+    " [the upgrade docs]"
+    "(https://github.com/canonical/istio-operators/blob/main/charms/istio-pilot/README.md) for "
+    "recommendations."
 )
 
 
