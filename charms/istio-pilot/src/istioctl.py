@@ -30,10 +30,15 @@ class Istioctl:
     def __init__(
         self, istioctl_path: str, namespace: str = "istio-system", profile: str = "minimal"
     ):
-        """Wrapper for the istioctl binary
+        """Wrapper for the istioctl binary.
+
+        This class provides a python API for the istioctl binary, supporting install, upgrade,
+        and other istioctl commands.
 
         Args:
-            binary_file (str): Path to the istioctl binary to be used
+            istioctl_path (str): Path to the istioctl binary to be wrapped
+            namespace (str): The namespace to install Istio into
+            profile (str): The Istio profile to use for installation or upgrades
         """
         self._istioctl_path = istioctl_path
         self._namespace = namespace
@@ -159,7 +164,7 @@ class Istioctl:
         version_dict = yaml.safe_load(version_string)
         return {
             "client": get_client_version(version_dict),
-            "control_plane": get_control_plane_version(version_dict)
+            "control_plane": get_control_plane_version(version_dict),
         }
 
 
@@ -206,7 +211,9 @@ def get_control_plane_version(version_dict: dict) -> str:
 
     try:
         if mesh["Component"] != "pilot":
-            raise VersionCheckError(error_message_template.format(message="no control plane found"))
+            raise VersionCheckError(
+                error_message_template.format(message="no control plane found")
+            )
         version = mesh["Info"]["version"]
     except KeyError:
         raise VersionCheckError(error_message_template.format(message="no control plane found"))
