@@ -30,10 +30,15 @@ class Istioctl:
     def __init__(
         self, istioctl_path: str, namespace: str = "istio-system", profile: str = "minimal"
     ):
-        """Wrapper for the istioctl binary
+        """Wrapper for the istioctl binary.
+
+        This class provides a python API for the istioctl binary, supporting install, upgrade,
+        and other istioctl commands.
 
         Args:
-            binary_file (str): Path to the istioctl binary to be used
+            istioctl_path (str): Path to the istioctl binary to be wrapped
+            namespace (str): The namespace to install Istio into
+            profile (str): The Istio profile to use for installation or upgrades
         """
         self._istioctl_path = istioctl_path
         self._namespace = namespace
