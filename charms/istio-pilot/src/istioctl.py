@@ -6,23 +6,7 @@ from charmed_kubeflow_chisme.lightkube.batch import delete_many
 from lightkube import Client, codecs
 
 
-class InstallFailedError(Exception):
-    pass
-
-
-class ManifestFailedError(Exception):
-    pass
-
-
-class PrecheckFailedError(Exception):
-    pass
-
-
-class UpgradeFailedError(Exception):
-    pass
-
-
-class VersionCheckError(Exception):
+class IstioctlError(Exception):
     pass
 
 
@@ -63,7 +47,7 @@ class Istioctl:
             logging.error(f"stdout: {cpe.stdout}")
             logging.error(f"stderr: {cpe.stderr}")
 
-            raise InstallFailedError(error_msg) from cpe
+            raise IstioctlError(error_msg) from cpe
 
     def manifest(self) -> str:
         """Wrapper for the `istioctl manifest generate` command.
@@ -84,7 +68,7 @@ class Istioctl:
             logging.error(f"stdout: {cpe.stdout}")
             logging.error(f"stderr: {cpe.stderr}")
 
-            raise ManifestFailedError(error_msg) from cpe
+            raise IstioctlError(error_msg) from cpe
 
         return manifests
 
@@ -106,7 +90,7 @@ class Istioctl:
                 ]
             )
         except subprocess.CalledProcessError as cpe:
-            raise PrecheckFailedError(
+            raise IstioctlError(
                 "Upgrade failed during `istio precheck` with error code" f" {cpe.returncode}"
             ) from cpe
 
@@ -141,7 +125,7 @@ class Istioctl:
                 ]
             )
         except subprocess.CalledProcessError as cpe:
-            raise UpgradeFailedError(
+            raise IstioctlError(
                 "Upgrade failed during `istioctl upgrade` with error code" f" {cpe.returncode}"
             ) from cpe
 
@@ -157,7 +141,7 @@ class Istioctl:
                 ]
             )
         except subprocess.CalledProcessError as cpe:
-            raise VersionCheckError("Failed to get Istio version") from cpe
+            raise IstioctlError("Failed to get Istio version") from cpe
 
         version_dict = yaml.safe_load(version_string)
         return {
@@ -179,7 +163,7 @@ def get_client_version(version_dict: dict) -> str:
         version = version_dict["clientVersion"]["version"]
     except (KeyError, TypeError):
         # TypeError in case version_dict is None
-        raise VersionCheckError("Failed to get client version - no version found in output")
+        raise IstioctlError("Failed to get client version - no version found in output")
     return version
 
 
@@ -198,22 +182,20 @@ def get_control_plane_version(version_dict: dict) -> str:
     try:
         meshes = version_dict["meshVersion"]
     except KeyError:
-        raise VersionCheckError(error_message_template.format(message="no control plane found"))
+        raise IstioctlError(error_message_template.format(message="no control plane found"))
 
     if len(meshes) == 0:
-        raise VersionCheckError(error_message_template.format(message="no mesh found"))
+        raise IstioctlError(error_message_template.format(message="no mesh found"))
     if len(meshes) > 1:
-        raise VersionCheckError(error_message_template.format(message="too many meshes found"))
+        raise IstioctlError(error_message_template.format(message="too many meshes found"))
 
     mesh = meshes[0]
 
     try:
         if mesh["Component"] != "pilot":
-            raise VersionCheckError(
-                error_message_template.format(message="no control plane found")
-            )
+            raise IstioctlError(error_message_template.format(message="no control plane found"))
         version = mesh["Info"]["version"]
     except KeyError:
-        raise VersionCheckError(error_message_template.format(message="no control plane found"))
+        raise IstioctlError(error_message_template.format(message="no control plane found"))
 
     return version
