@@ -124,18 +124,13 @@ class Istioctl:
         client = Client()
         delete_many(client=client, objs=k8s_objects)
 
-    def upgrade(self, precheck: bool = True):
+    def upgrade(self):
         """Upgrades the Istio installation using istioctl.
 
         Note that this only upgrades the control plane (eg: istiod), it does not upgrade the data
         plane (for example, the istio/proxyv2 image used in the istio-gateway charm).
 
-        Args:
-            precheck (bool): Whether to run `self.precheck()` before upgrading
         """
-        if precheck:
-            self.precheck()
-
         try:
             subprocess.check_output(
                 [
