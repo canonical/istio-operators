@@ -91,7 +91,8 @@ class Istioctl:
     def precheck(self):
         """Executes `istioctl x precheck` to validate whether the environment can be updated.
 
-        NOTE: This function does not validate exact versions compatibility. This verification should be done by caller.
+        NOTE: This function does not validate exact versions compatibility. This verification
+        should be done by caller.
 
         Raises:
             PrecheckFailedError: if the precheck command fails.
