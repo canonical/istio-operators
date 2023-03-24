@@ -11,7 +11,7 @@ from lightkube.generic_resource import create_global_resource
 from ops.model import ActiveStatus, WaitingStatus
 
 from charm import _get_gateway_address_from_svc, _validate_upgrade_version
-from istioctl import PrecheckFailedError, UpgradeFailedError, VersionCheckError
+from istioctl import IstioctlError
 
 
 @pytest.fixture(autouse=True)
@@ -653,12 +653,12 @@ def test_upgrade_successful(harness, mocked_istioctl, mocked_istioctl_class, moc
     harness.charm.upgrade_charm("mock_event")
 
     mocked_istioctl_class.assert_called_with("./istioctl", model_name, "minimal")
-    mocked_istioctl.upgrade.assert_called_with(precheck=False)
+    mocked_istioctl.upgrade.assert_called_with()
 
 
 @pytest.fixture()
 def mocked_istioctl_precheck(mocker):
-    mocker.patch("charm.Istioctl.precheck", side_effect=PrecheckFailedError())
+    mocker.patch("charm.Istioctl.precheck", side_effect=IstioctlError())
 
 
 def test_upgrade_failed_precheck(harness, mocked_istioctl_precheck, mocker):
@@ -677,7 +677,7 @@ def test_upgrade_failed_precheck(harness, mocked_istioctl_precheck, mocker):
 
 @pytest.fixture()
 def mocked_istioctl_version(mocker):
-    mocker.patch("charm.Istioctl.precheck", side_effect=VersionCheckError())
+    mocker.patch("charm.Istioctl.precheck", side_effect=IstioctlError())
 
 
 def test_upgrade_failed_getting_version(harness, mocked_istioctl_version, mocker):
@@ -712,7 +712,7 @@ def test_upgrade_failed_version_check(harness, mocker):
 
 @pytest.fixture()
 def mocked_istioctl_upgrade(mocker):
-    mocker.patch("charm.Istioctl.upgrade", side_effect=UpgradeFailedError())
+    mocker.patch("charm.Istioctl.upgrade", side_effect=IstioctlError())
 
 
 def test_upgrade_failed_during_upgrade(harness, mocked_istioctl_upgrade, mocker):

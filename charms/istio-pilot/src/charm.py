@@ -18,7 +18,7 @@ from packaging.version import Version
 from serialized_data_interface import NoCompatibleVersions, NoVersionsListed, get_interfaces
 
 from istio_gateway_info_provider import RELATION_NAME, GatewayProvider
-from istioctl import Istioctl, PrecheckFailedError, UpgradeFailedError, VersionCheckError
+from istioctl import Istioctl, IstioctlError
 from resources_handler import ResourceHandler
 
 GATEWAY_HTTP_PORT = 8080
@@ -157,7 +157,7 @@ class Operator(CharmBase):
         # Check for version compatibility for the upgrade
         try:
             versions = istioctl.version()
-        except VersionCheckError as e:
+        except IstioctlError as e:
             self.log.error(UPGRADE_FAILED_MSG.format(message=str(e)))
             raise GenericCharmRuntimeError(
                 "Failed to upgrade.  See `juju debug-log` for details."
@@ -175,7 +175,7 @@ class Operator(CharmBase):
         try:
             self._log_and_set_status(MaintenanceStatus("Executing `istioctl precheck`"))
             istioctl.precheck()
-        except PrecheckFailedError as e:
+        except IstioctlError as e:
             # TODO: Expand this message.  Give user any output of the failed command
             self.log.error(UPGRADE_FAILED_MSG.format(message="`istioctl precheck` failed."))
             raise GenericCharmRuntimeError(
@@ -192,8 +192,8 @@ class Operator(CharmBase):
             self._log_and_set_status(
                 MaintenanceStatus("Executing `istioctl upgrade` for our configuration")
             )
-            istioctl.upgrade(precheck=False)
-        except UpgradeFailedError as e:
+            istioctl.upgrade()
+        except IstioctlError as e:
             # TODO: Expand this message.  Give user any output of the failed command
             self.log.error(UPGRADE_FAILED_MSG.format(message="`istioctl upgrade` failed."))
             raise GenericCharmRuntimeError(
