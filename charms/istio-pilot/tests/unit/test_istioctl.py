@@ -1,4 +1,3 @@
-from contextlib import nullcontext as does_not_raise
 from pathlib import Path
 from subprocess import CalledProcessError
 from unittest.mock import MagicMock
@@ -152,14 +151,11 @@ def test_istioctl_precheck_error(mocked_check_call_failing):
         ictl.precheck()
 
 
-def test_istioctl_upgrade(mocker, mocked_check_output):
-    mocked_precheck = mocker.patch("istioctl.Istioctl.precheck")
-
+def test_istioctl_upgrade(mocked_check_output):
     ictl = Istioctl(istioctl_path=ISTIOCTL_BINARY, namespace=NAMESPACE, profile=PROFILE)
 
     ictl.upgrade()
 
-    assert mocked_precheck.call_count == 1
     mocked_check_output.assert_called_once_with(
         [
             ISTIOCTL_BINARY,
@@ -173,9 +169,7 @@ def test_istioctl_upgrade(mocker, mocked_check_output):
     )
 
 
-def test_istioctl_upgrade_error(mocker, mocked_check_output_failing):
-    mocker.patch("istioctl.Istioctl.precheck")
-
+def test_istioctl_upgrade_error(mocked_check_output_failing):
     ictl = Istioctl(istioctl_path=ISTIOCTL_BINARY, namespace=NAMESPACE, profile=PROFILE)
 
     with pytest.raises(UpgradeFailedError) as exception_info:
@@ -183,26 +177,6 @@ def test_istioctl_upgrade_error(mocker, mocked_check_output_failing):
 
     # Check if we failed for the right reason
     assert "istioctl upgrade" in exception_info.value.args[0]
-
-
-def test_istioctl_upgrade_error_in_precheck(mocker):
-    mocked_precheck = mocker.patch("istioctl.Istioctl.precheck")
-    mocked_precheck.side_effect = PrecheckFailedError()
-
-    ictl = Istioctl(istioctl_path=ISTIOCTL_BINARY, namespace=NAMESPACE, profile=PROFILE)
-
-    with pytest.raises(PrecheckFailedError):
-        ictl.upgrade()
-
-
-def test_istioctl_upgrade_error_in_precheck_with_precheck_disabled(mocker):
-    mocked_precheck = mocker.patch("istioctl.Istioctl.precheck")
-    mocked_precheck.side_effect = CalledProcessError(returncode=1, cmd="")
-
-    ictl = Istioctl(istioctl_path=ISTIOCTL_BINARY, namespace=NAMESPACE, profile=PROFILE)
-
-    with does_not_raise():
-        ictl.upgrade(precheck=False)
 
 
 def test_istioctl_version(mocked_check_output):
