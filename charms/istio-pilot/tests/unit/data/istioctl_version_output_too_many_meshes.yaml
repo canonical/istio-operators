@@ -1,0 +1,11 @@
+clientVersion:
+  version: 1.2.3
+dataPlaneVersion: []
+meshVersion:
+  - Component: pilot
+    Info:
+      version: 1.2.3
+  - Component: something-else
+    Info:
+      version: 1.2.3
+
