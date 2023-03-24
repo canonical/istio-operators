@@ -25,12 +25,12 @@ async def test_deploy_istio_charms(ops_test: OpsTest):
     istio_charms = await ops_test.build_charms(f"{charms_path}-gateway", f"{charms_path}-pilot")
 
     await ops_test.model.deploy(
-        istio_charms["istio-pilot"], application_name=ISTIO_PILOT, series="kubernetes", trust=True
+        istio_charms["istio-pilot"], application_name=ISTIO_PILOT, series="focal", trust=True
     )
     await ops_test.model.deploy(
         istio_charms["istio-gateway"],
         application_name=ISTIO_INGRESSGATEWAY,
-        series="kubernetes",
+        series="focal",
         config={"kind": "ingress"},
         trust=True,
     )
