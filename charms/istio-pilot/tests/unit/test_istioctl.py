@@ -7,16 +7,7 @@ import yaml
 from jinja2 import Environment, FileSystemLoader
 from lightkube import ApiError
 
-from istioctl import (
-    InstallFailedError,
-    Istioctl,
-    ManifestFailedError,
-    PrecheckFailedError,
-    UpgradeFailedError,
-    VersionCheckError,
-    get_client_version,
-    get_control_plane_version,
-)
+from istioctl import Istioctl, IstioctlError, get_client_version, get_control_plane_version
 
 ISTIOCTL_BINARY = "not_really_istioctl"
 NAMESPACE = "dummy-namespace"
@@ -68,7 +59,7 @@ def test_istioctl_install_error(mocked_check_call_failing):
     ictl = Istioctl(istioctl_path=ISTIOCTL_BINARY, namespace=NAMESPACE, profile=PROFILE)
 
     # Assert that we raise an error when istioctl fails
-    with pytest.raises(InstallFailedError):
+    with pytest.raises(IstioctlError):
         ictl.install()
 
 
@@ -100,7 +91,7 @@ def test_istioctl_manifest_error(mocked_check_output_failing):
     ictl = Istioctl(istioctl_path=ISTIOCTL_BINARY, namespace=NAMESPACE, profile=PROFILE)
 
     # Assert that we raise an error when istioctl fails
-    with pytest.raises(ManifestFailedError):
+    with pytest.raises(IstioctlError):
         ictl.manifest()
 
 
@@ -147,7 +138,7 @@ def test_istioctl_precheck(mocked_check_call):
 def test_istioctl_precheck_error(mocked_check_call_failing):
     ictl = Istioctl(istioctl_path=ISTIOCTL_BINARY, namespace=NAMESPACE, profile=PROFILE)
 
-    with pytest.raises(PrecheckFailedError):
+    with pytest.raises(IstioctlError):
         ictl.precheck()
 
 
@@ -172,7 +163,7 @@ def test_istioctl_upgrade(mocked_check_output):
 def test_istioctl_upgrade_error(mocked_check_output_failing):
     ictl = Istioctl(istioctl_path=ISTIOCTL_BINARY, namespace=NAMESPACE, profile=PROFILE)
 
-    with pytest.raises(UpgradeFailedError) as exception_info:
+    with pytest.raises(IstioctlError) as exception_info:
         ictl.upgrade()
 
     # Check if we failed for the right reason
@@ -215,7 +206,7 @@ def test_istioctl_version_no_versions(mocked_check_output):
 
     ictl = Istioctl(istioctl_path=ISTIOCTL_BINARY, namespace=NAMESPACE, profile=PROFILE)
 
-    with pytest.raises(VersionCheckError):
+    with pytest.raises(IstioctlError):
         ictl.version()
 
 
@@ -223,7 +214,7 @@ def test_istioctl_version_istioctl_command_fails(mocked_check_output_failing):
     """Tests that istioctl.version() returns successfully when expected"""
     ictl = Istioctl(istioctl_path=ISTIOCTL_BINARY, namespace=NAMESPACE, profile=PROFILE)
 
-    with pytest.raises(VersionCheckError):
+    with pytest.raises(IstioctlError):
         ictl.version()
 
 
@@ -244,7 +235,7 @@ def test_get_client_version():
 
 def test_get_client_version_no_version():
     """Asserts that get_client_version raises when input does not have correct keys."""
-    with pytest.raises(VersionCheckError):
+    with pytest.raises(IstioctlError):
         get_client_version({})
 
 
@@ -265,7 +256,7 @@ def test_get_control_plane_version():
 
 def test_get_control_plane_version_no_version():
     """Asserts that get_client_version raises when input does not have correct keys."""
-    with pytest.raises(VersionCheckError):
+    with pytest.raises(IstioctlError):
         get_control_plane_version({})
 
 
@@ -274,7 +265,7 @@ def test_get_control_plane_version_too_many_meshes():
         (TEST_DATA_PATH / "istioctl_version_output_too_many_meshes.yaml").read_text()
     )
 
-    with pytest.raises(VersionCheckError):
+    with pytest.raises(IstioctlError):
         get_control_plane_version(istioctl_version_output)
 
 
@@ -282,5 +273,5 @@ def test_get_control_plane_version_no_pilot_in_meshes():
     istioctl_version_output = yaml.safe_load(
         (TEST_DATA_PATH / "istioctl_version_output_no_pilot_in_control.yaml").read_text()
     )
-    with pytest.raises(VersionCheckError):
+    with pytest.raises(IstioctlError):
         get_control_plane_version(istioctl_version_output)
