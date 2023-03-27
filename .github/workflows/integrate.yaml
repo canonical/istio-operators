@@ -1,33 +1,24 @@
 # reusable workflow triggered by other actions
-name: Continuous Integration
+name: CI
 
 on:
   workflow_call:
     secrets:
-      charmcraft-credentials:
+      CHARMCRAFT_CREDENTIALS:
         required: true
 
 jobs:
-
   lib-check:
     name: Check libraries
-    runs-on: ubuntu-20.04
     strategy:
       matrix:
         charm:
         - istio-gateway
         - istio-pilot
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v3
-      with:
-        fetch-depth: 0
-    - name: Check libs
-      uses: canonical/charming-actions/check-libraries@2.2.2
-      with:
+    uses: canonical/charmed-kubeflow-workflows/.github/workflows/_quality-checks.yaml@main
+    secrets: inherit
+    with:
         charm-path: ./charms/${{ matrix.charm }}
-        credentials: "${{ secrets.charmcraft-credentials }}"
-        github-token: "${{ secrets.GITHUB_TOKEN }}"
   lint:
     name: Lint Code
     runs-on: ubuntu-20.04
@@ -82,8 +73,8 @@ jobs:
 
     - name: Bootstrap
       run: |
-        # Pinned until this bug is resolved: https://bugs.launchpad.net/juju/+bug/1992833
-        sg microk8s -c 'juju bootstrap microk8s uk8s --agent-version=2.9.34'
+        # Pinning juju agent to 2.9.42 to keep compatibility with pythonlib-juju<3
+        sg microk8s -c 'juju bootstrap microk8s uk8s --agent-version=2.9.42'
         sg microk8s -c 'juju add-model istio-system'
 
     - run: sg microk8s -c 'KUBECONFIG=/home/runner/.kube/config tox -e integration
@@ -143,9 +134,8 @@ jobs:
         with:
           provider: microk8s
           channel: 1.24/stable
-          # Pinned to 2.9.34 due to https://bugs.launchpad.net/juju/+bug/1992833
-          # This should be fixed on release of juju 2.9.36 + libjuju 3.0.3
-          bootstrap-options: --agent-version="2.9.34"
+          # Pinning juju agent to 2.9.42 to keep compatibility with pythonlib-juju<3
+          bootstrap-options: --agent-version="2.9.42"
       - run: sg microk8s -c "microk8s enable metallb:'10.64.140.43-10.64.140.49,192.168.0.105-192.168.0.111'"
       - run: juju add-model cos-test
 
