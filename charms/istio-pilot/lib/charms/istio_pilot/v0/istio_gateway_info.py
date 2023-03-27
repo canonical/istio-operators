@@ -105,19 +105,18 @@ class GatewayRequirer(Object):
 
         data = gateway[0].data[remote_app]
 
-        if not "gateway_name" in data:
-            logger.error(
-                "Missing gateway name in gateway-info relation data. Waiting for gateway creation in istio-pilot"
+        if "gateway_name" not in data:
+            msg = (
+                "Missing gateway name in gateway-info relation data. "
+                "Waiting for gateway creation in istio-pilot"
             )
-            raise GatewayRelationDataMissingError(
-                "Missing gateway name in gateway-info relation data. Waiting for gateway creation in istio-pilot"
-            )
+            logger.error(msg)
+            raise GatewayRelationDataMissingError(msg)
 
-        if not "gateway_namespace" in data:
-            logger.error("Missing gateway namespace in gateway-info relation data")
-            raise GatewayRelationDataMissingError(
-                "Missing gateway namespace in gateway-info relation data"
-            )
+        if "gateway_namespace" not in data:
+            msg = "Missing gateway namespace in gateway-info relation data"
+            logger.error(msg)
+            raise GatewayRelationDataMissingError(msg)
 
         return {
             "gateway_name": data["gateway_name"],
