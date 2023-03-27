@@ -1,7 +1,7 @@
-"""Library for sharing istio gateway information
+"""Library for sharing istio gateway information.
 
 This library wraps the relation endpoints using the `istio-gateway-name`
-interface. It provides a Python API for both requesting and providing 
+interface. It provides a Python API for both requesting and providing
 gateway information.
 
 ## Getting Started
@@ -24,7 +24,7 @@ requires:
 ```python
 from charms.istio_pilot.v0.istio_gateway_info import GatewayProvider, GatewayRelationError
 
-Class SomeCharm(CharmBase):
+class SomeCharm(CharmBase):
     def __init__(self, *args):
         self.gateway = GatewayProvider(self)
         self.framework.observe(self.on.some_event_emitted, self.some_event_function)
@@ -33,12 +33,13 @@ Class SomeCharm(CharmBase):
         # use the getter function wherever the info is needed
         try:
             gateway_data = self.gateway_relation.get_relation_data()
-            except GatewayRelationError as error:
-            ...
+        except GatewayRelationError as error:
+            "your error handler goes here"
 ```
 """
 
 import logging
+
 from ops.framework import Object
 from ops.model import Application
 
@@ -50,7 +51,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 1
+LIBPATCH = 2
 
 
 RELATION_NAME = "gateway-info"
@@ -122,4 +123,3 @@ class GatewayRequirer(Object):
             "gateway_name": data["gateway_name"],
             "gateway_namespace": data["gateway_namespace"],
         }
-
