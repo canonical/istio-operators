@@ -4,6 +4,7 @@ import logging
 import subprocess
 
 import yaml
+from charmed_kubeflow_chisme.exceptions import GenericCharmRuntimeError
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from jinja2 import Environment, FileSystemLoader
@@ -12,22 +13,40 @@ from lightkube.core.exceptions import ApiError
 from lightkube.resources.core_v1 import Service
 from ops.charm import CharmBase, RelationBrokenEvent
 from ops.main import main
-from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
+from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
+from packaging.version import Version
 from serialized_data_interface import NoCompatibleVersions, NoVersionsListed, get_interfaces
 
 from istio_gateway_info_provider import RELATION_NAME, GatewayProvider
+from istioctl import Istioctl, IstioctlError
 from resources_handler import ResourceHandler
 
 GATEWAY_HTTP_PORT = 8080
 GATEWAY_HTTPS_PORT = 8443
 METRICS_PORT = 15014
 GATEWAY_WORKLOAD_SERVICE_NAME = "istio-ingressgateway-workload"
+ISTIOCTL_PATH = "./istioctl"
+ISTIOCTL_DEPOYMENT_PROFILE = "minimal"
+UPGRADE_FAILED_MSG = (
+    "Failed to upgrade Istio.  {message}  To recover Istio, see [the upgrade docs]"
+    "(https://github.com/canonical/istio-operators/blob/main/charms/istio-pilot/README.md) for "
+    "recommendations."
+)
+
+UPGRADE_FAILED_VERSION_ERROR_MSG = (
+    "Failed to upgrade Istio because of an error retrieving version information about istio.  "
+    "Got message: '{message}' when trying to retrieve version information.  To recover Istio, see"
+    " [the upgrade docs]"
+    "(https://github.com/canonical/istio-operators/blob/main/charms/istio-pilot/README.md) for "
+    "recommendations."
+)
 
 
 class Operator(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
 
+        # TODO: https://github.com/canonical/istio-operators/issues/196
         if not self.unit.is_leader():
             # We can't do anything useful when not the leader, so do nothing.
             self.model.unit.status = WaitingStatus("Waiting for leadership")
@@ -66,6 +85,7 @@ class Operator(CharmBase):
 
         self.framework.observe(self.on.install, self.install)
         self.framework.observe(self.on.remove, self.remove)
+        self.framework.observe(self.on.upgrade_charm, self.upgrade_charm)
 
         for event in [self.on.config_changed, self.on["ingress"].relation_created]:
             self.framework.observe(event, self.handle_default_gateway)
@@ -125,6 +145,68 @@ class Operator(CharmBase):
         self._resource_handler.delete_manifest(
             manifests, namespace=self.model.name, ignore_not_found=True, ignore_unauthorized=True
         )
+
+    def upgrade_charm(self, event):
+        """Upgrade charm.
+
+        Supports upgrade of exactly one minor version at a time.
+        """
+        istioctl = Istioctl(ISTIOCTL_PATH, self.model.name, ISTIOCTL_DEPOYMENT_PROFILE)
+        self._log_and_set_status(MaintenanceStatus("Upgrading Istio"))
+
+        # Check for version compatibility for the upgrade
+        try:
+            versions = istioctl.version()
+        except IstioctlError as e:
+            self.log.error(UPGRADE_FAILED_MSG.format(message=str(e)))
+            raise GenericCharmRuntimeError(
+                "Failed to upgrade.  See `juju debug-log` for details."
+            ) from e
+
+        try:
+            _validate_upgrade_version(versions)
+        except ValueError as e:
+            self.log.error(UPGRADE_FAILED_MSG.format(message=str(e)))
+            raise GenericCharmRuntimeError(
+                "Failed to upgrade.  See `juju debug-log` for details."
+            ) from e
+
+        # Use istioctl precheck to confirm the upgrade should be safe
+        try:
+            self._log_and_set_status(MaintenanceStatus("Executing `istioctl precheck`"))
+            istioctl.precheck()
+        except IstioctlError as e:
+            # TODO: Expand this message.  Give user any output of the failed command
+            self.log.error(UPGRADE_FAILED_MSG.format(message="`istioctl precheck` failed."))
+            raise GenericCharmRuntimeError(
+                "Failed to upgrade.  See `juju debug-log` for details."
+            ) from e
+        except Exception as e:
+            self.log.error(UPGRADE_FAILED_MSG.format(message="An unknown error occurred."))
+            raise GenericCharmRuntimeError(
+                "Failed to upgrade.  See `juju debug-log` for details."
+            ) from e
+
+        # Execute the upgrade
+        try:
+            self._log_and_set_status(
+                MaintenanceStatus("Executing `istioctl upgrade` for our configuration")
+            )
+            istioctl.upgrade()
+        except IstioctlError as e:
+            # TODO: Expand this message.  Give user any output of the failed command
+            self.log.error(UPGRADE_FAILED_MSG.format(message="`istioctl upgrade` failed."))
+            raise GenericCharmRuntimeError(
+                "Failed to upgrade.  See `juju debug-log` for details."
+            ) from e
+        except Exception as e:
+            self.log.error(UPGRADE_FAILED_MSG.format(message="An unknown error occurred."))
+            raise GenericCharmRuntimeError(
+                "Failed to upgrade.  See `juju debug-log` for details."
+            ) from e
+
+        self.log.info("Upgrade complete.")
+        self.unit.status = ActiveStatus()
 
     def handle_default_gateway(self, event):
         """Handles creating gateways from charm config
@@ -261,7 +343,7 @@ class Operator(CharmBase):
 
         self.unit.status = ActiveStatus()
 
-        def get_kwargs(version, route):
+        def get_kwargs(route):
             """Handles both v1 and v2 ingress relations.
 
             v1 ingress schema doesn't allow sending over a namespace.
@@ -275,7 +357,7 @@ class Operator(CharmBase):
 
         # TODO: we could probably extract the rendering bits from the charm code
         virtual_services = "\n---".join(
-            t.render(**get_kwargs(ingress.versions[app.name], route)).strip().strip("---")
+            t.render(**get_kwargs(route)).strip().strip("---")
             for ((_, app), route) in routes.items()
         )
 
@@ -376,6 +458,28 @@ class Operator(CharmBase):
         )
         return svc
 
+    def _log_and_set_status(self, status):
+        """Sets the status of the charm and logs the status message.
+
+        TODO: Move this to Chisme
+
+        Args:
+            status: The status to set
+        """
+        self.unit.status = status
+
+        # For some reason during unit tests, self.log is not available.  Workaround this for now
+        logger = logging.getLogger(__name__)
+
+        log_destination_map = {
+            ActiveStatus: logger.info,
+            BlockedStatus: logger.warning,
+            MaintenanceStatus: logger.info,
+            WaitingStatus: logger.info,
+        }
+
+        log_destination_map[type(status)](status.message)
+
 
 def _get_gateway_address_from_svc(svc):
     """Returns the gateway service address from a kubernetes Service.
@@ -424,6 +528,41 @@ def _get_address_from_loadbalancer(svc):
         return svc.status.loadBalancer.ingress[0].ip
     else:
         raise ValueError("Unknown situation - LoadBalancer service has no hostname or IP")
+
+
+def _validate_upgrade_version(versions) -> bool:
+    """Validates that the version of istioctl can upgrade the currently deployed Istio.
+
+    This asserts that the istioctl version is equal to or at most greater than the current Istio
+    control plane by no more than one minor version.
+
+    Args:
+        versions (dict): A dictionary containing:
+                            client: the client version (eg: istioctl)
+                            control_plane: the control plane version (eg: istiod)
+
+    Returns True if this is the case, else raises an exception with details.
+    """
+    client_version = Version(versions["client"])
+    control_plane_version = Version(versions["control_plane"])
+
+    if client_version < control_plane_version:
+        raise ValueError(
+            "Client version is older than control plane version.  "
+            "This is not supported by this charm."
+        )
+    elif client_version.minor - control_plane_version.minor > 1:
+        raise ValueError(
+            "Client version is more than one minor version ahead of control plane version.  "
+            "This is not supported by this charm."
+        )
+    elif client_version.major != control_plane_version.major:
+        raise ValueError(
+            "Client version is a different major version to control plane version.  "
+            "This is not supported by this charm."
+        )
+
+    return True
 
 
 if __name__ == "__main__":
