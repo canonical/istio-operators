@@ -763,6 +763,9 @@ def test_patch_istio_validating_webhook(harness, mocker):
     """Tests that _patch_istio_validating_webhook works as expected."""
     model_name = "test-model"
     harness.set_model_name(model_name)
+    harness.set_leader(True)
+    # Avoid initialising the resource handler
+    mocker.patch("resources_handler.load_in_cluster_generic_resources")
     harness.begin()
 
     mock_vwc = ValidatingWebhookConfiguration(
