@@ -1,14 +1,25 @@
+from contextlib import nullcontext as does_not_raise
 from unittest.mock import MagicMock
 from unittest.mock import call as Call  # noqa: N812
 
 import pytest
 import yaml
+from charmed_kubeflow_chisme.exceptions import GenericCharmRuntimeError
+from charmed_kubeflow_chisme.lightkube.mocking import FakeApiError
 from lightkube import codecs
 from lightkube.core.exceptions import ApiError
 from lightkube.generic_resource import create_global_resource
+from lightkube.models.admissionregistration_v1 import (
+    ServiceReference,
+    ValidatingWebhook,
+    ValidatingWebhookConfiguration,
+    WebhookClientConfig,
+)
+from lightkube.models.meta_v1 import ObjectMeta
 from ops.model import ActiveStatus, WaitingStatus
 
-from charm import _get_gateway_address_from_svc
+from charm import _get_gateway_address_from_svc, _validate_upgrade_version
+from istioctl import IstioctlError
 
 
 @pytest.fixture(autouse=True)
@@ -44,6 +55,7 @@ def test_events(harness, mocker):
     send_info = mocker.patch("charm.Operator.send_info")
     handle_ingress = mocker.patch("charm.Operator.handle_ingress")
     handle_ingress_auth = mocker.patch("charm.Operator.handle_ingress_auth")
+    upgrade_charm = mocker.patch("charm.Operator.upgrade_charm")
 
     harness.charm.on.install.emit()
     install.assert_called_once()
@@ -52,6 +64,10 @@ def test_events(harness, mocker):
     harness.charm.on.remove.emit()
     remove.assert_called_once()
     remove.reset_mock()
+
+    harness.charm.on.upgrade_charm.emit()
+    upgrade_charm.assert_called_once()
+    upgrade_charm.reset_mock()
 
     rel_id = harness.add_relation("istio-pilot", "app")
     harness.update_relation_data(
@@ -96,10 +112,9 @@ def test_not_leader(harness):
     assert harness.charm.model.unit.status == WaitingStatus("Waiting for leadership")
 
 
-def test_basic(harness, subprocess, mocker):
+def test_basic(harness, mocked_check_call, mocker):
     mocker.patch("lightkube.codecs.load_all_yaml")
     mocker.patch("resources_handler.load_in_cluster_generic_resources")
-    check_call = subprocess.check_call
 
     # Mock _is_gateway_service_up() to simulate that we do see a gateway from istio-ingressgateway
     mocker.patch("charm.Operator._is_gateway_service_up", return_value=True)
@@ -117,15 +132,16 @@ def test_basic(harness, subprocess, mocker):
         "values.global.istioNamespace=None",
     ]
 
-    assert len(check_call.call_args_list) == 1
-    assert check_call.call_args_list[0].args == (expected_args,)
-    assert check_call.call_args_list[0].kwargs == {}
+    assert len(mocked_check_call.call_args_list) == 1
+    assert mocked_check_call.call_args_list[0].args == (expected_args,)
+    assert mocked_check_call.call_args_list[0].kwargs == {}
 
     assert harness.charm.model.unit.status == ActiveStatus("")
 
 
-def test_with_ingress_relation(harness, subprocess, mocked_client, helpers, mocker, mocked_list):
-    check_call = subprocess.check_call
+def test_with_ingress_relation(
+    harness, mocked_check_call, mocked_client, helpers, mocker, mocked_list
+):
     # Mock _is_gateway_service_up() to simulate that we do see a gateway from istio-ingressgateway
     mocker.patch("charm.Operator._is_gateway_service_up", return_value=True)
 
@@ -146,7 +162,7 @@ def test_with_ingress_relation(harness, subprocess, mocked_client, helpers, mock
     harness.begin()
     harness.charm.on.install.emit()
 
-    assert check_call.call_args_list == [
+    assert mocked_check_call.call_args_list == [
         Call(
             [
                 "./istioctl",
@@ -228,9 +244,7 @@ def test_with_ingress_relation(harness, subprocess, mocked_client, helpers, mock
     assert isinstance(harness.charm.model.unit.status, ActiveStatus)
 
 
-def test_with_ingress_auth_relation(harness, subprocess, helpers, mocked_client, mocker):
-    check_call = subprocess.check_call
-
+def test_with_ingress_auth_relation(harness, mocked_check_call, helpers, mocked_client, mocker):
     harness.set_leader(True)
     rel_id = harness.add_relation("ingress-auth", "app")
 
@@ -252,7 +266,7 @@ def test_with_ingress_auth_relation(harness, subprocess, helpers, mocked_client,
     mocker.patch("resources_handler.load_in_cluster_generic_resources")
     harness.begin()
     harness.charm.on.install.emit()
-    assert check_call.call_args_list == [
+    assert mocked_check_call.call_args_list == [
         Call(
             [
                 "./istioctl",
@@ -388,9 +402,7 @@ def test_correct_data_in_gateway_info_relation(harness, mocker, mocked_client):
     assert istio_relation_data["gateway_namespace"] == model.name
 
 
-def test_removal(harness, subprocess, mocked_client, helpers, mocker):
-    check_output = subprocess.check_output
-
+def test_removal(harness, mocked_check_output, mocked_client, helpers, mocker):
     # Mock this method to avoid an error when passing mocked manifests
     mocker.patch("resources_handler.load_in_cluster_generic_resources")
 
@@ -426,9 +438,9 @@ def test_removal(harness, subprocess, mocked_client, helpers, mocker):
     ]
 
     harness.charm.on.remove.emit()
-    assert len(check_output.call_args_list) == 1
-    assert check_output.call_args_list[0].args == (expected_args,)
-    assert check_output.call_args_list[0].kwargs == {}
+    assert len(mocked_check_output.call_args_list) == 1
+    assert mocked_check_output.call_args_list[0].args == (expected_args,)
+    assert mocked_check_output.call_args_list[0].kwargs == {}
 
     delete_calls = mocked_client.return_value.delete.call_args_list
     assert helpers.calls_contain_namespace(delete_calls, harness.model.name)
@@ -607,7 +619,7 @@ def test_get_gateway_address_from_svc(
     mock_service_fixture,
     gateway_address,
     harness,
-    subprocess,
+    mocked_check_output,
     mocked_client,
     helpers,
     mocker,
@@ -618,3 +630,185 @@ def test_get_gateway_address_from_svc(
     mock_service = request.getfixturevalue(mock_service_fixture)
 
     assert _get_gateway_address_from_svc(svc=mock_service) is gateway_address
+
+
+@pytest.fixture()
+def mocked_istioctl_class(mocker):
+    mocked_istioctl_class = mocker.patch("charm.Istioctl")
+    mocked_istioctl_class.return_value = mocked_istioctl
+    yield mocked_istioctl_class
+
+
+@pytest.fixture()
+def mocked_istioctl(mocked_istioctl_class):
+    mocked_istioctl = MagicMock()
+    mocked_istioctl_class.return_value = mocked_istioctl
+    yield mocked_istioctl
+
+
+def test_upgrade_successful(harness, mocked_istioctl, mocked_istioctl_class, mocker):
+    """Tests that charm.upgrade_charm works successfully when expected."""
+    model_name = "test-model"
+    harness.set_model_name(model_name)
+    harness.set_leader(True)
+    # Avoid initialising the resource handler
+    mocker.patch("resources_handler.load_in_cluster_generic_resources")
+    # Do not validate versions
+    mocker.patch("charm._validate_upgrade_version")
+    # Return valid version data from istioctl.versions
+    mocked_istioctl.version.return_value = {"client": "1.12.5", "control_plane": "1.12.5"}
+
+    harness.begin()
+
+    # Do not actually patch specific istio installs
+    harness.charm._patch_istio_validating_webhook = MagicMock()
+
+    harness.charm.upgrade_charm("mock_event")
+
+    mocked_istioctl_class.assert_called_with("./istioctl", model_name, "minimal")
+    mocked_istioctl.upgrade.assert_called_with()
+    harness.charm._patch_istio_validating_webhook.assert_called_with()
+
+
+@pytest.fixture()
+def mocked_istioctl_precheck(mocker):
+    mocker.patch("charm.Istioctl.precheck", side_effect=IstioctlError())
+
+
+def test_upgrade_failed_precheck(harness, mocked_istioctl_precheck, mocker):
+    """Tests that charm.upgrade_charm fails when precheck fails."""
+    model_name = "test-model"
+    harness.set_model_name(model_name)
+    harness.set_leader(True)
+    # Avoid initialising the resource handler
+    mocker.patch("resources_handler.load_in_cluster_generic_resources")
+
+    harness.begin()
+
+    with pytest.raises(GenericCharmRuntimeError):
+        harness.charm.upgrade_charm("mock_event")
+
+
+@pytest.fixture()
+def mocked_istioctl_version(mocker):
+    mocker.patch("charm.Istioctl.precheck", side_effect=IstioctlError())
+
+
+def test_upgrade_failed_getting_version(harness, mocked_istioctl_version, mocker):
+    """Tests that charm.upgrade_charm fails when precheck fails."""
+    model_name = "test-model"
+    harness.set_model_name(model_name)
+    harness.set_leader(True)
+    # Avoid initialising the resource handler
+    mocker.patch("resources_handler.load_in_cluster_generic_resources")
+
+    harness.begin()
+
+    with pytest.raises(GenericCharmRuntimeError):
+        harness.charm.upgrade_charm("mock_event")
+
+
+def test_upgrade_failed_version_check(harness, mocker):
+    """Tests that charm.upgrade_charm fails when precheck fails."""
+    model_name = "test-model"
+    harness.set_model_name(model_name)
+    harness.set_leader(True)
+    # Avoid initialising the resource handler
+    mocker.patch("resources_handler.load_in_cluster_generic_resources")
+    # Mock _validate_upgrade_version to raise a failure
+    mocker.patch("charm._validate_upgrade_version", side_effect=ValueError())
+
+    harness.begin()
+
+    with pytest.raises(GenericCharmRuntimeError):
+        harness.charm.upgrade_charm("mock_event")
+
+
+@pytest.fixture()
+def mocked_istioctl_upgrade(mocker):
+    mocker.patch("charm.Istioctl.upgrade", side_effect=IstioctlError())
+
+
+def test_upgrade_failed_during_upgrade(harness, mocked_istioctl_upgrade, mocker):
+    """Tests that charm.upgrade_charm fails when upgrade process fails."""
+    model_name = "test-model"
+    harness.set_model_name(model_name)
+    harness.set_leader(True)
+    # Avoid initialising the resource handler
+    mocker.patch("resources_handler.load_in_cluster_generic_resources")
+
+    harness.begin()
+
+    with pytest.raises(GenericCharmRuntimeError):
+        harness.charm.upgrade_charm("mock_event")
+
+
+@pytest.mark.parametrize(
+    "versions, context_raised",
+    [
+        ({"client": "1.1.0", "control_plane": "1.1.0"}, does_not_raise()),
+        ({"client": "1.1.1", "control_plane": "1.1.0"}, does_not_raise()),
+        ({"client": "1.2.10", "control_plane": "1.1.0"}, does_not_raise()),
+        ({"client": "2.1.0", "control_plane": "1.1.0"}, pytest.raises(ValueError)),
+        ({"client": "1.1.0", "control_plane": "1.2.0"}, pytest.raises(ValueError)),
+        ({"client": "1.1.0", "control_plane": "2.1.0"}, pytest.raises(ValueError)),
+    ],
+)
+def test_validate_upgrade_version(versions, context_raised):
+    with context_raised:
+        _validate_upgrade_version(versions)
+
+
+def test_patch_istio_validating_webhook(harness, mocker):
+    """Tests that _patch_istio_validating_webhook works as expected."""
+    model_name = "test-model"
+    harness.set_model_name(model_name)
+    harness.begin()
+
+    mock_vwc = ValidatingWebhookConfiguration(
+        metadata=ObjectMeta(name="istiod-default-validator"),
+        webhooks=[
+            ValidatingWebhook(
+                admissionReviewVersions=[""],
+                name="",
+                sideEffects=None,
+                clientConfig=WebhookClientConfig(
+                    service=ServiceReference(
+                        name="istiod",
+                        namespace="istio-system",
+                    )
+                ),
+            )
+        ],
+    )
+
+    harness.charm.lightkube_client = MagicMock()
+    harness.charm.lightkube_client.get.return_value = mock_vwc
+
+    harness.charm._patch_istio_validating_webhook()
+
+    # Confirm we've tried to apply a patched version of the webhook
+    patch_call = harness.charm.lightkube_client.patch.call_args_list[0]
+    # Assert the expected webhook is being patched
+    assert patch_call[0][1] == "istiod-default-validator"
+    # Assert that we've patched to the expected model name
+    vwc = patch_call[0][2]
+    assert vwc.webhooks[0].clientConfig.service.namespace == model_name
+
+
+def test_patch_istio_validating_webhook_for_webhook_does_not_exist(harness, mocker):
+    """Tests that charm._patch_istio_validating_webhook does not fail if webhook missing."""
+    model_name = "test-model"
+    harness.set_model_name(model_name)
+    harness.set_leader(True)
+    # Avoid initialising the resource handler
+    mocker.patch("resources_handler.load_in_cluster_generic_resources")
+    harness.begin()
+
+    harness.charm.lightkube_client = MagicMock()
+    harness.charm.lightkube_client.get.side_effect = FakeApiError(404)
+
+    harness.charm._patch_istio_validating_webhook()
+
+    # Confirm we've not tried to apply anything
+    assert harness.charm.lightkube_client.patch.call_count == 0
