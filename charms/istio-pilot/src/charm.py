@@ -10,6 +10,7 @@ from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from jinja2 import Environment, FileSystemLoader
 from lightkube import Client
 from lightkube.core.exceptions import ApiError
+from lightkube.resources.admissionregistration_v1 import ValidatingWebhookConfiguration
 from lightkube.resources.core_v1 import Service
 from ops.charm import CharmBase, RelationBrokenEvent
 from ops.main import main
@@ -162,6 +163,10 @@ class Operator(CharmBase):
             raise GenericCharmRuntimeError(
                 "Failed to upgrade.  See `juju debug-log` for details."
             ) from e
+        self.log.info(
+            f"Attempting to upgrade from control plane version {versions['control_plane']} "
+            f"to client version {versions['client']}"
+        )
 
         try:
             _validate_upgrade_version(versions)
@@ -204,6 +209,14 @@ class Operator(CharmBase):
             raise GenericCharmRuntimeError(
                 "Failed to upgrade.  See `juju debug-log` for details."
             ) from e
+
+        # Patch any known issues with the upgrade
+        client_version = Version(versions["client"])
+        if Version("1.12.0") <= client_version < Version("1.15.0"):
+            self._log_and_set_status(
+                MaintenanceStatus(f"Fixing webhooks from upgrade to {str(client_version)}")
+            )
+            self._patch_istio_validating_webhook()
 
         self.log.info("Upgrade complete.")
         self.unit.status = ActiveStatus()
@@ -479,6 +492,35 @@ class Operator(CharmBase):
         }
 
         log_destination_map[type(status)](status.message)
+
+    def _patch_istio_validating_webhook(self):
+        """Patch ValidatingWebhookConfiguration from istioctl v1.12-v1.14 to use correct namespace.
+
+        istioctl v1.12, v1.13, and v1.14 have a bug where the ValidatingWebhookConfiguration
+        istiod-default-validator looks for istiod in the `istio-system` namespace rather than the
+        namespace actually used for istio.  This function patches this webhook configuration to
+        use the correct namespace.
+        """
+        try:
+            vwc = self.lightkube_client.get(
+                ValidatingWebhookConfiguration, name="istiod-default-validator"
+            )
+        except ApiError as e:
+            # If the webhook doesn't exist, we don't need to patch it
+            self.log.info("No webhooks found - skipping patch operation.")
+            if e.status.code == 404:
+                return
+            raise e
+
+        vwc.metadata.managedFields = None
+        vwc.webhooks[0].clientConfig.service.namespace = self.model.name
+        self.lightkube_client.patch(
+            ValidatingWebhookConfiguration,
+            "istiod-default-validator",
+            vwc,
+            field_manager=self.app.name,
+            force=True,
+        )
 
 
 def _get_gateway_address_from_svc(svc):
