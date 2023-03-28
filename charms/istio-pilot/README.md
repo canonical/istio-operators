@@ -27,16 +27,25 @@ This charm supports in-place upgrades of the Istio control plane by up to one mi
 
 The charm will attempt to validate the upgrade prior to modifying the control plane, setting an `ErrorStatus` and logging the reason if an unsupported upgrade is detected.
 
-When upgrading istio-pilot, you should also upgrade istio-gateway at the same time to the same version.  These charms are only tested against each other at the same version.
+### Typical Upgrade Procedure
 
-If you need to upgrade across multiple versions (say from Istio 1.11.0 to Istio 1.16.0), refresh the charm one minor version at a time.  For example, starting with a deployed istio-pilot 1.11, you can do:
+When upgrading istio-pilot, you should **always remove the istio-gateway charm before upgrading** (some versions of `istio-pilot` do not upgrade properly if istio-gateway is deployed).  If you are upgrading one minor version, the procedure is:
+* `juju remove-application istio-ingressgateway`
+* `juju refresh istio-pilot --channel <desired-version>/stable`
+* `juju deploy istio-gateway --channel <desired-version>/stable --trust --config kind=ingress istio-ingressgateway`
+
+Where the istio-gateway config should match whatever you were using before upgrading.   
+
+For upgrades across multiple versions (say from Istio 1.11.0 to Istio 1.16.0), use the same procedure as above but refresh istio-pilot multiple times through each intermediate minor version.  For example, starting with a deployed istio-pilot 1.11, you can do:
+* `juju remove-application istio-ingressgateway`
 * `juju refresh istio-pilot --channel 1.12/stable`
 * `juju refresh istio-pilot --channel 1.13/stable`
 * `juju refresh istio-pilot --channel 1.14/stable`
 * `juju refresh istio-pilot --channel 1.15/stable`
 * `juju refresh istio-pilot --channel 1.16/stable`
+* `juju deploy istio-gateway --channel <desired-version>/stable --trust --config kind=ingress istio-ingressgateway`
 
-Where between each command you wait until the upgrade is complete.
+Where between each refresh command you wait until the upgrade is complete.
 
 ### Debugging Failed Upgrades
 
@@ -48,9 +57,13 @@ If at any point you use the [istioctl](https://istio.io/latest/docs/reference/co
 
 #### Upgrades across more than one minor version
 
-When the charm detects an upgrade across more than one minor version, it will set an `ErrorStatus` and log the reason.  For example, if you have istio-pilot 1.13.0 deployed and you `juju refresh istio-pilot --channel 1.15/stable`, the upgrade-charm event will fail and the charm will go to `ErrorStatus`.  To resolve this error, refresh the charm again back to a supported version (`juju refresh istio-pilot --channel 1.14/stable`).  The charm should recover and successfully upgrade Istio to 1.14.  You can then do a second refresh to get to Istio 1.15.    
+When the charm detects an upgrade across more than one minor version, it will set an `ErrorStatus` and log the reason.  For example, if you have istio-pilot 1.13.0 deployed and you `juju refresh istio-pilot --channel 1.15/stable`, the upgrade-charm event will fail and the charm will go to `ErrorStatus`.  To resolve this error:
+* refresh the charm again back to a supported version (`juju refresh istio-pilot --channel 1.14/stable`)
+* if this refresh does not clear the error state immediately, use `juju resolve istio-pilot/0 --no-retry` to clear the error on the previous refresh event and move on to the next event.  This should lead to the refresh event for 1.14 firing, but it is a race so there could be other events that fire first
 
-If for some reason you cannot use the charm's typical upgrade procedure to get to within one minor version of your target version, you can use the [istioctl](https://istio.io/latest/docs/reference/commands/istioctl/) tool to manually upgrade through some versions.  
+Once the new refresh event fires, the charm should recover and successfully upgrade Istio to 1.14.  You can then do a second refresh to get to Istio 1.15.    
+
+If for some reason you cannot use the charm's typical upgrade procedure to get to within one minor version of your target version, you can use the [istioctl](https://istio.io/latest/docs/reference/commands/istioctl/) tool to manually upgrade through some versions and then `juju resolved istio-pilot/0` (without the `--no-retry`) to rerun the refresh event.  
 
 #### Downgrades
 
