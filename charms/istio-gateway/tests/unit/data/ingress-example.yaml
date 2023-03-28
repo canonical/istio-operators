@@ -146,7 +146,7 @@ spec:
               value: standard
             - name: ISTIO_META_CLUSTER_ID
               value: Kubernetes
-          image: docker.io/istio/proxyv2:1.16.0
+          image: docker.io/istio/proxyv2:1.16.2
           name: istio-proxy
           ports:
             - containerPort: 8080
@@ -181,6 +181,12 @@ spec:
             privileged: false
             readOnlyRootFilesystem: true
           volumeMounts:
+            - name: workload-socket
+              mountPath: /var/run/secrets/workload-spiffe-uds
+            - name: credential-socket
+              mountPath: /var/run/secrets/credential-uds
+            - name: workload-certs
+              mountPath: /var/run/secrets/workload-spiffe-credentials
             - mountPath: /etc/istio/proxy
               name: istio-envoy
             - mountPath: /etc/istio/config
@@ -207,6 +213,12 @@ spec:
         runAsUser: 1337
       serviceAccountName: istio-ingressgateway-workload-service-account
       volumes:
+        - emptyDir: {}
+          name: workload-socket
+        - emptyDir: {}
+          name: credential-socket
+        - emptyDir: {}
+          name: workload-certs
         - configMap:
             name: istio-ca-root-cert
           name: istiod-ca-cert
