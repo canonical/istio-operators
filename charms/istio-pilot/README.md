@@ -29,15 +29,17 @@ The charm will attempt to validate the upgrade prior to modifying the control pl
 
 ### Typical Upgrade Procedure
 
-When upgrading istio-pilot, you should **always remove the istio-gateway charm before upgrading** (some versions of `istio-pilot` do not upgrade properly if istio-gateway is deployed).  If you are upgrading one minor version, the procedure is:
-* `juju remove-application istio-ingressgateway`
+Note: Before upgrading istio-pilot, **always remove the istio-ingressgateway application**[^1]
+
+To upgrade Istio by one minor version, the procedure is:
+* `juju remove-application istio-ingressgateway`[^1]
 * `juju refresh istio-pilot --channel <desired-version>/stable`
 * `juju deploy istio-gateway --channel <desired-version>/stable --trust --config kind=ingress istio-ingressgateway`
 
-Where the istio-gateway config should match whatever you were using before upgrading.   
+Where the charm `--config` fields should match whatever you were using before upgrading.   
 
 For upgrades across multiple versions (say from Istio 1.11.0 to Istio 1.16.0), use the same procedure as above but refresh istio-pilot multiple times through each intermediate minor version.  For example, starting with a deployed istio-pilot 1.11, you can do:
-* `juju remove-application istio-ingressgateway`
+* `juju remove-application istio-ingressgateway`[^1]
 * `juju refresh istio-pilot --channel 1.12/stable`
 * `juju refresh istio-pilot --channel 1.13/stable`
 * `juju refresh istio-pilot --channel 1.14/stable`
@@ -45,7 +47,7 @@ For upgrades across multiple versions (say from Istio 1.11.0 to Istio 1.16.0), u
 * `juju refresh istio-pilot --channel 1.16/stable`
 * `juju deploy istio-gateway --channel <desired-version>/stable --trust --config kind=ingress istio-ingressgateway`
 
-Where between each refresh command you wait until the upgrade is complete.
+Where between each refresh command you wait until the upgrade is complete.[^2]
 
 ### Debugging Failed Upgrades
 
@@ -72,3 +74,6 @@ If you accidentally attempt a downgrade, the istio-pilot charm will go to error 
 #### Unknown version errors
 
 If the upgrade fails saying it cannot find the control plane version, this likely means your existing istio deployment is missing key pieces.  Use the [istioctl](https://istio.io/latest/docs/reference/commands/istioctl/) tool to inspect further. 
+
+[^1]: Removal of the istio-ingressgateway application prior to upgrading istio-pilot is required because some versions of istio-pilot will hang indefinitely if istio-ingressgateway's workload pod is present in the cluster.  To remove the istio-ingressgateway application, use `juju remove-application istio-ingressgateway`.  Confirm that istio-ingressgateway is completely removed before proceeding by checking that the istio-ingressgateway application is no longer in `juju status` and the `istio-ingressgateway-workload` deployment is no longer in `kubectl get deployment -n kubeflow`.  If Juju hangs on removing the application, use `juju remove-application istio-ingressgateway --force` to force the removal.  Note that forcing the removal may leave the deployment in kubernetes, so be sure to check for that after forcing and delete the deployment manually if necessary.  
+[^2]: Note that in an older version of the istio-pilot upgrade handler, the charm would progress to Active/Idle as soon as the Kubernetes objects for Istio were updated, regardless of whether Kubernetes was still rolling out the new version of Istio's deployment.  This has been fixed in all istio-pilot charms hosted in CharmHub, but if you've pulled an older version it could result in a race condition when refreshing across multiple charm versions quickly.  For example, if you refreshed from 1.12->1.13 and then quickly refreshed again from 1.13->1.14, the Istio deployments for 1.13 might still be rolling out and thus the istio-pilot charm for 1.14 might raise an error saying it cannot upgrade from 1.12 to 1.14.  If this occurs, use Kubernetes to check the rollout status for the `istiod` deployment and wait for it to complete.  Once that is complete, use `juju resolved istio-pilot` to rerun the upgrade handler for version 1.14 and continue your upgrade.  Throughout this process, you can also check the `juju debug-log istio-pilot/0` to see detailed information about any errors during upgrade.  

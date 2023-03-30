@@ -1,8 +1,10 @@
+import logging
 from contextlib import nullcontext as does_not_raise
 from unittest.mock import MagicMock
 from unittest.mock import call as Call  # noqa: N812
 
 import pytest
+import tenacity
 import yaml
 from charmed_kubeflow_chisme.exceptions import GenericCharmRuntimeError
 from charmed_kubeflow_chisme.lightkube.mocking import FakeApiError
@@ -18,7 +20,11 @@ from lightkube.models.admissionregistration_v1 import (
 from lightkube.models.meta_v1 import ObjectMeta
 from ops.model import ActiveStatus, WaitingStatus
 
-from charm import _get_gateway_address_from_svc, _validate_upgrade_version
+from charm import (
+    _get_gateway_address_from_svc,
+    _validate_upgrade_version,
+    _wait_for_update_rollout,
+)
 from istioctl import IstioctlError
 
 
@@ -657,6 +663,8 @@ def test_upgrade_successful(harness, mocked_istioctl, mocked_istioctl_class, moc
     mocker.patch("charm._validate_upgrade_version")
     # Return valid version data from istioctl.versions
     mocked_istioctl.version.return_value = {"client": "1.12.5", "control_plane": "1.12.5"}
+    # Do not wait for upgrade to finish
+    mocked_wait_for_update_rollout = mocker.patch("charm._wait_for_update_rollout")
 
     harness.begin()
 
@@ -668,6 +676,8 @@ def test_upgrade_successful(harness, mocked_istioctl, mocked_istioctl_class, moc
     mocked_istioctl_class.assert_called_with("./istioctl", model_name, "minimal")
     mocked_istioctl.upgrade.assert_called_with()
     harness.charm._patch_istio_validating_webhook.assert_called_with()
+
+    mocked_wait_for_update_rollout.assert_called_once()
 
 
 @pytest.fixture()
@@ -815,3 +825,45 @@ def test_patch_istio_validating_webhook_for_webhook_does_not_exist(harness, mock
 
     # Confirm we've not tried to apply anything
     assert harness.charm.lightkube_client.patch.call_count == 0
+
+
+def test_wait_for_update_rollout(mocked_istioctl):
+    """Tests that waiting for Istio updates to roll out works as expected."""
+    # Mock istioctl.version so it initially returns client != control_plane, then
+    # eventually returns client == control_plane.
+    versions_equal = {"client": "1.12.5", "control_plane": "1.12.5"}
+    versions_not_equal = {"client": "1.12.5", "control_plane": "1.12.4"}
+    mocked_istioctl.version.side_effect = [
+        versions_not_equal,
+        versions_not_equal,
+        versions_not_equal,
+        versions_equal,
+    ]
+
+    retry_strategy = tenacity.Retrying(
+        stop=tenacity.stop_after_attempt(5),
+        wait=tenacity.wait_fixed(0.001),
+        reraise=True,
+    )
+
+    _wait_for_update_rollout(mocked_istioctl, retry_strategy, logging.getLogger())
+
+    assert mocked_istioctl.version.call_count == 4
+
+
+def test_wait_for_update_rollout_timeout(mocked_istioctl):
+    """Tests that waiting for Istio updates to roll out raises on timeout."""
+    # Mock istioctl.version so it always returns client != control_plane
+    versions_not_equal = {"client": "1.12.5", "control_plane": "1.12.4"}
+    mocked_istioctl.version.return_value = versions_not_equal
+
+    retry_strategy = tenacity.Retrying(
+        stop=tenacity.stop_after_attempt(5),
+        wait=tenacity.wait_fixed(0.001),
+        reraise=True,
+    )
+
+    with pytest.raises(GenericCharmRuntimeError):
+        _wait_for_update_rollout(mocked_istioctl, retry_strategy, logging.getLogger())
+
+    assert mocked_istioctl.version.call_count == 5
