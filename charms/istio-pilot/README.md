@@ -51,7 +51,7 @@ Where between each refresh command you wait until the upgrade is complete.
 
 ### Debugging Failed Upgrades
 
-The sections below describe different scenarios for failed upgrades.  To get more detailed information about any failed upgrade, see `juju debug-log istio-pilot/0` for more verbose logs.  In general, the debugging procedure is:
+The sections below describe different scenarios for failed upgrades.  To get more detailed information about any failed upgrade, see `juju debug-log -i istio-pilot/0` for more verbose logs.  In general, the debugging procedure is:
 * if you're trying to upgrade across version gaps that are not supported (eg: two minor versions), refresh the charm back to a supported version
 * if something unexpected happens, use the [istioctl](https://istio.io/latest/docs/reference/commands/istioctl/) and debugging guidance from [Istio](https://istio.io/latest/) to diagnose and resolve any issues.  If you can restore the cluster to a running state that is at most one minor version behind your target version, you can then `juju resolved istio-pilot` to get Istio to retry the upgrade. 
 
