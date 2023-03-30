@@ -29,15 +29,17 @@ The charm will attempt to validate the upgrade prior to modifying the control pl
 
 ### Typical Upgrade Procedure
 
-When upgrading istio-pilot, you should **always remove the istio-gateway charm before upgrading** (some versions of `istio-pilot` do not upgrade properly if istio-gateway is deployed).  If you are upgrading one minor version, the procedure is:
-* `juju remove-application istio-ingressgateway`
+Note: Before upgrading istio-pilot, **always remove the istio-ingressgateway application**[^1]
+
+To upgrade Istio by one minor version, the procedure is:
+* `juju remove-application istio-ingressgateway`[^1]
 * `juju refresh istio-pilot --channel <desired-version>/stable`
 * `juju deploy istio-gateway --channel <desired-version>/stable --trust --config kind=ingress istio-ingressgateway`
 
-Where the istio-gateway config should match whatever you were using before upgrading.   
+Where the charm `--config` fields should match whatever you were using before upgrading.   
 
 For upgrades across multiple versions (say from Istio 1.11.0 to Istio 1.16.0), use the same procedure as above but refresh istio-pilot multiple times through each intermediate minor version.  For example, starting with a deployed istio-pilot 1.11, you can do:
-* `juju remove-application istio-ingressgateway`
+* `juju remove-application istio-ingressgateway`[^1]
 * `juju refresh istio-pilot --channel 1.12/stable`
 * `juju refresh istio-pilot --channel 1.13/stable`
 * `juju refresh istio-pilot --channel 1.14/stable`
@@ -49,7 +51,7 @@ Where between each refresh command you wait until the upgrade is complete.
 
 ### Debugging Failed Upgrades
 
-The sections below describe different scenarios for failed upgrades.  In general, the debugging procedure is:
+The sections below describe different scenarios for failed upgrades.  To get more detailed information about any failed upgrade, see `juju debug-log -i istio-pilot/0` for more verbose logs.  In general, the debugging procedure is:
 * if you're trying to upgrade across version gaps that are not supported (eg: two minor versions), refresh the charm back to a supported version
 * if something unexpected happens, use the [istioctl](https://istio.io/latest/docs/reference/commands/istioctl/) and debugging guidance from [Istio](https://istio.io/latest/) to diagnose and resolve any issues.  If you can restore the cluster to a running state that is at most one minor version behind your target version, you can then `juju resolved istio-pilot` to get Istio to retry the upgrade. 
 
@@ -72,3 +74,5 @@ If you accidentally attempt a downgrade, the istio-pilot charm will go to error 
 #### Unknown version errors
 
 If the upgrade fails saying it cannot find the control plane version, this likely means your existing istio deployment is missing key pieces.  Use the [istioctl](https://istio.io/latest/docs/reference/commands/istioctl/) tool to inspect further. 
+
+[^1]: Removal of the istio-ingressgateway application prior to upgrading istio-pilot is required because some versions of istio-pilot will hang indefinitely if istio-ingressgateway's workload pod is present in the cluster.  To remove the istio-ingressgateway application, use `juju remove-application istio-ingressgateway`.  Confirm that istio-ingressgateway is completely removed before proceeding by checking that the istio-ingressgateway application is no longer in `juju status` and the `istio-ingressgateway-workload` deployment is no longer in `kubectl get deployment -n kubeflow`.  If Juju hangs on removing the application, use `juju remove-application istio-ingressgateway --force` to force the removal.  Note that forcing the removal may leave the deployment in kubernetes, so be sure to check for that after forcing and delete the deployment manually if necessary.  
