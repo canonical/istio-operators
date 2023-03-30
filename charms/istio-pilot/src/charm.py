@@ -43,7 +43,7 @@ UPGRADE_FAILED_VERSION_ERROR_MSG = (
     "recommendations."
 )
 
-# Helper to retry calling a function over 300 seconds
+# Helper to retry calling a function over 15 minutes
 RETRY_FOR_15_MINUTES = tenacity.Retrying(
     stop=tenacity.stop_after_delay(60 * 15),
     wait=tenacity.wait_fixed(2),
