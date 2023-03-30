@@ -227,6 +227,9 @@ class Operator(CharmBase):
             ) from e
 
         # Wait for the upgrade to complete before progressing
+        self._log_and_set_status(
+            MaintenanceStatus("Waiting for Istio upgrade to roll out in cluster")
+        )
         _wait_for_update_rollout(istioctl, RETRY_FOR_15_MINUTES, self.log)
 
         # Patch any known issues with the upgrade
@@ -636,7 +639,6 @@ def _validate_upgrade_version(versions) -> bool:
 def _wait_for_update_rollout(
     istioctl: Istioctl, retry_strategy: tenacity.Retrying, logger: logging.Logger
 ):
-    logger.info("Waiting for Istio upgrade to roll out")
     for attempt in retry_strategy:
         # When istioctl shows the control plane version matches the client version, continue
         with attempt:
@@ -654,6 +656,11 @@ def _wait_for_update_rollout(
                 )
                 raise GenericCharmRuntimeError(
                     "Failed to upgrade.  See `juju debug-log` for details."
+                )
+            else:
+                logger.info(
+                    f"Found control plane version ({versions['control_plane']}) matching client"
+                    f" version - upgrade rollout complete"
                 )
     return versions
 
