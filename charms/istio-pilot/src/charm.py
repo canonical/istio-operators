@@ -3,7 +3,6 @@
 import logging
 import subprocess
 
-import tenacity
 import yaml
 from charmed_kubeflow_chisme.exceptions import GenericCharmRuntimeError
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
@@ -41,13 +40,6 @@ UPGRADE_FAILED_VERSION_ERROR_MSG = (
     " [the upgrade docs]"
     "(https://github.com/canonical/istio-operators/blob/main/charms/istio-pilot/README.md) for "
     "recommendations."
-)
-
-# Helper to retry calling a function over 15 minutes
-RETRY_FOR_15_MINUTES = tenacity.Retrying(
-    stop=tenacity.stop_after_delay(60 * 15),
-    wait=tenacity.wait_fixed(2),
-    reraise=True,
 )
 
 
@@ -225,12 +217,6 @@ class Operator(CharmBase):
             raise GenericCharmRuntimeError(
                 "Failed to upgrade.  See `juju debug-log` for details."
             ) from e
-
-        # Wait for the upgrade to complete before progressing
-        self._log_and_set_status(
-            MaintenanceStatus("Waiting for Istio upgrade to roll out in cluster")
-        )
-        _wait_for_update_rollout(istioctl, RETRY_FOR_15_MINUTES, self.log)
 
         # Patch any known issues with the upgrade
         client_version = Version(versions["client"])
@@ -634,35 +620,6 @@ def _validate_upgrade_version(versions) -> bool:
         )
 
     return True
-
-
-def _wait_for_update_rollout(
-    istioctl: Istioctl, retry_strategy: tenacity.Retrying, logger: logging.Logger
-):
-    for attempt in retry_strategy:
-        # When istioctl shows the control plane version matches the client version, continue
-        with attempt:
-            versions = istioctl.version()
-            if versions["control_plane"] != versions["client"]:
-                logger.info(
-                    f"Found control plane version {versions['control_plane']} - waiting for "
-                    f"control plane to be version {versions['client']}."
-                )
-                logger.error(
-                    UPGRADE_FAILED_MSG.format(
-                        message="upgrade-charm handler timed out while waiting for new Istio"
-                        " version to roll out."
-                    )
-                )
-                raise GenericCharmRuntimeError(
-                    "Failed to upgrade.  See `juju debug-log` for details."
-                )
-            else:
-                logger.info(
-                    f"Found control plane version ({versions['control_plane']}) matching client"
-                    f" version - upgrade rollout complete"
-                )
-    return versions
 
 
 if __name__ == "__main__":
