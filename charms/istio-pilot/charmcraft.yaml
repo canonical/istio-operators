@@ -13,5 +13,5 @@ parts:
     build-packages: [git]
   istioctl:
     plugin: dump
-    source: https://github.com/istio/istio/releases/download/1.12.9/istioctl-1.12.9-linux-amd64.tar.gz
+    source: https://github.com/istio/istio/releases/download/1.16.2/istioctl-1.16.2-linux-amd64.tar.gz
     source-type: tar
