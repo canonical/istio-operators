@@ -46,7 +46,9 @@ def test_install_no_rel(harness):
     harness.update_config({"kind": "ingress"})
     harness.begin_with_initial_hooks()
 
-    assert harness.charm.model.unit.status == BlockedStatus("Please add required relation to istio-pilot")
+    assert harness.charm.model.unit.status == BlockedStatus("
+        Please add required relation to istio-pilot"
+    )
 
 
 def test_start_apply(configured_harness, kind, mocked_client):
