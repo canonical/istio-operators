@@ -46,7 +46,7 @@ class Operator(CharmBase):
             return
 
         if not self.model.relations["istio-pilot"]:
-            self.model.unit.status = BlockedStatus("Add required relation to istio-pilot")
+            self.model.unit.status = BlockedStatus("Please add required relation to istio-pilot")
             return
 
         if not ((pilot := interfaces["istio-pilot"]) and pilot.get_data()):
