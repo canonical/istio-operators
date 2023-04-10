@@ -16,24 +16,24 @@ TEST_DATA_PATH = Path("./tests/unit/istioctl_data/")
 EXAMPLE_MANIFEST = TEST_DATA_PATH / "example_manifest.yaml"
 
 
-def test_istioctl_install(mocked_check_call):
-    """Tests that istioctl.install() calls the binary successfully with the expected arguments."""
-    ictl = Istioctl(istioctl_path=ISTIOCTL_BINARY, namespace=NAMESPACE, profile=PROFILE)
+# autouse to ensure we don't accidentally call out, but
+# can also be used explicitly to get access to the mock.
+@pytest.fixture(autouse=True)
+def mocked_check_call(mocker):
+    mocked_check_call = mocker.patch("charm.subprocess.check_call")
+    mocked_check_call.return_value = 0
 
-    ictl.install()
+    yield mocked_check_call
 
-    # Assert that we call istioctl with the expected arguments
-    expected_call_args = [
-        ISTIOCTL_BINARY,
-        "install",
-        "-y",
-        "-s",
-        f"profile={PROFILE}",
-        "-s",
-        f"values.global.istioNamespace={NAMESPACE}",
-    ]
 
-    mocked_check_call.assert_called_once_with(expected_call_args)
+# autouse to ensure we don't accidentally call out, but
+# can also be used explicitly to get access to the mock.
+@pytest.fixture(autouse=True)
+def mocked_check_output(mocker):
+    mocked_check_output = mocker.patch("charm.subprocess.check_output")
+    mocked_check_output.return_value = "stdout"
+
+    yield mocked_check_output
 
 
 @pytest.fixture()
@@ -52,6 +52,26 @@ def mocked_check_output_failing(mocked_check_output):
     mocked_check_output.side_effect = cpe
 
     yield mocked_check_output
+
+
+def test_istioctl_install(mocked_check_call):
+    """Tests that istioctl.install() calls the binary successfully with the expected arguments."""
+    ictl = Istioctl(istioctl_path=ISTIOCTL_BINARY, namespace=NAMESPACE, profile=PROFILE)
+
+    ictl.install()
+
+    # Assert that we call istioctl with the expected arguments
+    expected_call_args = [
+        ISTIOCTL_BINARY,
+        "install",
+        "-y",
+        "-s",
+        f"profile={PROFILE}",
+        "-s",
+        f"values.global.istioNamespace={NAMESPACE}",
+    ]
+
+    mocked_check_call.assert_called_once_with(expected_call_args)
 
 
 def test_istioctl_install_error(mocked_check_call_failing):
