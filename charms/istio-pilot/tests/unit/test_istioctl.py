@@ -12,8 +12,46 @@ from istioctl import Istioctl, IstioctlError, get_client_version, get_control_pl
 ISTIOCTL_BINARY = "not_really_istioctl"
 NAMESPACE = "dummy-namespace"
 PROFILE = "my-profile"
-EXAMPLE_MANIFEST = "./tests/unit/example_manifest.yaml"
-TEST_DATA_PATH = Path("./tests/unit/data/")
+TEST_DATA_PATH = Path("./tests/unit/istioctl_data/")
+EXAMPLE_MANIFEST = TEST_DATA_PATH / "example_manifest.yaml"
+
+
+# autouse to ensure we don't accidentally call out, but
+# can also be used explicitly to get access to the mock.
+@pytest.fixture(autouse=True)
+def mocked_check_call(mocker):
+    mocked_check_call = mocker.patch("charm.subprocess.check_call")
+    mocked_check_call.return_value = 0
+
+    yield mocked_check_call
+
+
+# autouse to ensure we don't accidentally call out, but
+# can also be used explicitly to get access to the mock.
+@pytest.fixture(autouse=True)
+def mocked_check_output(mocker):
+    mocked_check_output = mocker.patch("charm.subprocess.check_output")
+    mocked_check_output.return_value = "stdout"
+
+    yield mocked_check_output
+
+
+@pytest.fixture()
+def mocked_check_call_failing(mocked_check_call):
+    cpe = CalledProcessError(cmd="", returncode=1, stderr="stderr", output="stdout")
+    mocked_check_call.return_value = None
+    mocked_check_call.side_effect = cpe
+
+    yield mocked_check_call
+
+
+@pytest.fixture()
+def mocked_check_output_failing(mocked_check_output):
+    cpe = CalledProcessError(cmd="", returncode=1, stderr="stderr", output="stdout")
+    mocked_check_output.return_value = None
+    mocked_check_output.side_effect = cpe
+
+    yield mocked_check_output
 
 
 def test_istioctl_install(mocked_check_call):
@@ -34,24 +72,6 @@ def test_istioctl_install(mocked_check_call):
     ]
 
     mocked_check_call.assert_called_once_with(expected_call_args)
-
-
-@pytest.fixture()
-def mocked_check_call_failing(mocked_check_call):
-    cpe = CalledProcessError(cmd="", returncode=1, stderr="stderr", output="stdout")
-    mocked_check_call.return_value = None
-    mocked_check_call.side_effect = cpe
-
-    yield mocked_check_call
-
-
-@pytest.fixture()
-def mocked_check_output_failing(mocked_check_output):
-    cpe = CalledProcessError(cmd="", returncode=1, stderr="stderr", output="stdout")
-    mocked_check_output.return_value = None
-    mocked_check_output.side_effect = cpe
-
-    yield mocked_check_output
 
 
 def test_istioctl_install_error(mocked_check_call_failing):
@@ -174,7 +194,7 @@ def test_istioctl_version(mocked_check_output):
     """Tests that istioctl.version() returns successfully when expected"""
     expected_client_version = "1.2.3"
     expected_control_version = "4.5.6"
-    environment = Environment(loader=FileSystemLoader("./tests/unit/data/"))
+    environment = Environment(loader=FileSystemLoader(TEST_DATA_PATH))
     template = environment.get_template("istioctl_version_output_template.yaml.j2")
     istioctl_version_output_str = template.render(
         client_version=expected_client_version,
@@ -221,7 +241,7 @@ def test_istioctl_version_istioctl_command_fails(mocked_check_output_failing):
 def test_get_client_version():
     client_version = "1.2.3"
 
-    environment = Environment(loader=FileSystemLoader("./tests/unit/data/"))
+    environment = Environment(loader=FileSystemLoader(TEST_DATA_PATH))
     template = environment.get_template("istioctl_version_output_template.yaml.j2")
     istioctl_version_output_str = template.render(
         client_version=client_version,
