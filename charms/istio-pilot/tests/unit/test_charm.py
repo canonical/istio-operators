@@ -16,7 +16,7 @@ class TestCharmEvents:
 
     TODO: Explain this better
     """
-    def test_events(self, harness, mocker):
+    def test_event_observing(self, harness, mocker):
         harness.begin()
         mocked_install = mocker.patch("charm.Operator.install")
         mocked_remove = mocker.patch("charm.Operator.remove")
@@ -56,6 +56,7 @@ class TestCharmEvents:
         assert isinstance(mocked_reconcile.call_args_list[0][0][0], RelationChangedEvent)
         assert isinstance(mocked_reconcile.call_args_list[1][0][0], RelationBrokenEvent)
         mocked_reconcile.reset_mock()
+
 
 
 # Fixtures
