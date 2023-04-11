@@ -2,6 +2,7 @@ from unittest.mock import Mock
 
 import pytest
 from ops.charm import RelationCreatedEvent, RelationChangedEvent, RelationBrokenEvent
+from ops.model import WaitingStatus
 from ops.testing import Harness
 
 from charm import Operator
@@ -57,6 +58,22 @@ class TestCharmEvents:
         assert isinstance(mocked_reconcile.call_args_list[1][0][0], RelationBrokenEvent)
         mocked_reconcile.reset_mock()
 
+    def test_not_leader(self, harness):
+        """Assert that the charm does not perform any actions when not the leader."""
+        harness.set_leader(False)
+        harness.begin()
+        harness.charm.on.config_changed.emit()
+        assert harness.charm.model.unit.status == WaitingStatus("Waiting for leadership")
+
+
+class TestCharmHelpers:
+    """Directly test charm helpers and private methods."""
+    def test_reconcile_not_leader(self, harness):
+        """Assert that the reconcile handler does not perform any actions when not the leader."""
+        harness.set_leader(False)
+        harness.begin()
+        harness.charm.reconcile("mock event")
+        assert harness.charm.model.unit.status == WaitingStatus("Waiting for leadership")
 
 
 # Fixtures

@@ -314,7 +314,7 @@ class Operator(CharmBase):
     def _check_leader(self):
         """Check if this unit is a leader."""
         if not self.unit.is_leader():
-            self.logger.info("Not a leader, skipping setup")
+            self.log.info("Not a leader, skipping setup")
             raise ErrorWithStatus("Waiting for leadership", WaitingStatus)
 
     def _get_interfaces(self):
