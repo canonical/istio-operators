@@ -1,11 +1,24 @@
-from unittest.mock import Mock
+import logging
+from contextlib import nullcontext as does_not_raise
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
+import tenacity
+from charmed_kubeflow_chisme.exceptions import GenericCharmRuntimeError
+from charmed_kubeflow_chisme.lightkube.mocking import FakeApiError
+from lightkube.models.admissionregistration_v1 import (
+    ServiceReference,
+    ValidatingWebhook,
+    ValidatingWebhookConfiguration,
+    WebhookClientConfig,
+)
+from lightkube.models.meta_v1 import ObjectMeta
 from ops.charm import RelationBrokenEvent, RelationChangedEvent, RelationCreatedEvent
 from ops.model import WaitingStatus
 from ops.testing import Harness
 
-from charm import Operator
+from charm import Operator, _validate_upgrade_version, _wait_for_update_rollout
+from istioctl import IstioctlError
 
 # TODO: Fixtures to block lightkube
 # TODO: Fixtures to block istioctl
@@ -77,10 +90,233 @@ class TestCharmHelpers:
         assert harness.charm.model.unit.status == WaitingStatus("Waiting for leadership")
 
 
+class TestCharmUpgrade:
+    """Tests for charm upgrade handling."""
+
+    @patch("charm.Operator._patch_istio_validating_webhook")  # Do not patch istio installs
+    @patch("charm._wait_for_update_rollout")  # Do not wait for upgrade to finish
+    @patch("charm._validate_upgrade_version")  # Do not validate versions
+    @patch("charm.Istioctl", return_value=MagicMock())
+    def test_upgrade_successful(
+        self,
+        mocked_istioctl_class,
+        _mocked_validate_upgrade_version,
+        mocked_wait_for_update_rollout,
+        _mocked_patch_istio_validating_webhook,
+        harness,
+    ):
+        """Tests that charm.upgrade_charm works successfully when expected."""
+        model_name = "test-model"
+        harness.set_model_name(model_name)
+
+        mocked_istioctl = mocked_istioctl_class.return_value
+
+        # Return valid version data from istioctl.versions
+        mocked_istioctl.version.return_value = {"client": "1.12.5", "control_plane": "1.12.5"}
+
+        # Simulate the upgrade
+        harness.begin()
+        harness.charm.upgrade_charm("mock_event")
+
+        # Assert that the upgrade was successful
+        mocked_istioctl_class.assert_called_with("./istioctl", model_name, "minimal")
+        mocked_istioctl.upgrade.assert_called_with()
+        harness.charm._patch_istio_validating_webhook.assert_called_with()
+
+        mocked_wait_for_update_rollout.assert_called_once()
+
+    @patch("charm._validate_upgrade_version")  # Do not validate versions
+    @patch("charm.Istioctl.version")  # Pass istioctl version check
+    @patch("charm.Istioctl.precheck", side_effect=IstioctlError())  # Fail istioctl precheck
+    def test_upgrade_failed_precheck(
+        self,
+        _mocked_istioctl_precheck,
+        _mocked_istioctl_version,
+        _mocked_validate_upgrade_version,
+        harness,
+    ):
+        """Tests that charm.upgrade_charm fails when precheck fails."""
+        harness.begin()
+
+        with pytest.raises(GenericCharmRuntimeError):
+            harness.charm.upgrade_charm("mock_event")
+
+    @patch("charm.Istioctl.version", side_effect=IstioctlError())
+    def test_upgrade_failed_getting_version(self, _mocked_istioctl_version, harness):
+        """Tests that charm.upgrade_charm fails when precheck fails."""
+        harness.begin()
+
+        with pytest.raises(GenericCharmRuntimeError):
+            harness.charm.upgrade_charm("mock_event")
+
+    @patch("charm._validate_upgrade_version", side_effect=ValueError())  # Fail when validating
+    @patch("charm.Istioctl.version")  # Pass istioctl version check
+    def test_upgrade_failed_version_check(
+        self, _mocked_istioctl_version, _mocked_validate_upgrade_version, harness
+    ):
+        """Tests that charm.upgrade_charm fails when precheck fails."""
+        model_name = "test-model"
+        harness.set_model_name(model_name)
+
+        harness.begin()
+
+        with pytest.raises(GenericCharmRuntimeError):
+            harness.charm.upgrade_charm("mock_event")
+
+    @patch("charm.Istioctl.upgrade", side_effect=IstioctlError())  # Fail istioctl upgrade
+    def test_upgrade_failed_during_upgrade(self, _mocked_istioctl_upgrade, harness):
+        """Tests that charm.upgrade_charm fails when upgrade process fails."""
+        harness.begin()
+
+        with pytest.raises(GenericCharmRuntimeError):
+            harness.charm.upgrade_charm("mock_event")
+
+    @pytest.mark.parametrize(
+        "versions, context_raised",
+        [
+            ({"client": "1.1.0", "control_plane": "1.1.0"}, does_not_raise()),
+            ({"client": "1.1.1", "control_plane": "1.1.0"}, does_not_raise()),
+            ({"client": "1.2.10", "control_plane": "1.1.0"}, does_not_raise()),
+            ({"client": "2.1.0", "control_plane": "1.1.0"}, pytest.raises(ValueError)),
+            ({"client": "1.1.0", "control_plane": "1.2.0"}, pytest.raises(ValueError)),
+            ({"client": "1.1.0", "control_plane": "2.1.0"}, pytest.raises(ValueError)),
+        ],
+    )
+    def test_validate_upgrade_version(self, versions, context_raised):
+        with context_raised:
+            _validate_upgrade_version(versions)
+
+    def test_patch_istio_validating_webhook(self, harness, mocked_lightkube_client):
+        """Tests that _patch_istio_validating_webhook works as expected."""
+        model_name = "test-model"
+        harness.set_model_name(model_name)
+        harness.begin()
+
+        mock_vwc = ValidatingWebhookConfiguration(
+            metadata=ObjectMeta(name="istiod-default-validator"),
+            webhooks=[
+                ValidatingWebhook(
+                    admissionReviewVersions=[""],
+                    name="",
+                    sideEffects=None,
+                    clientConfig=WebhookClientConfig(
+                        service=ServiceReference(
+                            name="istiod",
+                            namespace="istio-system",
+                        )
+                    ),
+                )
+            ],
+        )
+
+        mocked_lightkube_client.get.return_value = mock_vwc
+
+        harness.charm._patch_istio_validating_webhook()
+
+        # Confirm we've tried to apply a patched version of the webhook
+        patch_call = mocked_lightkube_client.patch.call_args_list[0]
+        # Assert the expected webhook is being patched
+        assert patch_call[0][1] == "istiod-default-validator"
+        # Assert that we've patched to the expected model name
+        vwc = patch_call[0][2]
+        assert vwc.webhooks[0].clientConfig.service.namespace == model_name
+
+    def test_patch_istio_validating_webhook_for_webhook_does_not_exist(
+        self, harness, mocked_lightkube_client
+    ):
+        """Tests that charm._patch_istio_validating_webhook does not fail if webhook missing."""
+        harness.begin()
+
+        mocked_lightkube_client = MagicMock()
+        mocked_lightkube_client.get.side_effect = FakeApiError(404)
+
+        harness.charm._patch_istio_validating_webhook()
+
+        # Confirm we've not tried to apply anything
+        assert mocked_lightkube_client.patch.call_count == 0
+
+    @patch("charm.Istioctl", return_value=MagicMock())
+    def test_wait_for_update_rollout(self, mocked_istioctl_class):
+        """Tests that waiting for Istio updates to roll out works as expected."""
+        mocked_istioctl = mocked_istioctl_class.return_value
+
+        # Mock istioctl.version so it initially returns client != control_plane, then
+        # eventually returns client == control_plane.
+        versions_equal = {"client": "1.12.5", "control_plane": "1.12.5"}
+        versions_not_equal = {"client": "1.12.5", "control_plane": "1.12.4"}
+        mocked_istioctl.version.side_effect = [
+            versions_not_equal,
+            versions_not_equal,
+            versions_not_equal,
+            versions_equal,
+        ]
+
+        retry_strategy = tenacity.Retrying(
+            stop=tenacity.stop_after_attempt(5),
+            wait=tenacity.wait_fixed(0.001),
+            reraise=True,
+        )
+
+        _wait_for_update_rollout(mocked_istioctl, retry_strategy, logging.getLogger())
+
+        assert mocked_istioctl.version.call_count == 4
+
+    @patch("charm.Istioctl", return_value=MagicMock())
+    def test_wait_for_update_rollout_timeout(self, mocked_istioctl):
+        """Tests that waiting for Istio updates to roll out raises on timeout."""
+        # Mock istioctl.version so it always returns client != control_plane
+        versions_not_equal = {"client": "1.12.5", "control_plane": "1.12.4"}
+        mocked_istioctl.version.return_value = versions_not_equal
+
+        retry_strategy = tenacity.Retrying(
+            stop=tenacity.stop_after_attempt(5),
+            wait=tenacity.wait_fixed(0.001),
+            reraise=True,
+        )
+
+        with pytest.raises(GenericCharmRuntimeError):
+            _wait_for_update_rollout(mocked_istioctl, retry_strategy, logging.getLogger())
+
+        assert mocked_istioctl.version.call_count == 5
+
+
 # Fixtures
 @pytest.fixture
 def harness():
     return Harness(Operator)
+
+
+# autouse to ensure we don't accidentally call out, but
+# can also be used explicitly to get access to the mock.
+@pytest.fixture(autouse=True)
+def mocked_check_call(mocker):
+    mocked_check_call = mocker.patch("charm.subprocess.check_call")
+    mocked_check_call.return_value = 0
+
+    yield mocked_check_call
+
+
+# autouse to ensure we don't accidentally call out, but
+# can also be used explicitly to get access to the mock.
+@pytest.fixture(autouse=True)
+def mocked_check_output(mocker):
+    mocked_check_output = mocker.patch("charm.subprocess.check_output")
+    mocked_check_output.return_value = "stdout"
+
+    yield mocked_check_output
+
+
+@pytest.fixture()
+def mocked_lightkube_client(mocked_lightkube_client_class):
+    mocked_instance = MagicMock()
+    mocked_lightkube_client_class.return_value = mocked_instance
+    yield mocked_instance
+
+
+@pytest.fixture()
+def mocked_lightkube_client_class(mocker):
+    mocked = mocker.patch("charm.Client")
+    yield mocked
 
 
 # Helpers

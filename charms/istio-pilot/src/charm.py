@@ -5,6 +5,7 @@ import subprocess
 
 import tenacity
 from charmed_kubeflow_chisme.exceptions import ErrorWithStatus, GenericCharmRuntimeError
+from lightkube import Client
 from lightkube.core.exceptions import ApiError
 from lightkube.resources.admissionregistration_v1 import ValidatingWebhookConfiguration
 from lightkube.resources.core_v1 import Service
@@ -107,8 +108,7 @@ class Operator(CharmBase):
         #         jobs=[{"static_configs": [{"targets": [f"{self._istiod_svc}:{METRICS_PORT}"]}]}],
         #     )
         # self.grafana_dashboards = GrafanaDashboardProvider(
-        #     self,
-        #     relation_name="grafana-dashboard"
+        #       self, relation_name="grafana-dashboard"
         # )
 
         # Configure the gateway-info provider
@@ -119,6 +119,18 @@ class Operator(CharmBase):
         #  If we break this into a separate handler, it will need to trigger on anything that
         #  triggers a reconcile because the Gateway's status could change during those events
         self.gateway = GatewayProvider(self)
+        # Configure Observability
+        # TODO: Re-add this, but is there a way to do it without having to mock it in unit tests?
+        # if self._istiod_svc:
+        #     self._scraping = MetricsEndpointProvider(
+        #         self,
+        #         relation_name="metrics-endpoint",
+        #         jobs=[{"static_configs": [{"targets": [f"{self._istiod_svc}:{METRICS_PORT}"]}]}],
+        #     )
+        # self.grafana_dashboards = GrafanaDashboardProvider(
+        #     self,
+        #     relation_name="grafana-dashboard"
+        # )
 
     def install(self, event):
         """Install charm."""
@@ -434,8 +446,9 @@ class Operator(CharmBase):
             "Attempting to patch istiod-default-validator webhook to ensure it points to"
             " correct namespace."
         )
+        lightkube_client = Client()
         try:
-            vwc = self.lightkube_client.get(
+            vwc = lightkube_client.get(
                 ValidatingWebhookConfiguration, name="istiod-default-validator"
             )
         except ApiError as e:
@@ -447,7 +460,7 @@ class Operator(CharmBase):
 
         vwc.metadata.managedFields = None
         vwc.webhooks[0].clientConfig.service.namespace = self.model.name
-        self.lightkube_client.patch(
+        lightkube_client.patch(
             ValidatingWebhookConfiguration,
             "istiod-default-validator",
             vwc,
