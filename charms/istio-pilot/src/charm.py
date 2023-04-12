@@ -322,6 +322,17 @@ class Operator(CharmBase):
             self.log.info("Not a leader, skipping setup")
             raise ErrorWithStatus("Waiting for leadership", WaitingStatus)
 
+    @property
+    def _gateway_port(self):
+        if _xor(self.model.config["ssl-crt"], self.model.config["ssl-key"]):
+            # Fail if ssl is only partly configured as this is probably a mistake
+            raise ErrorWithStatus("Charm config for ssl-crt and ssl-key must either both be set or unset", BlockedStatus)
+
+        if self.model.config["ssl-crt"] and self.model.config["ssl-key"]:
+            return GATEWAY_HTTPS_PORT
+        else:
+            return GATEWAY_HTTP_PORT
+
     def _get_interfaces(self):
         """Retrieve interface object."""
         try:
@@ -624,6 +635,14 @@ def _wait_for_update_rollout(
                     f" version - upgrade rollout complete"
                 )
     return versions
+
+
+def _xor(a, b):
+    """Returns True if exactly one of a and b is True, else False."""
+    if (a and not b) or (b and not a):
+        return True
+    else:
+        return False
 
 
 if __name__ == "__main__":

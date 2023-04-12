@@ -21,10 +21,13 @@ from ops.model import WaitingStatus
 from ops.testing import Harness
 
 from charm import (
+    GATEWAY_HTTP_PORT,
+    GATEWAY_HTTPS_PORT,
     Operator,
     _get_gateway_address_from_svc,
     _validate_upgrade_version,
     _wait_for_update_rollout,
+    _xor,
 )
 from istioctl import IstioctlError
 
@@ -96,6 +99,23 @@ class TestCharmHelpers:
         harness.begin()
         harness.charm.reconcile("mock event")
         assert harness.charm.model.unit.status == WaitingStatus("Waiting for leadership")
+
+    @pytest.mark.parametrize(
+        "ssl_crt, ssl_key, expected_port, expected_context",
+        [
+            ("", "", GATEWAY_HTTP_PORT, does_not_raise()),
+            ("x", "x", GATEWAY_HTTPS_PORT, does_not_raise()),
+            ("x", "", None, pytest.raises(ErrorWithStatus)),
+            ("", "x", None, pytest.raises(ErrorWithStatus)),
+        ]
+    )
+    def test_gateway_port(self, ssl_crt, ssl_key, expected_port, expected_context, harness):
+        harness.begin()
+        harness.update_config({"ssl-crt": ssl_crt, "ssl-key": ssl_key})
+
+        with expected_context:
+            gateway_port = harness.charm._gateway_port
+            assert gateway_port == expected_port
 
     @pytest.mark.parametrize(
         "mock_service_fixture, is_gateway_up",
@@ -181,6 +201,18 @@ class TestCharmHelpers:
 
         assert "versions not found" in err.value.msg
 
+    @pytest.mark.parametrize(
+        "left, right, expected",
+        [
+            (True, False, True),
+            (False, True, True),
+            (True, True, False),
+            (False, False, False),
+        ]
+    )
+    def test_xor(self, left, right, expected):
+        """Test that the xor helper function works as expected."""
+        assert _xor(left, right) is expected
 
 
 class TestCharmUpgrade:
