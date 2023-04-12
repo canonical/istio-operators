@@ -1,10 +1,12 @@
 import logging
 from contextlib import nullcontext as does_not_raise
+from typing import Optional
 from unittest.mock import MagicMock, Mock, patch
+import yaml
 
 import pytest
 import tenacity
-from charmed_kubeflow_chisme.exceptions import GenericCharmRuntimeError
+from charmed_kubeflow_chisme.exceptions import ErrorWithStatus, GenericCharmRuntimeError
 from charmed_kubeflow_chisme.lightkube.mocking import FakeApiError
 from lightkube import codecs
 from lightkube.models.admissionregistration_v1 import (
@@ -140,6 +142,45 @@ class TestCharmHelpers:
         mock_service = request.getfixturevalue(mock_service_fixture)
 
         assert _get_gateway_address_from_svc(svc=mock_service) is gateway_address
+
+    def test_get_ingress_auth_data(self, harness):
+        """Tests that the _get_ingress_auth_data helper returns the correct relation data."""
+        harness.begin()
+        returned_data = add_ingress_auth_to_harness(harness)
+
+        ingress_auth_data = harness.charm._get_ingress_auth_data()
+
+        assert len(ingress_auth_data) == 1
+        assert list(ingress_auth_data.values())[0] == returned_data['data']
+
+    def test_get_ingress_auth_data_empty(self, harness):
+        """Tests that the _get_ingress_auth_data helper returns the correct relation data."""
+        harness.begin()
+        ingress_auth_data = harness.charm._get_ingress_auth_data()
+
+        assert len(ingress_auth_data) == 0
+
+    def test_get_ingress_auth_data_too_many_relations(self, harness):
+        """Tests that the _get_ingress_auth_data helper returns the correct relation data."""
+        harness.begin()
+        add_ingress_auth_to_harness(harness, other_app="other1")
+        add_ingress_auth_to_harness(harness, other_app="other2")
+
+        with pytest.raises(ErrorWithStatus) as err:
+            harness.charm._get_ingress_auth_data()
+
+        assert "Multiple ingress-auth" in err.value.msg
+
+    def test_get_ingress_auth_data_waiting_on_version(self, harness):
+        """Tests that the _get_ingress_auth_data helper returns the correct relation data."""
+        harness.begin()
+        harness.add_relation("ingress-auth", "other")
+
+        with pytest.raises(ErrorWithStatus) as err:
+            harness.charm._get_ingress_auth_data()
+
+        assert "versions not found" in err.value.msg
+
 
 
 class TestCharmUpgrade:
@@ -450,6 +491,47 @@ def mocked_lightkube_client_class(mocker):
 
 
 # Helpers
+def add_data_to_sdi_relation(harness: Harness, rel_id: str, other: str, data: Optional[dict] = None, supported_versions: str = "- v1") -> None:
+    """Add data to the an SDI-backed relation."""
+    if data is None:
+        data = {}
+
+    harness.update_relation_data(
+        rel_id,
+        other,
+        {"_supported_versions": supported_versions, "data": yaml.dump(data)},
+    )
+
+
+def add_ingress_auth_to_harness(harness: Harness, other_app="other") -> dict:
+    """Relates a new app and unit to the ingress-auth relation.
+
+    Returns dict of:
+    * other (str): The name of the other app
+    * other_unit (str): The name of the other unit
+    * rel_id (int): The relation id
+    * data (dict): The relation data put to the relation
+    """
+    other_unit=f"{other_app}/0"
+    rel_id = harness.add_relation("ingress-auth", other_app)
+
+    harness.add_relation_unit(rel_id, other_unit)
+    data = {
+        "service": "service-name",
+        "port": 6666,
+        "allowed-request-headers": ["foo"],
+        "allowed-response-headers": ["bar"],
+    }
+    add_data_to_sdi_relation(harness, rel_id, other_app, data)
+
+    return {
+        "other": other_app,
+        "other_unit": other_unit,
+        "rel_id": rel_id,
+        "data": data,
+    }
+
+
 def assert_called_once_and_reset(mock: Mock):
     mock.assert_called_once()
     mock.reset_mock()

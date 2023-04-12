@@ -13,7 +13,12 @@ from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from packaging.version import Version
-from serialized_data_interface import NoCompatibleVersions, NoVersionsListed, get_interfaces
+from serialized_data_interface import (
+    NoCompatibleVersions,
+    NoVersionsListed,
+    get_interface,
+    get_interfaces,
+)
 
 from istio_gateway_info_provider import RELATION_NAME as GATEWAY_INFO_RELATION_NAME
 from istio_gateway_info_provider import GatewayProvider
@@ -22,6 +27,7 @@ from istioctl import Istioctl, IstioctlError
 GATEWAY_HTTP_PORT = 8080
 GATEWAY_HTTPS_PORT = 8443
 METRICS_PORT = 15014
+INGRESS_AUTH_RELATION_NAME = "ingress-auth"
 ISTIOCTL_PATH = "./istioctl"
 ISTIOCTL_DEPOYMENT_PROFILE = "minimal"
 UPGRADE_FAILED_MSG = (
@@ -332,7 +338,32 @@ class Operator(CharmBase):
         This is a workaround to ensure that errors in other relation data, such as an incomplete
         ingress relation, do not block us from retrieving the ingress-auth data.
         """
-        raise NotImplementedError()
+        try:
+            ingress_auth_interface = get_interface(self, INGRESS_AUTH_RELATION_NAME)
+        except NoVersionsListed as err:
+            raise ErrorWithStatus(err, WaitingStatus)
+        except NoCompatibleVersions as err:
+            raise ErrorWithStatus(err, BlockedStatus)
+
+        # Filter out data we sent out.
+        if ingress_auth_interface:
+            ingress_auth_data = {
+                (rel, app): route
+                for (rel, app), route in sorted(
+                    ingress_auth_interface.get_data().items(), key=lambda tup: tup[0][0].id
+                )
+                if app != self.app
+            }
+        else:
+            # If there is no ingress-auth relation, we have no data here
+            ingress_auth_data = {}
+
+        if len(ingress_auth_data) > 1:
+            raise ErrorWithStatus(
+                "Multiple ingress-auth relations are not supported", BlockedStatus
+            )
+
+        return ingress_auth_data
 
     def _get_gateway_service(self):
         """Returns a lightkube Service object for the gateway service."""
