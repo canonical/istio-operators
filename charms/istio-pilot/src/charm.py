@@ -119,6 +119,27 @@ class Operator(CharmBase):
         #  If we break this into a separate handler, it will need to trigger on anything that
         #  triggers a reconcile because the Gateway's status could change during those events
         self.gateway = GatewayProvider(self)
+        # Configure Observability
+        # TODO: Re-add this, but is there a way to do it without having to mock it in unit tests?
+        # if self._istiod_svc:
+        #     self._scraping = MetricsEndpointProvider(
+        #         self,
+        #         relation_name="metrics-endpoint",
+        #         jobs=[{"static_configs": [{"targets": [f"{self._istiod_svc}:{METRICS_PORT}"]}]}],
+        #     )
+        # self.grafana_dashboards = GrafanaDashboardProvider(
+        #     self,
+        #     relation_name="grafana-dashboard"
+        # )
+
+        # Configure the gateway-info provider
+        # TODO: Rename this to gateway_info?
+        # TODO: Can the gateway-info provider event handling just be moved to this class, and main
+        #  doesn't need to know about it (similar to obs libs)?  We'd probably want it to be after
+        #  the main handlers.
+        #  If we break this into a separate handler, it will need to trigger on anything that
+        #  triggers a reconcile because the Gateway's status could change during those events
+        self.gateway = GatewayProvider(self)
 
     def install(self, event):
         """Install charm."""
