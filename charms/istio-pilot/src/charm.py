@@ -19,8 +19,8 @@ from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingSta
 from packaging.version import Version
 from serialized_data_interface import NoCompatibleVersions, NoVersionsListed, get_interfaces
 
-from istio_gateway_info_provider import GatewayProvider
 from istio_gateway_info_provider import RELATION_NAME as GATEWAY_INFO_RELATION_NAME
+from istio_gateway_info_provider import GatewayProvider
 from istioctl import Istioctl, IstioctlError
 
 GATEWAY_HTTP_PORT = 8080
@@ -81,7 +81,9 @@ class Operator(CharmBase):
 
         # Watch:
         # * relation_joined: because we send data to the other side whenever we see a related app
-        self.framework.observe(self.on[GATEWAY_INFO_RELATION_NAME].relation_created, self.reconcile)
+        self.framework.observe(
+            self.on[GATEWAY_INFO_RELATION_NAME].relation_created, self.reconcile
+        )
 
         # Watch:
         # * relation_joined: because we send data to the other side whenever we see a related app
@@ -434,8 +436,9 @@ class Operator(CharmBase):
             "Attempting to patch istiod-default-validator webhook to ensure it points to"
             " correct namespace."
         )
+        lightkube_client = Client()
         try:
-            vwc = self.lightkube_client.get(
+            vwc = lightkube_client.get(
                 ValidatingWebhookConfiguration, name="istiod-default-validator"
             )
         except ApiError as e:
@@ -447,7 +450,7 @@ class Operator(CharmBase):
 
         vwc.metadata.managedFields = None
         vwc.webhooks[0].clientConfig.service.namespace = self.model.name
-        self.lightkube_client.patch(
+        lightkube_client.patch(
             ValidatingWebhookConfiguration,
             "istiod-default-validator",
             vwc,
