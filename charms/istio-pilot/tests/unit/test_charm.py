@@ -1,12 +1,11 @@
 from unittest.mock import Mock
 
 import pytest
-from ops.charm import RelationCreatedEvent, RelationChangedEvent, RelationBrokenEvent
+from ops.charm import RelationBrokenEvent, RelationChangedEvent, RelationCreatedEvent
 from ops.model import WaitingStatus
 from ops.testing import Harness
 
 from charm import Operator
-
 
 # TODO: Fixtures to block lightkube
 # TODO: Fixtures to block istioctl
@@ -17,6 +16,7 @@ class TestCharmEvents:
 
     TODO: Explain this better
     """
+
     def test_event_observing(self, harness, mocker):
         harness.begin()
         mocked_install = mocker.patch("charm.Operator.install")
@@ -68,6 +68,7 @@ class TestCharmEvents:
 
 class TestCharmHelpers:
     """Directly test charm helpers and private methods."""
+
     def test_reconcile_not_leader(self, harness):
         """Assert that the reconcile handler does not perform any actions when not the leader."""
         harness.set_leader(False)
@@ -97,7 +98,3 @@ def exercise_relation(harness, relation_name):
     harness.update_relation_data(rel_id, other_app, {"some_key": "some_value"})
     harness.remove_relation_unit(rel_id, other_unit)
     harness.remove_relation(rel_id)
-
-
-def test_assert_this_suite_is_incomplete():
-    raise NotImplementedError("This test suite is incomplete")
