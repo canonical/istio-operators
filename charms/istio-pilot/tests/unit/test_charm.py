@@ -29,6 +29,7 @@ class TestCharmEvents:
 
     TODO: Explain this better
     """
+
     def test_event_observing(self, harness, mocker):
         harness.begin()
         mocked_install = mocker.patch("charm.Operator.install")
@@ -80,6 +81,7 @@ class TestCharmEvents:
 
 class TestCharmHelpers:
     """Directly test charm helpers and private methods."""
+
     def test_reconcile_not_leader(self, harness):
         """Assert that the reconcile handler does not perform any actions when not the leader."""
         harness.set_leader(False)

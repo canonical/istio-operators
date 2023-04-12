@@ -4,16 +4,12 @@ import logging
 import subprocess
 
 import tenacity
-import yaml
 from charmed_kubeflow_chisme.exceptions import ErrorWithStatus, GenericCharmRuntimeError
-from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
-from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
-from jinja2 import Environment, FileSystemLoader
 from lightkube import Client
 from lightkube.core.exceptions import ApiError
 from lightkube.resources.admissionregistration_v1 import ValidatingWebhookConfiguration
 from lightkube.resources.core_v1 import Service
-from ops.charm import CharmBase, RelationBrokenEvent
+from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from packaging.version import Version
@@ -111,7 +107,9 @@ class Operator(CharmBase):
         #         relation_name="metrics-endpoint",
         #         jobs=[{"static_configs": [{"targets": [f"{self._istiod_svc}:{METRICS_PORT}"]}]}],
         #     )
-        # self.grafana_dashboards = GrafanaDashboardProvider(self, relation_name="grafana-dashboard")
+        # self.grafana_dashboards = GrafanaDashboardProvider(
+        #       self, relation_name="grafana-dashboard"
+        # )
 
         # Configure the gateway-info provider
         # TODO: Rename this to gateway_info?
@@ -194,7 +192,7 @@ class Operator(CharmBase):
             # If any relation in this group has a version error, this will fail fast and not
             # provide any data for us to work on.  This is a limitation of SDI.
             interfaces = self._get_interfaces()
-            self._reconcile_ingress(interfaces['ingress'], event)
+            self._reconcile_ingress(interfaces["ingress"], event)
         except ErrorWithStatus as err:
             # One or more related applications resulted in an error
             handled_errors.append(err)
