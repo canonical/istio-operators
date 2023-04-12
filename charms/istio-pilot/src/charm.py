@@ -5,6 +5,8 @@ import subprocess
 
 import tenacity
 from charmed_kubeflow_chisme.exceptions import ErrorWithStatus, GenericCharmRuntimeError
+from charmed_kubeflow_chisme.lightkube.batch import delete_many
+from charmed_kubeflow_chisme.kubernetes import KubernetesResourceHandler
 from lightkube import Client
 from lightkube.core.exceptions import ApiError
 from lightkube.resources.admissionregistration_v1 import ValidatingWebhookConfiguration
@@ -28,6 +30,7 @@ GATEWAY_HTTP_PORT = 8080
 GATEWAY_HTTPS_PORT = 8443
 METRICS_PORT = 15014
 INGRESS_AUTH_RELATION_NAME = "ingress-auth"
+INGRESS_AUTH_TEMPLATE_FILES = ["manifests/auth_filter.yaml.j2"]
 ISTIOCTL_PATH = "./istioctl"
 ISTIOCTL_DEPOYMENT_PROFILE = "minimal"
 UPGRADE_FAILED_MSG = (
@@ -168,8 +171,8 @@ class Operator(CharmBase):
 
         ingress_auth_reconcile_successful = False
         try:
-            ingress_auth = self._get_ingress_auth_data()
-            self._reconcile_ingress_auth(ingress_auth)
+            ingress_auth_data = self._get_ingress_auth_data()
+            self._reconcile_ingress_auth(ingress_auth_data)
             ingress_auth_reconcile_successful = True
         except ErrorWithStatus as err:
             handled_errors.append(err)
@@ -383,6 +386,9 @@ class Operator(CharmBase):
         #  assuming the name.
         # TODO: What happens if this service does not exist?  We should check on that and then add
         #  tests to confirm this works
+
+        # Note: this assumes that the gateway service is deployed in the same namespace as this
+        # charm
         svc = self.lightkube_client.get(
             Service, name=self.model.config["gateway-service-name"], namespace=self.model.name
         )
@@ -432,11 +438,38 @@ class Operator(CharmBase):
         #  else's
         raise NotImplementedError()
 
-    def _reconcile_ingress_auth(self, ingress_auth_interface):
-        """Reconcile the EnvoyFilter which is controlled by the ingress-auth relation data."""
-        # If there is no ingress_auth data, this should result in any existing EnvoyFilter being
-        # deleted.  Document that side effect
-        raise NotImplementedError()
+    def _reconcile_ingress_auth(self, ingress_auth_data: dict):
+        """Reconcile the EnvoyFilter which is controlled by the ingress-auth relation data.
+
+        If ingress_auth_data is an empty dict, this results in any existing ingress-auth
+        EnvoyFilter previously deployed here to be deleted.
+
+        Note that this function supports only ingress_auth_data with a single entry.  If we
+        support multiple entries, this needs refactoring
+        """
+        context = {
+            "app_name": self.app.name,
+            "gateway_port": self._gateway_port,
+            "gateway_service_name": self.model.config["gateway-service-name"] + "NOT REALLLLLLL",  # TODO: WHAT IS THIS????
+            "gateway_service_namespace": self.model.name,
+            "port": ingress_auth_data['port'],
+            "request_headers": ingress_auth_data['request_headers'],
+            "response_headers": ingress_auth_data['response_headers'],
+        }
+
+        krh = KubernetesResourceHandler(
+            field_manager=self.app.name,
+            template_files=INGRESS_AUTH_TEMPLATE_FILES,
+            context=context,
+            logger=self.log
+        )
+
+        if len(ingress_auth_data) == 0:
+            self.log.info("No ingress-auth data found - deleting any existing EnvoyFilter")
+            delete_many(krh.lightkube_client, krh.render_manifests())
+            return
+
+        krh.apply()
 
     def _remove_gateway(self):
         """Remove the Gateway resource."""
