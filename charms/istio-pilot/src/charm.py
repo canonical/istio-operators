@@ -118,6 +118,18 @@ class Operator(CharmBase):
         #  If we break this into a separate handler, it will need to trigger on anything that
         #  triggers a reconcile because the Gateway's status could change during those events
         self.gateway = GatewayProvider(self)
+        # Configure Observability
+        # TODO: Re-add this, but is there a way to do it without having to mock it in unit tests?
+        # if self._istiod_svc:
+        #     self._scraping = MetricsEndpointProvider(
+        #         self,
+        #         relation_name="metrics-endpoint",
+        #         jobs=[{"static_configs": [{"targets": [f"{self._istiod_svc}:{METRICS_PORT}"]}]}],
+        #     )
+        # self.grafana_dashboards = GrafanaDashboardProvider(
+        #     self,
+        #     relation_name="grafana-dashboard"
+        # )
 
     def install(self, event):
         """Install charm."""

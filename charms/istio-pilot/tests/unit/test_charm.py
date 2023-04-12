@@ -464,7 +464,3 @@ def exercise_relation(harness, relation_name):
     harness.update_relation_data(rel_id, other_app, {"some_key": "some_value"})
     harness.remove_relation_unit(rel_id, other_unit)
     harness.remove_relation(rel_id)
-
-
-def test_assert_this_suite_is_incomplete():
-    raise NotImplementedError("This test suite is incomplete")
