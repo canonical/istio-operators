@@ -4,24 +4,19 @@ import logging
 import subprocess
 
 import tenacity
-import yaml
-from charmed_kubeflow_chisme.exceptions import GenericCharmRuntimeError
-from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
-from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
-from jinja2 import Environment, FileSystemLoader
-from lightkube import Client
+from charmed_kubeflow_chisme.exceptions import ErrorWithStatus, GenericCharmRuntimeError
 from lightkube.core.exceptions import ApiError
 from lightkube.resources.admissionregistration_v1 import ValidatingWebhookConfiguration
 from lightkube.resources.core_v1 import Service
-from ops.charm import CharmBase, RelationBrokenEvent
+from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from packaging.version import Version
 from serialized_data_interface import NoCompatibleVersions, NoVersionsListed, get_interfaces
 
-from istio_gateway_info_provider import RELATION_NAME, GatewayProvider
+from istio_gateway_info_provider import RELATION_NAME as GATEWAY_INFO_RELATION_NAME
+from istio_gateway_info_provider import GatewayProvider
 from istioctl import Istioctl, IstioctlError
-from resources_handler import ResourceHandler
 
 GATEWAY_HTTP_PORT = 8080
 GATEWAY_HTTPS_PORT = 8443
@@ -54,62 +49,76 @@ RETRY_FOR_15_MINUTES = tenacity.Retrying(
 class Operator(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
-
-        # TODO: https://github.com/canonical/istio-operators/issues/196
-        if not self.unit.is_leader():
-            # We can't do anything useful when not the leader, so do nothing.
-            self.model.unit.status = WaitingStatus("Waiting for leadership")
-            return
-        try:
-            self.interfaces = get_interfaces(self)
-        except NoVersionsListed as err:
-            self.model.unit.status = WaitingStatus(str(err))
-            return
-        except NoCompatibleVersions as err:
-            self.model.unit.status = BlockedStatus(str(err))
-            return
-        else:
-            self.model.unit.status = ActiveStatus()
-
-        self.lightkube_client = Client(namespace=self.model.name, field_manager="lightkube")
-
-        if self._istiod_svc:
-            self._scraping = MetricsEndpointProvider(
-                self,
-                relation_name="metrics-endpoint",
-                jobs=[{"static_configs": [{"targets": [f"{self._istiod_svc}:{METRICS_PORT}"]}]}],
-            )
-        self.grafana_dashboards = GrafanaDashboardProvider(self, relation_name="grafana-dashboard")
         self.log = logging.getLogger(__name__)
 
-        self.env = Environment(loader=FileSystemLoader("src"))
-        self._resource_handler = ResourceHandler(self.app.name, self.model.name)
+        # TODO: Refactor this?  Putting it in init means we have to always mock it in unit tests
+        # self.lightkube_client = Client(namespace=self.model.name, field_manager="lightkube")
 
-        self._resource_files = [
-            "gateway.yaml.j2",
-            "auth_filter.yaml.j2",
-            "virtual_service.yaml.j2",
-        ]
-        self.gateway = GatewayProvider(self)
+        # TODO: Update resource_handler to use the newer handler
+        # # Configure resource handler
+        # self.env = Environment(loader=FileSystemLoader("src"))
+        # self._resource_files = [
+        #     "gateway.yaml.j2",
+        #     "auth_filter.yaml.j2",
+        #     "virtual_service.yaml.j2",
+        # ]
+        self._resource_handler = None
 
+        # Event handling for managing the Istio control plane
         self.framework.observe(self.on.install, self.install)
         self.framework.observe(self.on.remove, self.remove)
         self.framework.observe(self.on.upgrade_charm, self.upgrade_charm)
 
-        for event in [self.on.config_changed, self.on["ingress"].relation_created]:
-            self.framework.observe(event, self.handle_default_gateway)
+        # Event handling for managing our Istio resources
+        # Configuration changes always result in reconciliation
+        # This captures any changes to the default-gateway's config
+        self.framework.observe(self.on.config_changed, self.reconcile)
 
-        # FIXME: Calling handle_gateway_relation on update_status ensures gateway information is
-        # sent eventually to the related units, this is temporal and we should find a way to
-        # ensure all event handlers are called when they are supposed to.
-        for event in [self.on[RELATION_NAME].relation_changed, self.on.update_status]:
-            self.framework.observe(event, self.handle_gateway_info_relation)
-        self.framework.observe(self.on["istio-pilot"].relation_changed, self.send_info)
-        self.framework.observe(self.on["ingress"].relation_changed, self.handle_ingress)
-        self.framework.observe(self.on["ingress"].relation_broken, self.handle_ingress)
-        self.framework.observe(self.on["ingress"].relation_departed, self.handle_ingress)
-        self.framework.observe(self.on["ingress-auth"].relation_changed, self.handle_ingress_auth)
-        self.framework.observe(self.on["ingress-auth"].relation_departed, self.handle_ingress_auth)
+        # Watch:
+        # * relation_joined: because we send data to the other side whenever we see a related app
+        self.framework.observe(
+            self.on[GATEWAY_INFO_RELATION_NAME].relation_created, self.reconcile
+        )
+
+        # Watch:
+        # * relation_joined: because we send data to the other side whenever we see a related app
+        # * relation_changed: because of SDI's data versioning model, which first agrees on the
+        #                     schema version and then sends the rest of the data
+        # TODO: * relation_broken: is this needed?
+        self.framework.observe(self.on["istio-pilot"].relation_created, self.reconcile)
+        self.framework.observe(self.on["istio-pilot"].relation_changed, self.reconcile)
+        self.framework.observe(self.on["istio-pilot"].relation_broken, self.reconcile)
+
+        # Watch:
+        # * relation_changed: because if the remote data updates, we need to update our resources
+        # * relation_broken: because this is an application-level data exchange, so if the related
+        #   application goes away we need to remove their resources
+        self.framework.observe(self.on["ingress"].relation_changed, self.reconcile)
+        self.framework.observe(self.on["ingress"].relation_broken, self.reconcile)
+        self.framework.observe(self.on["ingress-auth"].relation_changed, self.reconcile)
+        self.framework.observe(self.on["ingress-auth"].relation_broken, self.reconcile)
+
+        # Configure Observability
+        # TODO: Re-add this, but is there a way to do it without having to mock it in unit tests?
+        # if self._istiod_svc:
+        #     self._scraping = MetricsEndpointProvider(
+        #         self,
+        #         relation_name="metrics-endpoint",
+        #         jobs=[{"static_configs": [{"targets": [f"{self._istiod_svc}:{METRICS_PORT}"]}]}],
+        #     )
+        # self.grafana_dashboards = GrafanaDashboardProvider(
+        #     self,
+        #     relation_name="grafana-dashboard"
+        # )
+
+        # Configure the gateway-info provider
+        # TODO: Rename this to gateway_info?
+        # TODO: Can the gateway-info provider event handling just be moved to this class, and main
+        #  doesn't need to know about it (similar to obs libs)?  We'd probably want it to be after
+        #  the main handlers.
+        #  If we break this into a separate handler, it will need to trigger on anything that
+        #  triggers a reconcile because the Gateway's status could change during those events
+        self.gateway = GatewayProvider(self)
 
     def install(self, event):
         """Install charm."""
@@ -136,6 +145,64 @@ class Operator(CharmBase):
 
         self.unit.status = ActiveStatus()
 
+    def reconcile(self, event):
+        """Reconcile the state of the charm.
+
+        TODO: Add more details
+        """
+        # If we are not the leader, the charm should do nothing else
+        try:
+            self._check_leader()
+        except ErrorWithStatus as err:
+            self._log_and_set_status(err.status)
+            return
+
+        # This charm may hit multiple, non-fatal errors during the reconciliation.  Collect them
+        # so that we can report them at the end.
+        handled_errors = []
+
+        ingress_auth_reconcile_successful = False
+        try:
+            ingress_auth = self._get_ingress_auth_data()
+            self._reconcile_ingress_auth(ingress_auth)
+            ingress_auth_reconcile_successful = True
+        except ErrorWithStatus as err:
+            handled_errors.append(err)
+
+        try:
+            # If handling the ingress_auth relation fails, remove the Gateway to prevent
+            # unauthenticated traffic
+            if ingress_auth_reconcile_successful:
+                self._reconcile_gateway()
+            else:
+                # TODO: Log here?
+                self._remove_gateway()
+        except ErrorWithStatus as err:
+            handled_errors.append(err)
+
+        try:
+            self._send_gateway_info()
+        except ErrorWithStatus as err:
+            handled_errors.append(err)
+
+        try:
+            # TODO: Should I break these up so we can have more granular behaviour?
+            #  I could just get the ingress interface directly.  Although I can't break that
+            #  up into its components easily due to how SDI is written.
+            # If any relation in this group has a version error, this will fail fast and not
+            # provide any data for us to work on.  This is a limitation of SDI.
+            interfaces = self._get_interfaces()
+            self._reconcile_ingress(interfaces["ingress"], event)
+        except ErrorWithStatus as err:
+            # One or more related applications resulted in an error
+            handled_errors.append(err)
+            self._log_and_set_status(err.status)
+
+        # TODO: If we have and handled_errors, report them
+        self._report_handled_errors(handled_errors)
+
+        raise NotImplementedError("this is just a pseudo-code example")
+
     def remove(self, event):
         """Remove charm."""
 
@@ -151,6 +218,7 @@ class Operator(CharmBase):
             ]
         )
 
+        # TODO: Update resource_handler to use the newer handler
         custom_resource_classes = [
             self._resource_handler.get_custom_resource_class_from_filename(resource_file)
             for resource_file in self._resource_files
@@ -243,218 +311,78 @@ class Operator(CharmBase):
         self.log.info("Upgrade complete.")
         self.unit.status = ActiveStatus()
 
-    def handle_default_gateway(self, event):
-        """Handles creating gateways from charm config
+    def _check_leader(self):
+        """Check if this unit is a leader."""
+        if not self.unit.is_leader():
+            self.log.info("Not a leader, skipping setup")
+            raise ErrorWithStatus("Waiting for leadership", WaitingStatus)
 
-        Side effect: self.handle_ingress() is also invoked by this handler as ingress
-        resources depend on the default_gateway
-        """
-        # Clean-up resources
-        self._resource_handler.delete_existing_resources(
-            resource=self._resource_handler.get_custom_resource_class_from_filename(
-                filename="gateway.yaml.j2"
-            ),
-            labels={
-                f"app.{self.app.name}.io/is-workload-entity": "true",
-            },
-            namespace=self.model.name,
-        )
-        t = self.env.get_template("gateway.yaml.j2")
-        gateway = self.model.config["default-gateway"]
-        secret_name = (
-            f"{self.app.name}-gateway-secret"
-            if self.model.config["ssl-crt"] and self.model.config["ssl-key"]
-            else None
-        )
-        manifest = None
-        if secret_name:
-            secret = self.env.get_template("gateway-secret.yaml.j2")
-            manifest_secret = secret.render(
-                secret_name=secret_name,
-                ssl_crt=self.model.config["ssl-crt"],
-                ssl_key=self.model.config["ssl-key"],
-                model_name=self.model.name,
-                app_name=self.app.name,
-            )
-            self._resource_handler.apply_manifest(manifest_secret)
-
-        manifest = t.render(
-            name=gateway,
-            secret_name=secret_name,
-            ssl_crt=self.model.config["ssl-crt"] or None,
-            ssl_key=self.model.config["ssl-key"] or None,
-            model_name=self.model.name,
-            app_name=self.app.name,
-            gateway_http_port=GATEWAY_HTTP_PORT,
-            gateway_https_port=GATEWAY_HTTPS_PORT,
-        )
-        self._resource_handler.apply_manifest(manifest)
-
-        # Update the ingress resources as they rely on the default_gateway
-        self.handle_ingress(event)
-
-    def handle_gateway_info_relation(self, event):
-        if not self.model.relations["gateway-info"]:
-            self.log.info("No gateway-info relation found")
-            return
-        is_gateway_created = self._resource_handler.validate_resource_exist(
-            resource_type=self._resource_handler.get_custom_resource_class_from_filename(
-                "gateway.yaml.j2"
-            ),
-            resource_name=self.model.config["default-gateway"],
-            resource_namespace=self.model.name,
-        )
-        if is_gateway_created:
-            self.gateway.send_gateway_relation_data(
-                self.app, self.model.config["default-gateway"], self.model.name
-            )
-        else:
-            self.log.info("Gateway is not created yet. Skip sending gateway relation data.")
-
-    def send_info(self, event):
-        if self.interfaces["istio-pilot"]:
-            self.interfaces["istio-pilot"].send_data(
-                {"service-name": f"istiod.{self.model.name}.svc", "service-port": "15012"}
-            )
-        else:
-            self.log.debug(f"Unable to send data, deferring event: {event}")
-            event.defer()
-
-    def handle_ingress(self, event):
-        # FIXME: sending the data every single time
-        # is not a great design, a better one involves refactoring and
-        # probably changing SDI
-        self.send_info(event)
-
+    def _get_interfaces(self):
+        """Retrieve interface object."""
         try:
-            if not self._is_gateway_service_up():
-                self.log.info(
-                    "No gateway address returned - this may be transitory, but "
-                    "if it persists it is likely an unexpected error. "
-                    "Deferring this event"
-                )
-                self.unit.status = WaitingStatus("Waiting for gateway address")
-                event.defer()
-                return
-        except (ApiError, TypeError) as e:
-            if isinstance(e, ApiError):
-                self.log.debug(
-                    "ApiError: Could not get istio-ingressgateway-workload, deferring this event"
-                )
-                self.unit.status = WaitingStatus(
-                    "Missing istio-ingressgateway-workload service, deferring this event"
-                )
-                event.defer()
-            elif isinstance(e, TypeError):
-                self.log.debug("TypeError: No ip address found, deferring this event")
-                self.unit.status = WaitingStatus("Waiting for ip address")
-                event.defer()
-            else:
-                self.log.error("Unexpected exception.  Exception was:")
-                self.log.exception(e)
-            return
+            interfaces = get_interfaces(self)
+        except NoVersionsListed as err:
+            raise ErrorWithStatus(err, WaitingStatus)
+        except NoCompatibleVersions as err:
+            raise ErrorWithStatus(err, BlockedStatus)
+        return interfaces
 
-        ingress = self.interfaces["ingress"]
+    def _get_ingress_auth_data(self) -> dict:
+        """Retrieve the ingress-auth relation data without touching other interface data.
 
-        if ingress:
-            # Filter out data we sent back.
-            routes = {
-                (rel, app): route
-                for (rel, app), route in sorted(
-                    ingress.get_data().items(), key=lambda tup: tup[0][0].id
-                )
-                if app != self.app
-            }
-        else:
-            routes = {}
+        This is a workaround to ensure that errors in other relation data, such as an incomplete
+        ingress relation, do not block us from retrieving the ingress-auth data.
+        """
+        raise NotImplementedError()
 
-        if isinstance(event, (RelationBrokenEvent)):
-            # The app-level data is still visible on a broken relation, but we
-            # shouldn't be keeping the VirtualService for that related app.
-            del routes[(event.relation, event.app)]
+    def _send_gateway_info(self):
+        """Sends gateway information to all related apps."""
+        # TODO: Can any of this be put into the lib?
+        # TODO: Could this be a lib class that subscribes its own event handlers?  It needs to run
+        #  after the main event handlers - is the order guaranteed?
 
-        t = self.env.get_template("virtual_service.yaml.j2")
-        gateway = self.model.config["default-gateway"]
+        # Maybe this always send data, but have an "is this up" field in the relation as well that
+        # captures the is_gateway_ready() part?
 
-        self.unit.status = ActiveStatus()
+        # Send the Gateway information if the Gateway is created, or send a null response if it is
+        # not up
+        # Should we also log something here about what we're sending?
+        # if self.is_gateway_ready():
+        #   self.gateway.send_gateway_relation_data(self.app, self.model.config["default-gateway"])
+        # else:
+        #   self.gateway.send_gateway_relation_data(self.app, "")  # ???
 
-        def get_kwargs(route):
-            """Handles both v1 and v2 ingress relations.
+        raise NotImplementedError()
 
-            v1 ingress schema doesn't allow sending over a namespace.
-            """
-            kwargs = {"gateway": gateway, "app_name": self.app.name, **route}
+    def _reconcile_gateway(self):
+        """Reconcile the Gateway resource."""
+        # TODO: put any gateway removal logic in _remove_gateway(), that way it is easy to call
+        #  when ingress-auth fails.
+        raise NotImplementedError()
 
-            if "namespace" not in kwargs:
-                kwargs["namespace"] = self.model.name
+    def _reconcile_ingress(self, ingress_interface):
+        """Reconcile all Ingress relations, managing the VirtualService resources."""
+        # TODO: Make sure you delete any that are no longer relevant, without deleting everyone
+        #  else's
+        raise NotImplementedError()
 
-            return kwargs
+    def _reconcile_ingress_auth(self, ingress_auth_interface):
+        """Reconcile the EnvoyFilter which is controlled by the ingress-auth relation data."""
+        # If there is no ingress_auth data, this should result in any existing EnvoyFilter being
+        # deleted.  Document that side effect
+        raise NotImplementedError()
 
-        # TODO: we could probably extract the rendering bits from the charm code
-        virtual_services = "\n---".join(
-            t.render(**get_kwargs(route)).strip().strip("---")
-            for ((_, app), route) in routes.items()
-        )
+    def _remove_gateway(self):
+        """Remove the Gateway resource."""
+        raise NotImplementedError()
 
-        self._resource_handler.reconcile_desired_resources(
-            resource=self._resource_handler.get_custom_resource_class_from_filename(
-                filename="virtual_service.yaml.j2"
-            ),
-            namespace=self.model.name,
-            desired_resources=virtual_services,
-        )
+    def _report_handled_errors(self, errors):
+        """Sets status to the worst error's status and logs all messages, otherwise sets Active.
 
-    def handle_ingress_auth(self, event):
-        auth_routes = self.interfaces["ingress-auth"]
-        if auth_routes:
-            auth_routes = list(auth_routes.get_data().values())
-        else:
-            auth_routes = []
-
-        if not auth_routes:
-            self.log.info("Skipping auth route creation due to empty list")
-            return
-
-        if not all(ar.get("service") for ar in auth_routes):
-            self.model.unit.status = WaitingStatus(
-                "Waiting for auth route connection information."
-            )
-            return
-
-        if self.model.config["ssl-crt"] and self.model.config["ssl-key"]:
-            gateway_port = GATEWAY_HTTPS_PORT
-        else:
-            gateway_port = GATEWAY_HTTP_PORT
-
-        t = self.env.get_template("auth_filter.yaml.j2")
-        auth_filters = "".join(
-            t.render(
-                namespace=self.model.name,
-                app_name=self.app.name,
-                gateway_port=gateway_port,
-                **{
-                    "request_headers": yaml.safe_dump(
-                        [{"exact": h} for h in r.get("allowed-request-headers", [])],
-                        default_flow_style=True,
-                    ),
-                    "response_headers": yaml.safe_dump(
-                        [{"exact": h} for h in r.get("allowed-response-headers", [])],
-                        default_flow_style=True,
-                    ),
-                    "port": r["port"],
-                    "service": r["service"],
-                },
-            )
-            for r in auth_routes
-        )
-
-        self._resource_handler.delete_existing_resources(
-            self._resource_handler.get_custom_resource_class_from_filename(
-                filename="auth_filter.yaml.j2"
-            ),
-            namespace=self.model.name,
-        )
-        self._resource_handler.apply_manifest(auth_filters, namespace=self.model.name)
+        TODO: expand this
+        """
+        # TODO: Set Active otherwise?  Call a "check my status" function if we have no errors?
+        raise NotImplementedError()
 
     @property
     def _istiod_svc(self):
@@ -469,29 +397,6 @@ class Operator(CharmBase):
             raise
         else:
             return exporter_ip
-
-    def _is_gateway_service_up(self):
-        """Returns True if the ingress gateway service is up, else False."""
-        svc = self._get_gateway_service()
-
-        if svc.spec.type == "NodePort":
-            # TODO: do we need to interrogate this further for status?
-            return True
-        if _get_gateway_address_from_svc(svc) is not None:
-            return True
-        return False
-
-    def _get_gateway_service(self):
-        """Returns a lightkube Service object for the gateway service."""
-        # FIXME: service name is hardcoded and depends on the istio gateway application name being
-        #  `istio-ingressgateway`.  This is very fragile
-        # TODO: extract this from charm code
-        # TODO: What happens if this service does not exist?  We should check on that and then add
-        #  tests to confirm this works
-        svc = self.lightkube_client.get(
-            Service, name=GATEWAY_WORKLOAD_SERVICE_NAME, namespace=self.model.name
-        )
-        return svc
 
     def _log_and_set_status(self, status):
         """Sets the status of the charm and logs the status message.
