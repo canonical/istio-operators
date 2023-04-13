@@ -5,10 +5,10 @@ import subprocess
 
 import tenacity
 from charmed_kubeflow_chisme.exceptions import ErrorWithStatus, GenericCharmRuntimeError
-from charmed_kubeflow_chisme.lightkube.batch import delete_many
 from charmed_kubeflow_chisme.kubernetes import KubernetesResourceHandler
 from lightkube import Client
 from lightkube.core.exceptions import ApiError
+from lightkube.generic_resource import create_namespaced_resource
 from lightkube.resources.admissionregistration_v1 import ValidatingWebhookConfiguration
 from lightkube.resources.core_v1 import Service
 from ops.charm import CharmBase
@@ -444,14 +444,24 @@ class Operator(CharmBase):
         If ingress_auth_data is an empty dict, this results in any existing ingress-auth
         EnvoyFilter previously deployed here to be deleted.
 
-        Note that this function supports only ingress_auth_data with a single entry.  If we
-        support multiple entries, this needs refactoring
+        Limitations:
+            * this function supports only ingress_auth_data with a single entry.  If we support
+              multiple entries, this needs refactoring
+            * the auth_filter yaml template has a hard-coded workloadSelector for the Gateway
         """
+        envoyfilter_name = f"{self.app.name}-authn-filter"
+
+        if len(ingress_auth_data) == 0:
+            self.log.info("No ingress-auth data found - deleting any existing EnvoyFilter")
+            _remove_envoyfilter(envoyfilter_name)
+            return
+
         context = {
+            "auth_service_name": ingress_auth_data['service'],
+            "auth_service_namespace": self.model.name,  # Assumed to be in the same namespace
             "app_name": self.app.name,
+            "envoyfilter_name": envoyfilter_name,
             "gateway_port": self._gateway_port,
-            "gateway_service_name": self.model.config["gateway-service-name"] + "NOT REALLLLLLL",  # TODO: WHAT IS THIS????
-            "gateway_service_namespace": self.model.name,
             "port": ingress_auth_data['port'],
             "request_headers": ingress_auth_data['request_headers'],
             "response_headers": ingress_auth_data['response_headers'],
@@ -463,11 +473,6 @@ class Operator(CharmBase):
             context=context,
             logger=self.log
         )
-
-        if len(ingress_auth_data) == 0:
-            self.log.info("No ingress-auth data found - deleting any existing EnvoyFilter")
-            delete_many(krh.lightkube_client, krh.render_manifests())
-            return
 
         krh.apply()
 
@@ -604,6 +609,24 @@ def _get_address_from_loadbalancer(svc):
         return svc.status.loadBalancer.ingress[0].ip
     else:
         raise ValueError("Unknown situation - LoadBalancer service has no hostname or IP")
+
+
+def _remove_envoyfilter(name: str, namespace: str):
+    """Remove an EnvoyFilter resource.
+
+    Args:
+        name: The name of the EnvoyFilter resource to remove
+    """
+    envoyfilter_resource = create_namespaced_resource(
+        group="networking.istio.io", version="v1alpha3", kind="EnvoyFilter", plural="envoyfilters"
+    )
+    lightkube_client = Client()
+    try:
+        lightkube_client.delete(envoyfilter_resource, name=name, namespace=namespace)
+    except ApiError as e:
+        if e.status.code == 404:
+            return
+        raise e
 
 
 def _validate_upgrade_version(versions) -> bool:

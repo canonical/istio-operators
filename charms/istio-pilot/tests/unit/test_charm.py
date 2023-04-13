@@ -9,6 +9,7 @@ import tenacity
 from charmed_kubeflow_chisme.exceptions import ErrorWithStatus, GenericCharmRuntimeError
 from charmed_kubeflow_chisme.lightkube.mocking import FakeApiError
 from lightkube import codecs
+from lightkube.core.exceptions import ApiError
 from lightkube.models.admissionregistration_v1 import (
     ServiceReference,
     ValidatingWebhook,
@@ -27,7 +28,7 @@ from charm import (
     _get_gateway_address_from_svc,
     _validate_upgrade_version,
     _wait_for_update_rollout,
-    _xor,
+    _xor, _remove_envoyfilter,
 )
 from istioctl import IstioctlError
 
@@ -200,6 +201,63 @@ class TestCharmHelpers:
             harness.charm._get_ingress_auth_data()
 
         assert "versions not found" in err.value.msg
+
+    @patch("charm.KubernetesResourceHandler", return_value=MagicMock())
+    def test_reconcile_ingress_auth(self, mocked_kubernetes_resource_handler_class, harness):
+        """Tests that the _reconcile_ingress_auth helper succeeds when expected."""
+        mocked_krh = mocked_kubernetes_resource_handler_class.return_value
+        ingress_auth_data = {
+            'port': 1234,
+            'service': 'some-service',
+            'request_headers': 'header1',
+            'response_headers': 'header2',
+        }
+        harness.begin()
+
+        harness.charm._reconcile_ingress_auth(ingress_auth_data)
+
+        mocked_krh.apply.assert_called_once()
+
+    @patch("charm._remove_envoyfilter")
+    @patch("charm.KubernetesResourceHandler", return_value=MagicMock())
+    def test_reconcile_ingress_auth_no_auth(self, _mocked_kubernetes_resource_handler_class, mocked_remove_envoyfilter, harness):
+        """Tests that the _reconcile_ingress_auth removes the EnvoyFilter when expected."""
+        ingress_auth_data = {}
+        harness.begin()
+
+        harness.charm._reconcile_ingress_auth(ingress_auth_data)
+
+        mocked_remove_envoyfilter.assert_called_once()
+
+    @patch("charm.Client", return_value=MagicMock())
+    def test_remove_envoyfilter(self, mocked_lightkube_client_class):
+        """Test that _renove_envoyfilter works when expected."""
+        name = "test"
+        namespace = "test-namespace"
+        mocked_lightkube_client = mocked_lightkube_client_class.return_value
+
+        _remove_envoyfilter(name, namespace)
+
+        mocked_lightkube_client.delete.assert_called_once()
+
+    @pytest.mark.parametrize(
+        "error_code, context_raised",
+        [
+            (999, pytest.raises(ApiError)),  # Generic ApiErrors are raised
+            (404, does_not_raise())  # 404 errors are ignored
+        ]
+    )
+    @patch("charm.Client", return_value=MagicMock())
+    def test_remove_envoyfilter_error_handling(self, mocked_lightkube_client_class, error_code, context_raised):
+        """Test that _renove_envoyfilter handles errors as expected."""
+        name = "test"
+        namespace = "test-namespace"
+        mocked_lightkube_client = mocked_lightkube_client_class.return_value
+        mocked_lightkube_client.delete.side_effect = FakeApiError(error_code)
+
+        with context_raised:
+            _remove_envoyfilter(name, namespace)
+
 
     @pytest.mark.parametrize(
         "left, right, expected",
