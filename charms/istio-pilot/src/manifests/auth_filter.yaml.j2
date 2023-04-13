@@ -2,7 +2,7 @@
 apiVersion: networking.istio.io/v1alpha3
 kind: EnvoyFilter
 metadata:
-  name: {{ app_name }}-authn-filter
+  name: {{ envoyfilter_name }}
   labels:
     app.{{ app_name }}.io/is-workload-entity: "true"
 spec:
@@ -25,8 +25,8 @@ spec:
             '@type': type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
             http_service:
               server_uri:
-                uri: http://{{ gateway_service_name }}.{{ gateway_service_namespace }}.svc.cluster.local:{{ port }}
-                cluster: outbound|{{ port }}||{{ gateway_service_name }}.{{ gateway_service_namespace }}.svc.cluster.local
+                uri: http://{{ auth_service_name }}.{{ auth_service_namespace }}.svc.cluster.local:{{ port }}
+                cluster: outbound|{{ port }}||{{ auth_service_name }}.{{ auth_service_namespace }}.svc.cluster.local
                 timeout: 10s
               authorization_request:
                 allowed_headers:
