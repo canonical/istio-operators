@@ -2,6 +2,7 @@
 
 import logging
 import subprocess
+from typing import Optional
 
 import tenacity
 from charmed_kubeflow_chisme.exceptions import ErrorWithStatus, GenericCharmRuntimeError
@@ -25,6 +26,10 @@ from serialized_data_interface import (
 from istio_gateway_info_provider import RELATION_NAME as GATEWAY_INFO_RELATION_NAME
 from istio_gateway_info_provider import GatewayProvider
 from istioctl import Istioctl, IstioctlError
+
+ENVOYFILTER_LIGHTKUBE_RESOURCE = create_namespaced_resource(
+    group="networking.istio.io", version="v1alpha3", kind="EnvoyFilter", plural="envoyfilters"
+)
 
 GATEWAY_HTTP_PORT = 8080
 GATEWAY_HTTPS_PORT = 8443
@@ -341,7 +346,10 @@ class Operator(CharmBase):
     def _gateway_port(self):
         if _xor(self.model.config["ssl-crt"], self.model.config["ssl-key"]):
             # Fail if ssl is only partly configured as this is probably a mistake
-            raise ErrorWithStatus("Charm config for ssl-crt and ssl-key must either both be set or unset", BlockedStatus)
+            raise ErrorWithStatus(
+                "Charm config for ssl-crt and ssl-key must either both be set or unset",
+                BlockedStatus,
+            )
 
         if self.model.config["ssl-crt"] and self.model.config["ssl-key"]:
             return GATEWAY_HTTPS_PORT
@@ -456,21 +464,21 @@ class Operator(CharmBase):
             return
 
         context = {
-            "auth_service_name": ingress_auth_data['service'],
+            "auth_service_name": ingress_auth_data["service"],
             "auth_service_namespace": self.model.name,  # Assumed to be in the same namespace
             "app_name": self.app.name,
             "envoyfilter_name": envoyfilter_name,
             "gateway_port": self._gateway_port,
-            "port": ingress_auth_data['port'],
-            "request_headers": ingress_auth_data['request_headers'],
-            "response_headers": ingress_auth_data['response_headers'],
+            "port": ingress_auth_data["port"],
+            "request_headers": ingress_auth_data["request_headers"],
+            "response_headers": ingress_auth_data["response_headers"],
         }
 
         krh = KubernetesResourceHandler(
             field_manager=self.app.name,
             template_files=INGRESS_AUTH_TEMPLATE_FILES,
             context=context,
-            logger=self.log
+            logger=self.log,
         )
 
         krh.apply()
@@ -624,19 +632,23 @@ def _get_address_from_loadbalancer(svc):
         raise ValueError("Unknown situation - LoadBalancer service has no hostname or IP")
 
 
-def _remove_envoyfilter(name: str, namespace: str):
-    """Remove an EnvoyFilter resource.
+def _remove_envoyfilter(name: str, namespace: str, logger: Optional[logging.Logger] = None):
+    """Remove an EnvoyFilter resource, ignoring if the resource is already removed.
 
     Args:
         name: The name of the EnvoyFilter resource to remove
+        namespace: The namespace of the EnvoyFilter resource to remove
+        logger: (optional) logger to log any messages to
     """
-    envoyfilter_resource = create_namespaced_resource(
-        group="networking.istio.io", version="v1alpha3", kind="EnvoyFilter", plural="envoyfilters"
-    )
     lightkube_client = Client()
     try:
-        lightkube_client.delete(envoyfilter_resource, name=name, namespace=namespace)
+        lightkube_client.delete(ENVOYFILTER_LIGHTKUBE_RESOURCE, name=name, namespace=namespace)
     except ApiError as e:
+        if logger:
+            logger.info(
+                f"Failed to remove EnvoyFilter {name} in namespace {namespace} -"
+                f" resource does not exist.  It may have been removed already."
+            )
         if e.status.code == 404:
             return
         raise e
