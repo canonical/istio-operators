@@ -2,10 +2,10 @@ import logging
 from contextlib import nullcontext as does_not_raise
 from typing import Optional
 from unittest.mock import MagicMock, Mock, patch
-import yaml
 
 import pytest
 import tenacity
+import yaml
 from charmed_kubeflow_chisme.exceptions import ErrorWithStatus, GenericCharmRuntimeError
 from charmed_kubeflow_chisme.lightkube.mocking import FakeApiError
 from lightkube import codecs
@@ -26,9 +26,10 @@ from charm import (
     GATEWAY_HTTPS_PORT,
     Operator,
     _get_gateway_address_from_svc,
+    _remove_envoyfilter,
     _validate_upgrade_version,
     _wait_for_update_rollout,
-    _xor, _remove_envoyfilter,
+    _xor,
 )
 from istioctl import IstioctlError
 
@@ -108,7 +109,7 @@ class TestCharmHelpers:
             ("x", "x", GATEWAY_HTTPS_PORT, does_not_raise()),
             ("x", "", None, pytest.raises(ErrorWithStatus)),
             ("", "x", None, pytest.raises(ErrorWithStatus)),
-        ]
+        ],
     )
     def test_gateway_port(self, ssl_crt, ssl_key, expected_port, expected_context, harness):
         harness.begin()
@@ -172,7 +173,7 @@ class TestCharmHelpers:
         ingress_auth_data = harness.charm._get_ingress_auth_data()
 
         assert len(ingress_auth_data) == 1
-        assert list(ingress_auth_data.values())[0] == returned_data['data']
+        assert list(ingress_auth_data.values())[0] == returned_data["data"]
 
     def test_get_ingress_auth_data_empty(self, harness):
         """Tests that the _get_ingress_auth_data helper returns the correct relation data."""
@@ -207,10 +208,10 @@ class TestCharmHelpers:
         """Tests that the _reconcile_ingress_auth helper succeeds when expected."""
         mocked_krh = mocked_kubernetes_resource_handler_class.return_value
         ingress_auth_data = {
-            'port': 1234,
-            'service': 'some-service',
-            'request_headers': 'header1',
-            'response_headers': 'header2',
+            "port": 1234,
+            "service": "some-service",
+            "request_headers": "header1",
+            "response_headers": "header2",
         }
         harness.begin()
 
@@ -220,7 +221,9 @@ class TestCharmHelpers:
 
     @patch("charm._remove_envoyfilter")
     @patch("charm.KubernetesResourceHandler", return_value=MagicMock())
-    def test_reconcile_ingress_auth_no_auth(self, _mocked_kubernetes_resource_handler_class, mocked_remove_envoyfilter, harness):
+    def test_reconcile_ingress_auth_no_auth(
+        self, _mocked_kubernetes_resource_handler_class, mocked_remove_envoyfilter, harness
+    ):
         """Tests that the _reconcile_ingress_auth removes the EnvoyFilter when expected."""
         ingress_auth_data = {}
         harness.begin()
@@ -244,11 +247,13 @@ class TestCharmHelpers:
         "error_code, context_raised",
         [
             (999, pytest.raises(ApiError)),  # Generic ApiErrors are raised
-            (404, does_not_raise())  # 404 errors are ignored
-        ]
+            (404, does_not_raise()),  # 404 errors are ignored
+        ],
     )
     @patch("charm.Client", return_value=MagicMock())
-    def test_remove_envoyfilter_error_handling(self, mocked_lightkube_client_class, error_code, context_raised):
+    def test_remove_envoyfilter_error_handling(
+        self, mocked_lightkube_client_class, error_code, context_raised
+    ):
         """Test that _renove_envoyfilter handles errors as expected."""
         name = "test"
         namespace = "test-namespace"
@@ -258,7 +263,6 @@ class TestCharmHelpers:
         with context_raised:
             _remove_envoyfilter(name, namespace)
 
-
     @pytest.mark.parametrize(
         "left, right, expected",
         [
@@ -266,7 +270,7 @@ class TestCharmHelpers:
             (False, True, True),
             (True, True, False),
             (False, False, False),
-        ]
+        ],
     )
     def test_xor(self, left, right, expected):
         """Test that the xor helper function works as expected."""
@@ -581,7 +585,13 @@ def mocked_lightkube_client_class(mocker):
 
 
 # Helpers
-def add_data_to_sdi_relation(harness: Harness, rel_id: str, other: str, data: Optional[dict] = None, supported_versions: str = "- v1") -> None:
+def add_data_to_sdi_relation(
+    harness: Harness,
+    rel_id: str,
+    other: str,
+    data: Optional[dict] = None,
+    supported_versions: str = "- v1",
+) -> None:
     """Add data to the an SDI-backed relation."""
     if data is None:
         data = {}
@@ -602,7 +612,7 @@ def add_ingress_auth_to_harness(harness: Harness, other_app="other") -> dict:
     * rel_id (int): The relation id
     * data (dict): The relation data put to the relation
     """
-    other_unit=f"{other_app}/0"
+    other_unit = f"{other_app}/0"
     rel_id = harness.add_relation("ingress-auth", other_app)
 
     harness.add_relation_unit(rel_id, other_unit)
