@@ -358,19 +358,6 @@ class Operator(CharmBase):
         )
         return svc
 
-    def _is_gateway_service_up(self):
-        """Returns True if the ingress gateway service is up, else False."""
-        # TODO: This should really be something provided via a relation to istio-gateway, where it
-        #  tells us if things are working.
-        svc = self._get_gateway_service()
-
-        if svc.spec.type == "NodePort":
-            # TODO: do we need to interrogate this further for status?
-            return True
-        if _get_gateway_address_from_svc(svc) is not None:
-            return True
-        return False
-
     def _send_gateway_info(self):
         """Sends gateway information to all related apps."""
         # TODO: Can any of this be put into the lib?
@@ -419,6 +406,20 @@ class Operator(CharmBase):
         """
         # TODO: Set Active otherwise?  Call a "check my status" function if we have no errors?
         raise NotImplementedError()
+
+    @property
+    def _is_gateway_service_up(self):
+        """Returns True if the ingress gateway service is up, else False."""
+        # TODO: This should really be something provided via a relation to istio-gateway, where it
+        #  tells us if things are working.
+        svc = self._get_gateway_service()
+
+        if svc.spec.type == "NodePort":
+            # TODO: do we need to interrogate this further for status?
+            return True
+        if _get_gateway_address_from_svc(svc) is not None:
+            return True
+        return False
 
     @property
     def _istiod_svc(self):

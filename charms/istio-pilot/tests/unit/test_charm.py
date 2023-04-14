@@ -115,7 +115,7 @@ class TestCharmHelpers:
         )
 
         harness.charm._get_gateway_service = mock_get_gateway_service
-        assert harness.charm._is_gateway_service_up() is is_gateway_up
+        assert harness.charm._is_gateway_service_up is is_gateway_up
 
     @pytest.mark.parametrize(
         "mock_service_fixture, gateway_address",
