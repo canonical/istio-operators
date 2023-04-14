@@ -1,12 +1,15 @@
 import logging
 from contextlib import nullcontext as does_not_raise
+from typing import Optional
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 import tenacity
-from charmed_kubeflow_chisme.exceptions import GenericCharmRuntimeError
+import yaml
+from charmed_kubeflow_chisme.exceptions import ErrorWithStatus, GenericCharmRuntimeError
 from charmed_kubeflow_chisme.lightkube.mocking import FakeApiError
 from lightkube import codecs
+from lightkube.core.exceptions import ApiError
 from lightkube.models.admissionregistration_v1 import (
     ServiceReference,
     ValidatingWebhook,
@@ -19,10 +22,14 @@ from ops.model import WaitingStatus
 from ops.testing import Harness
 
 from charm import (
+    GATEWAY_HTTP_PORT,
+    GATEWAY_HTTPS_PORT,
     Operator,
     _get_gateway_address_from_svc,
+    _remove_envoyfilter,
     _validate_upgrade_version,
     _wait_for_update_rollout,
+    _xor,
 )
 from istioctl import IstioctlError
 
@@ -96,6 +103,23 @@ class TestCharmHelpers:
         assert harness.charm.model.unit.status == WaitingStatus("Waiting for leadership")
 
     @pytest.mark.parametrize(
+        "ssl_crt, ssl_key, expected_port, expected_context",
+        [
+            ("", "", GATEWAY_HTTP_PORT, does_not_raise()),
+            ("x", "x", GATEWAY_HTTPS_PORT, does_not_raise()),
+            ("x", "", None, pytest.raises(ErrorWithStatus)),
+            ("", "x", None, pytest.raises(ErrorWithStatus)),
+        ],
+    )
+    def test_gateway_port(self, ssl_crt, ssl_key, expected_port, expected_context, harness):
+        harness.begin()
+        harness.update_config({"ssl-crt": ssl_crt, "ssl-key": ssl_key})
+
+        with expected_context:
+            gateway_port = harness.charm._gateway_port
+            assert gateway_port == expected_port
+
+    @pytest.mark.parametrize(
         "mock_service_fixture, is_gateway_up",
         [
             # Pass fixtures by their names
@@ -140,6 +164,117 @@ class TestCharmHelpers:
         mock_service = request.getfixturevalue(mock_service_fixture)
 
         assert _get_gateway_address_from_svc(svc=mock_service) is gateway_address
+
+    def test_get_ingress_auth_data(self, harness):
+        """Tests that the _get_ingress_auth_data helper returns the correct relation data."""
+        harness.begin()
+        returned_data = add_ingress_auth_to_harness(harness)
+
+        ingress_auth_data = harness.charm._get_ingress_auth_data()
+
+        assert len(ingress_auth_data) == 1
+        assert list(ingress_auth_data.values())[0] == returned_data["data"]
+
+    def test_get_ingress_auth_data_empty(self, harness):
+        """Tests that the _get_ingress_auth_data helper returns the correct relation data."""
+        harness.begin()
+        ingress_auth_data = harness.charm._get_ingress_auth_data()
+
+        assert len(ingress_auth_data) == 0
+
+    def test_get_ingress_auth_data_too_many_relations(self, harness):
+        """Tests that the _get_ingress_auth_data helper returns the correct relation data."""
+        harness.begin()
+        add_ingress_auth_to_harness(harness, other_app="other1")
+        add_ingress_auth_to_harness(harness, other_app="other2")
+
+        with pytest.raises(ErrorWithStatus) as err:
+            harness.charm._get_ingress_auth_data()
+
+        assert "Multiple ingress-auth" in err.value.msg
+
+    def test_get_ingress_auth_data_waiting_on_version(self, harness):
+        """Tests that the _get_ingress_auth_data helper returns the correct relation data."""
+        harness.begin()
+        harness.add_relation("ingress-auth", "other")
+
+        with pytest.raises(ErrorWithStatus) as err:
+            harness.charm._get_ingress_auth_data()
+
+        assert "versions not found" in err.value.msg
+
+    @patch("charm.KubernetesResourceHandler", return_value=MagicMock())
+    def test_reconcile_ingress_auth(self, mocked_kubernetes_resource_handler_class, harness):
+        """Tests that the _reconcile_ingress_auth helper succeeds when expected."""
+        mocked_krh = mocked_kubernetes_resource_handler_class.return_value
+        ingress_auth_data = {
+            "port": 1234,
+            "service": "some-service",
+            "request_headers": "header1",
+            "response_headers": "header2",
+        }
+        harness.begin()
+
+        harness.charm._reconcile_ingress_auth(ingress_auth_data)
+
+        mocked_krh.apply.assert_called_once()
+
+    @patch("charm._remove_envoyfilter")
+    @patch("charm.KubernetesResourceHandler", return_value=MagicMock())
+    def test_reconcile_ingress_auth_no_auth(
+        self, _mocked_kubernetes_resource_handler_class, mocked_remove_envoyfilter, harness
+    ):
+        """Tests that the _reconcile_ingress_auth removes the EnvoyFilter when expected."""
+        ingress_auth_data = {}
+        harness.begin()
+
+        harness.charm._reconcile_ingress_auth(ingress_auth_data)
+
+        mocked_remove_envoyfilter.assert_called_once()
+
+    @patch("charm.Client", return_value=MagicMock())
+    def test_remove_envoyfilter(self, mocked_lightkube_client_class):
+        """Test that _renove_envoyfilter works when expected."""
+        name = "test"
+        namespace = "test-namespace"
+        mocked_lightkube_client = mocked_lightkube_client_class.return_value
+
+        _remove_envoyfilter(name, namespace)
+
+        mocked_lightkube_client.delete.assert_called_once()
+
+    @pytest.mark.parametrize(
+        "error_code, context_raised",
+        [
+            (999, pytest.raises(ApiError)),  # Generic ApiErrors are raised
+            (404, does_not_raise()),  # 404 errors are ignored
+        ],
+    )
+    @patch("charm.Client", return_value=MagicMock())
+    def test_remove_envoyfilter_error_handling(
+        self, mocked_lightkube_client_class, error_code, context_raised
+    ):
+        """Test that _renove_envoyfilter handles errors as expected."""
+        name = "test"
+        namespace = "test-namespace"
+        mocked_lightkube_client = mocked_lightkube_client_class.return_value
+        mocked_lightkube_client.delete.side_effect = FakeApiError(error_code)
+
+        with context_raised:
+            _remove_envoyfilter(name, namespace)
+
+    @pytest.mark.parametrize(
+        "left, right, expected",
+        [
+            (True, False, True),
+            (False, True, True),
+            (True, True, False),
+            (False, False, False),
+        ],
+    )
+    def test_xor(self, left, right, expected):
+        """Test that the xor helper function works as expected."""
+        assert _xor(left, right) is expected
 
 
 class TestCharmUpgrade:
@@ -450,6 +585,53 @@ def mocked_lightkube_client_class(mocker):
 
 
 # Helpers
+def add_data_to_sdi_relation(
+    harness: Harness,
+    rel_id: str,
+    other: str,
+    data: Optional[dict] = None,
+    supported_versions: str = "- v1",
+) -> None:
+    """Add data to the an SDI-backed relation."""
+    if data is None:
+        data = {}
+
+    harness.update_relation_data(
+        rel_id,
+        other,
+        {"_supported_versions": supported_versions, "data": yaml.dump(data)},
+    )
+
+
+def add_ingress_auth_to_harness(harness: Harness, other_app="other") -> dict:
+    """Relates a new app and unit to the ingress-auth relation.
+
+    Returns dict of:
+    * other (str): The name of the other app
+    * other_unit (str): The name of the other unit
+    * rel_id (int): The relation id
+    * data (dict): The relation data put to the relation
+    """
+    other_unit = f"{other_app}/0"
+    rel_id = harness.add_relation("ingress-auth", other_app)
+
+    harness.add_relation_unit(rel_id, other_unit)
+    data = {
+        "service": "service-name",
+        "port": 6666,
+        "allowed-request-headers": ["foo"],
+        "allowed-response-headers": ["bar"],
+    }
+    add_data_to_sdi_relation(harness, rel_id, other_app, data)
+
+    return {
+        "other": other_app,
+        "other_unit": other_unit,
+        "rel_id": rel_id,
+        "data": data,
+    }
+
+
 def assert_called_once_and_reset(mock: Mock):
     mock.assert_called_once()
     mock.reset_mock()

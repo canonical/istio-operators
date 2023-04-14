@@ -2,26 +2,40 @@
 
 import logging
 import subprocess
+from typing import Optional
 
 import tenacity
 from charmed_kubeflow_chisme.exceptions import ErrorWithStatus, GenericCharmRuntimeError
+from charmed_kubeflow_chisme.kubernetes import KubernetesResourceHandler
 from lightkube import Client
 from lightkube.core.exceptions import ApiError
+from lightkube.generic_resource import create_namespaced_resource
 from lightkube.resources.admissionregistration_v1 import ValidatingWebhookConfiguration
 from lightkube.resources.core_v1 import Service
 from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from packaging.version import Version
-from serialized_data_interface import NoCompatibleVersions, NoVersionsListed, get_interfaces
+from serialized_data_interface import (
+    NoCompatibleVersions,
+    NoVersionsListed,
+    get_interface,
+    get_interfaces,
+)
 
 from istio_gateway_info_provider import RELATION_NAME as GATEWAY_INFO_RELATION_NAME
 from istio_gateway_info_provider import GatewayProvider
 from istioctl import Istioctl, IstioctlError
 
+ENVOYFILTER_LIGHTKUBE_RESOURCE = create_namespaced_resource(
+    group="networking.istio.io", version="v1alpha3", kind="EnvoyFilter", plural="envoyfilters"
+)
+
 GATEWAY_HTTP_PORT = 8080
 GATEWAY_HTTPS_PORT = 8443
 METRICS_PORT = 15014
+INGRESS_AUTH_RELATION_NAME = "ingress-auth"
+INGRESS_AUTH_TEMPLATE_FILES = ["manifests/auth_filter.yaml.j2"]
 ISTIOCTL_PATH = "./istioctl"
 ISTIOCTL_DEPOYMENT_PROFILE = "minimal"
 UPGRADE_FAILED_MSG = (
@@ -174,8 +188,8 @@ class Operator(CharmBase):
 
         ingress_auth_reconcile_successful = False
         try:
-            ingress_auth = self._get_ingress_auth_data()
-            self._reconcile_ingress_auth(ingress_auth)
+            ingress_auth_data = self._get_ingress_auth_data()
+            self._reconcile_ingress_auth(ingress_auth_data)
             ingress_auth_reconcile_successful = True
         except ErrorWithStatus as err:
             handled_errors.append(err)
@@ -328,6 +342,20 @@ class Operator(CharmBase):
             self.log.info("Not a leader, skipping setup")
             raise ErrorWithStatus("Waiting for leadership", WaitingStatus)
 
+    @property
+    def _gateway_port(self):
+        if _xor(self.model.config["ssl-crt"], self.model.config["ssl-key"]):
+            # Fail if ssl is only partly configured as this is probably a mistake
+            raise ErrorWithStatus(
+                "Charm config for ssl-crt and ssl-key must either both be set or unset",
+                BlockedStatus,
+            )
+
+        if self.model.config["ssl-crt"] and self.model.config["ssl-key"]:
+            return GATEWAY_HTTPS_PORT
+        else:
+            return GATEWAY_HTTP_PORT
+
     def _get_interfaces(self):
         """Retrieve interface object."""
         try:
@@ -344,7 +372,32 @@ class Operator(CharmBase):
         This is a workaround to ensure that errors in other relation data, such as an incomplete
         ingress relation, do not block us from retrieving the ingress-auth data.
         """
-        raise NotImplementedError()
+        try:
+            ingress_auth_interface = get_interface(self, INGRESS_AUTH_RELATION_NAME)
+        except NoVersionsListed as err:
+            raise ErrorWithStatus(err, WaitingStatus)
+        except NoCompatibleVersions as err:
+            raise ErrorWithStatus(err, BlockedStatus)
+
+        # Filter out data we sent out.
+        if ingress_auth_interface:
+            ingress_auth_data = {
+                (rel, app): route
+                for (rel, app), route in sorted(
+                    ingress_auth_interface.get_data().items(), key=lambda tup: tup[0][0].id
+                )
+                if app != self.app
+            }
+        else:
+            # If there is no ingress-auth relation, we have no data here
+            ingress_auth_data = {}
+
+        if len(ingress_auth_data) > 1:
+            raise ErrorWithStatus(
+                "Multiple ingress-auth relations are not supported", BlockedStatus
+            )
+
+        return ingress_auth_data
 
     def _get_gateway_service(self):
         """Returns a lightkube Service object for the gateway service."""
@@ -353,6 +406,9 @@ class Operator(CharmBase):
         #  assuming the name.
         # TODO: What happens if this service does not exist?  We should check on that and then add
         #  tests to confirm this works
+
+        # Note: this assumes that the gateway service is deployed in the same namespace as this
+        # charm
         svc = self.lightkube_client.get(
             Service, name=self.model.config["gateway-service-name"], namespace=self.model.name
         )
@@ -389,11 +445,43 @@ class Operator(CharmBase):
         #  else's
         raise NotImplementedError()
 
-    def _reconcile_ingress_auth(self, ingress_auth_interface):
-        """Reconcile the EnvoyFilter which is controlled by the ingress-auth relation data."""
-        # If there is no ingress_auth data, this should result in any existing EnvoyFilter being
-        # deleted.  Document that side effect
-        raise NotImplementedError()
+    def _reconcile_ingress_auth(self, ingress_auth_data: dict):
+        """Reconcile the EnvoyFilter which is controlled by the ingress-auth relation data.
+
+        If ingress_auth_data is an empty dict, this results in any existing ingress-auth
+        EnvoyFilter previously deployed here to be deleted.
+
+        Limitations:
+            * this function supports only ingress_auth_data with a single entry.  If we support
+              multiple entries, this needs refactoring
+            * the auth_filter yaml template has a hard-coded workloadSelector for the Gateway
+        """
+        envoyfilter_name = f"{self.app.name}-authn-filter"
+
+        if len(ingress_auth_data) == 0:
+            self.log.info("No ingress-auth data found - deleting any existing EnvoyFilter")
+            _remove_envoyfilter(envoyfilter_name)
+            return
+
+        context = {
+            "auth_service_name": ingress_auth_data["service"],
+            "auth_service_namespace": self.model.name,  # Assumed to be in the same namespace
+            "app_name": self.app.name,
+            "envoyfilter_name": envoyfilter_name,
+            "gateway_port": self._gateway_port,
+            "port": ingress_auth_data["port"],
+            "request_headers": ingress_auth_data["request_headers"],
+            "response_headers": ingress_auth_data["response_headers"],
+        }
+
+        krh = KubernetesResourceHandler(
+            field_manager=self.app.name,
+            template_files=INGRESS_AUTH_TEMPLATE_FILES,
+            context=context,
+            logger=self.log,
+        )
+
+        krh.apply()
 
     def _remove_gateway(self):
         """Remove the Gateway resource."""
@@ -544,6 +632,28 @@ def _get_address_from_loadbalancer(svc):
         raise ValueError("Unknown situation - LoadBalancer service has no hostname or IP")
 
 
+def _remove_envoyfilter(name: str, namespace: str, logger: Optional[logging.Logger] = None):
+    """Remove an EnvoyFilter resource, ignoring if the resource is already removed.
+
+    Args:
+        name: The name of the EnvoyFilter resource to remove
+        namespace: The namespace of the EnvoyFilter resource to remove
+        logger: (optional) logger to log any messages to
+    """
+    lightkube_client = Client()
+    try:
+        lightkube_client.delete(ENVOYFILTER_LIGHTKUBE_RESOURCE, name=name, namespace=namespace)
+    except ApiError as e:
+        if logger:
+            logger.info(
+                f"Failed to remove EnvoyFilter {name} in namespace {namespace} -"
+                f" resource does not exist.  It may have been removed already."
+            )
+        if e.status.code == 404:
+            return
+        raise e
+
+
 def _validate_upgrade_version(versions) -> bool:
     """Validates that the version of istioctl can upgrade the currently deployed Istio.
 
@@ -606,6 +716,14 @@ def _wait_for_update_rollout(
                     f" version - upgrade rollout complete"
                 )
     return versions
+
+
+def _xor(a, b):
+    """Returns True if exactly one of a and b is True, else False."""
+    if (a and not b) or (b and not a):
+        return True
+    else:
+        return False
 
 
 if __name__ == "__main__":
