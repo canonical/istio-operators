@@ -3,26 +3,26 @@
 # See LICENSE file for licensing details.
 
 import pytest
-
-from charms.istio_pilot.v0.istio_gateway_info import (
-    GatewayRequirer,
-)
+from charms.istio_pilot.v0.istio_gateway_info import GatewayRequirer
 from ops.charm import CharmBase
 from ops.testing import Harness
 
-REQUIRER_CHARM_META = f"""
+REQUIRER_CHARM_META = """
 name: test-charm
 requires:
   test-relation:
     interface: test-interface
 """
 
+
 class GenericCharm(CharmBase):
     pass
+
 
 @pytest.fixture()
 def requirer_charm_harness():
     return Harness(GenericCharm, meta=REQUIRER_CHARM_META)
+
 
 def test_get_relation_data_passes(requirer_charm_harness, mocker):
     """Assert the relation data is as expected."""
@@ -33,9 +33,11 @@ def test_get_relation_data_passes(requirer_charm_harness, mocker):
     relation_id = requirer_charm_harness.add_relation("test-relation", "app")
 
     # Instantiate GatewayRequirer class
-    requirer_charm_harness.charm.gateway_requirer = GatewayRequirer(requirer_charm_harness.charm, relation_name="test-relation")
+    requirer_charm_harness.charm.gateway_requirer = GatewayRequirer(
+        requirer_charm_harness.charm, relation_name="test-relation"
+    )
 
-    # Add and update relation 
+    # Add and update relation
     expected_relation_data = {"gateway_name": "name", "gateway_namespace": "namespace"}
     requirer_charm_harness.add_relation_unit(relation_id, "app/0")
     requirer_charm_harness.update_relation_data(relation_id, "app", expected_relation_data)
