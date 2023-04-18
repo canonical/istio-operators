@@ -6,8 +6,6 @@ import pytest
 
 from charms.istio_pilot.v0.istio_gateway_info import (
     GatewayRequirer,
-    GatewayRelationDataMissingError,
-    GatewayRelationMissingError,
 )
 from ops.charm import CharmBase
 from ops.testing import Harness
@@ -29,7 +27,7 @@ def generic_charm_harness():
     return Harness(GenericCharm, meta=TEST_CHARM_META)
 
 def test_get_relation_data_passes(generic_charm_harness, mocker):
-    """Test various parts of the method."""
+    """Assert the relation data is as expected."""
     # Initial configuration
     generic_charm_harness.set_model_name("test-model")
     generic_charm_harness.begin()
