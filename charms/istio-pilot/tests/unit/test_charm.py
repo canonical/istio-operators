@@ -7,9 +7,11 @@ import pytest
 import tenacity
 import yaml
 from charmed_kubeflow_chisme.exceptions import ErrorWithStatus, GenericCharmRuntimeError
+from charmed_kubeflow_chisme.kubernetes import KubernetesResourceHandler
 from charmed_kubeflow_chisme.lightkube.mocking import FakeApiError
 from lightkube import codecs
 from lightkube.core.exceptions import ApiError
+from lightkube.generic_resource import create_namespaced_resource
 from lightkube.models.admissionregistration_v1 import (
     ServiceReference,
     ValidatingWebhook,
@@ -17,6 +19,7 @@ from lightkube.models.admissionregistration_v1 import (
     WebhookClientConfig,
 )
 from lightkube.models.meta_v1 import ObjectMeta
+from lightkube.resources.core_v1 import Secret
 from ops.charm import RelationBrokenEvent, RelationChangedEvent, RelationCreatedEvent
 from ops.model import WaitingStatus
 from ops.testing import Harness
@@ -35,6 +38,50 @@ from istioctl import IstioctlError
 
 # TODO: Fixtures to block lightkube
 # TODO: Fixtures to block istioctl
+
+
+GATEWAY_LIGHTKUBE_RESOURCE = create_namespaced_resource(
+    group="networking.istio.io", version="v1beta1", kind="Gateway", plural="gateways"
+)
+
+g = GATEWAY_LIGHTKUBE_RESOURCE(metadata=ObjectMeta(name="a", namespace="b"))
+g
+
+
+@pytest.fixture()
+def kubernetes_resource_handler_with_client(mocker):
+    mocked_client = MagicMock()
+
+    class KubernetesResourceHandlerWithClient(KubernetesResourceHandler):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self._lightkube_client = mocked_client
+
+    mocker.patch("charm.KubernetesResourceHandler", new=KubernetesResourceHandlerWithClient)
+    yield KubernetesResourceHandlerWithClient, mocked_client
+
+
+@pytest.fixture()
+def kubernetes_resource_handler_with_client_and_existing_gateway(
+    kubernetes_resource_handler_with_client,
+):
+    """Yields a KubernetesResourceHandlerWithClient with a mocked client and a mocked Gateway.
+
+    The mocked Gateway is returned from lightkube_client.list() to simulate finding a gateway
+    during reconciliation or deletion.
+    """
+    mocked_krh_class, mocked_lightkube_client = kubernetes_resource_handler_with_client
+
+    # Mock a previously existing resource so we have something to remove
+    existing_gateway_name = "my-old-gateway"
+    existing_gateway_namespace = "my-namespace"
+    mocked_lightkube_client.list.return_value = [
+        GATEWAY_LIGHTKUBE_RESOURCE(
+            metadata=ObjectMeta(name=existing_gateway_name, namespace=existing_gateway_namespace)
+        )
+    ]
+
+    yield mocked_krh_class, mocked_lightkube_client, existing_gateway_name
 
 
 class TestCharmEvents:
@@ -112,6 +159,7 @@ class TestCharmHelpers:
         ],
     )
     def test_gateway_port(self, ssl_crt, ssl_key, expected_port, expected_context, harness):
+        """Tests that the gateway_port selection works as expected."""
         harness.begin()
         harness.update_config({"ssl-crt": ssl_crt, "ssl-key": ssl_key})
 
@@ -203,6 +251,48 @@ class TestCharmHelpers:
 
         assert "versions not found" in err.value.msg
 
+    def test_reconcile_gateway(
+        self, harness, kubernetes_resource_handler_with_client_and_existing_gateway
+    ):
+        """Tests that reconcile_gateway works when expected."""
+        # Arrange
+        (
+            mocked_krh_class,
+            mocked_lightkube_client,
+            existing_gateway_name,
+        ) = kubernetes_resource_handler_with_client_and_existing_gateway
+
+        default_gateway = "my-gateway"
+        ssl_crt = ""
+        ssl_key = ""
+        harness.update_config(
+            {
+                "default-gateway": default_gateway,
+                "ssl-crt": ssl_crt,
+                "ssl-key": ssl_key,
+            }
+        )
+
+        harness.begin()
+
+        # Act
+        harness.charm._reconcile_gateway()
+
+        # Assert
+        # We've mocked the list method very broadly.  Ensure we only get called the time we expect
+        assert mocked_lightkube_client.list.call_count == 2
+        assert mocked_lightkube_client.list.call_args_list[0].args[0] == GATEWAY_LIGHTKUBE_RESOURCE
+        assert mocked_lightkube_client.list.call_args_list[1].args[0] == Secret
+
+        # Assert that we tried to create our gateway
+        assert mocked_lightkube_client.apply.call_count == 1
+        assert (
+            mocked_lightkube_client.apply.call_args.kwargs["obj"].metadata.name == default_gateway
+        )
+
+        # Assert that we tried to remove the old gateway
+        assert mocked_lightkube_client.delete.call_args.kwargs["name"] == existing_gateway_name
+
     @patch("charm.KubernetesResourceHandler", return_value=MagicMock())
     def test_reconcile_ingress_auth(self, mocked_kubernetes_resource_handler_class, harness):
         """Tests that the _reconcile_ingress_auth helper succeeds when expected."""
@@ -231,6 +321,35 @@ class TestCharmHelpers:
         harness.charm._reconcile_ingress_auth(ingress_auth_data)
 
         mocked_remove_envoyfilter.assert_called_once()
+
+    def test_remove_gateway(self, harness, kubernetes_resource_handler_with_client_and_existing_gateway):
+        """Tests that _remove_gateway works when expected.
+
+        Uses the kubernetes_resource_handler_with_client_and_existing_gateway pre-made
+        environment which has exactly one existing gateway that will be returned during a
+        client.list().
+        """
+        # Arrange
+        (
+            mocked_krh_class,
+            mocked_lightkube_client,
+            existing_gateway_name,
+        ) = kubernetes_resource_handler_with_client_and_existing_gateway
+
+        harness.begin()
+
+        # Act
+        harness.charm._remove_gateway()
+
+        # Assert
+        # We've mocked the list method very broadly.  Ensure we only get called the time we expect
+        assert mocked_lightkube_client.list.call_count == 2
+        assert mocked_lightkube_client.list.call_args_list[0].args[0] == GATEWAY_LIGHTKUBE_RESOURCE
+        assert mocked_lightkube_client.list.call_args_list[1].args[0] == Secret
+
+        # Assert that we tried to remove the old gateway
+        assert mocked_lightkube_client.delete.call_args.kwargs["name"] == existing_gateway_name
+
 
     @patch("charm.Client", return_value=MagicMock())
     def test_remove_envoyfilter(self, mocked_lightkube_client_class):
@@ -262,6 +381,26 @@ class TestCharmHelpers:
 
         with context_raised:
             _remove_envoyfilter(name, namespace)
+
+    @pytest.mark.parametrize(
+        "ssl_crt, ssl_key, expected_return, expected_context",
+        [
+            ("", "", False, does_not_raise()),
+            ("x", "x", True, does_not_raise()),
+            ("x", "", None, pytest.raises(ErrorWithStatus)),
+            ("", "x", None, pytest.raises(ErrorWithStatus)),
+        ],
+    )
+    def test_use_https(self, ssl_crt, ssl_key, expected_return, expected_context, harness):
+        """Tests that the gateway_port selection works as expected.
+
+        Implicitly tests _use_https() as well.
+        """
+        harness.begin()
+        harness.update_config({"ssl-crt": ssl_crt, "ssl-key": ssl_key})
+
+        with expected_context:
+            assert harness.charm._use_https() == expected_return
 
     @pytest.mark.parametrize(
         "left, right, expected",

@@ -6,12 +6,15 @@ from typing import Optional
 
 import tenacity
 from charmed_kubeflow_chisme.exceptions import ErrorWithStatus, GenericCharmRuntimeError
-from charmed_kubeflow_chisme.kubernetes import KubernetesResourceHandler
+from charmed_kubeflow_chisme.kubernetes import (
+    KubernetesResourceHandler,
+    create_charm_default_labels,
+)
 from lightkube import Client
 from lightkube.core.exceptions import ApiError
 from lightkube.generic_resource import create_namespaced_resource
 from lightkube.resources.admissionregistration_v1 import ValidatingWebhookConfiguration
-from lightkube.resources.core_v1 import Service
+from lightkube.resources.core_v1 import Secret, Service
 from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
@@ -27,15 +30,20 @@ from istio_gateway_info_provider import RELATION_NAME as GATEWAY_INFO_RELATION_N
 from istio_gateway_info_provider import GatewayProvider
 from istioctl import Istioctl, IstioctlError
 
+GATEWAY_LIGHTKUBE_RESOURCE = create_namespaced_resource(
+    group="networking.istio.io", version="v1beta1", kind="Gateway", plural="gateways"
+)
 ENVOYFILTER_LIGHTKUBE_RESOURCE = create_namespaced_resource(
     group="networking.istio.io", version="v1alpha3", kind="EnvoyFilter", plural="envoyfilters"
 )
 
 GATEWAY_HTTP_PORT = 8080
 GATEWAY_HTTPS_PORT = 8443
+GATEWAY_TEMPLATE_FILES = ["src/manifests/gateway.yaml.j2"]
+KRH_GATEWAY_SCOPE = "gateway"
 METRICS_PORT = 15014
 INGRESS_AUTH_RELATION_NAME = "ingress-auth"
-INGRESS_AUTH_TEMPLATE_FILES = ["manifests/auth_filter.yaml.j2"]
+INGRESS_AUTH_TEMPLATE_FILES = ["src/manifests/auth_filter.yaml.j2"]
 ISTIOCTL_PATH = "./istioctl"
 ISTIOCTL_DEPOYMENT_PROFILE = "minimal"
 UPGRADE_FAILED_MSG = (
@@ -65,6 +73,7 @@ class Operator(CharmBase):
         super().__init__(*args)
         self.log = logging.getLogger(__name__)
 
+        self._field_manager = self.app.name
         # TODO: Refactor this?  Putting it in init means we have to always mock it in unit tests
         # self.lightkube_client = Client(namespace=self.model.name, field_manager="lightkube")
 
@@ -76,7 +85,6 @@ class Operator(CharmBase):
         #     "auth_filter.yaml.j2",
         #     "virtual_service.yaml.j2",
         # ]
-        self._resource_handler = None
 
         # Event handling for managing the Istio control plane
         self.framework.observe(self.on.install, self.install)
@@ -342,16 +350,10 @@ class Operator(CharmBase):
             self.log.info("Not a leader, skipping setup")
             raise ErrorWithStatus("Waiting for leadership", WaitingStatus)
 
+    # TODO: make this into a validation?  does it get used anywhere?  the template manages this
     @property
     def _gateway_port(self):
-        if _xor(self.model.config["ssl-crt"], self.model.config["ssl-key"]):
-            # Fail if ssl is only partly configured as this is probably a mistake
-            raise ErrorWithStatus(
-                "Charm config for ssl-crt and ssl-key must either both be set or unset",
-                BlockedStatus,
-            )
-
-        if self.model.config["ssl-crt"] and self.model.config["ssl-key"]:
+        if self._use_https():
             return GATEWAY_HTTPS_PORT
         else:
             return GATEWAY_HTTP_PORT
@@ -434,10 +436,41 @@ class Operator(CharmBase):
         raise NotImplementedError()
 
     def _reconcile_gateway(self):
-        """Reconcile the Gateway resource."""
-        # TODO: put any gateway removal logic in _remove_gateway(), that way it is easy to call
-        #  when ingress-auth fails.
-        raise NotImplementedError()
+        """Creates or updates the Gateway resources.
+
+        If secured with TLS, this also deploys a secret with the certificate and key.
+        """
+        # Secure the gateway, if enabled
+        use_https = self._use_https()
+        # TODO: Validate the settings are consistent here too.  has correct port, etc
+        if use_https:
+            ssl_crt = self.model.config["ssl-crt"]
+            ssl_key = self.model.config["ssl-key"]
+        else:
+            ssl_crt = None
+            ssl_key = None
+
+        gateway_name = self.model.config["default-gateway"]
+        context = {
+            "gateway_name": gateway_name,
+            "namespace": self.model.name,
+            "port": self._gateway_port,
+            "ssl_crt": ssl_crt,
+            "ssl_key": ssl_key,
+            "secure": use_https,
+        }
+
+        krh = KubernetesResourceHandler(
+            field_manager=self._field_manager,
+            template_files=GATEWAY_TEMPLATE_FILES,
+            context=context,
+            logger=self.log,
+            labels=create_charm_default_labels(
+                application_name=self.app.name, model_name=self.model.name, scope=KRH_GATEWAY_SCOPE
+            ),
+            child_resource_types=[GATEWAY_LIGHTKUBE_RESOURCE, Secret],
+        )
+        krh.reconcile()
 
     def _reconcile_ingress(self, ingress_interface):
         """Reconcile all Ingress relations, managing the VirtualService resources."""
@@ -475,7 +508,7 @@ class Operator(CharmBase):
         }
 
         krh = KubernetesResourceHandler(
-            field_manager=self.app.name,
+            field_manager=self._field_manager,
             template_files=INGRESS_AUTH_TEMPLATE_FILES,
             context=context,
             logger=self.log,
@@ -484,8 +517,18 @@ class Operator(CharmBase):
         krh.apply()
 
     def _remove_gateway(self):
-        """Remove the Gateway resource."""
-        raise NotImplementedError()
+        """Remove any deployed Gateway resources."""
+        # TODO: Make this ignore when things were already removed.  Probably means updating
+        #  delete_many and then passing a flag in through the krh?
+        krh = KubernetesResourceHandler(
+            field_manager=self._field_manager,
+            logger=self.log,
+            labels=create_charm_default_labels(
+                application_name=self.app.name, model_name=self.model.name, scope=KRH_GATEWAY_SCOPE
+            ),
+            child_resource_types=[GATEWAY_LIGHTKUBE_RESOURCE, Secret],
+        )
+        krh.delete()
 
     def _report_handled_errors(self, errors):
         """Sets status to the worst error's status and logs all messages, otherwise sets Active.
@@ -581,6 +624,18 @@ class Operator(CharmBase):
             force=True,
         )
         self.log.info("istiod-default-validator webhook successfully patched")
+
+    def _use_https(self):
+        if _xor(self.model.config["ssl-crt"], self.model.config["ssl-key"]):
+            # Fail if ssl is only partly configured as this is probably a mistake
+            raise ErrorWithStatus(
+                "Charm config for ssl-crt and ssl-key must either both be set or unset",
+                BlockedStatus,
+            )
+        if self.model.config["ssl-crt"] and self.model.config["ssl-key"]:
+            return True
+        else:
+            return False
 
 
 def _get_gateway_address_from_svc(svc):
