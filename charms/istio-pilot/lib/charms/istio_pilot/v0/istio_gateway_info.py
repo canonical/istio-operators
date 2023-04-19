@@ -156,6 +156,7 @@ class GatewayRequirer(Object):
         Raises:
             GatewayRelationDataMissingError: if data is missing or incomplete
             GatewayRelationMissingError: if there is no related application
+            ops.model.TooManyRelatedAppsError: if there is more than one related application
         """
         # Raise if there is no related applicaton
         if not relation:
