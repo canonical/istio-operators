@@ -72,6 +72,22 @@ class ProviderCharm(self):
         except GatewayRelationError as error:
             raise <your preferred exception with a message> from error
 ```
+
+## Relation data
+
+The data shared by this library has only two items:
+
+* gateway_name: the name of the Gateway the provider knows about. It corresponds to
+the `name` field in the Gateway definition:
+
+```yaml
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: my-gateway
+```
+
+* gateway_namespace: the namespace where the Gateway is deployed.
 """
 
 import logging
