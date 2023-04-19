@@ -19,8 +19,8 @@ certifi==2022.12.7
     #   httpcore
     #   httpx
     #   requests
-charmed-kubeflow-chisme==0.0.8
-    # via -r requirements.txt
+charmed-kubeflow-chisme@git+https://github.com/canonical/charmed-kubeflow-chisme.git@0f8e4bac0b93395b5ae1102be65ee9b6d719326b
+    # via -r requirements.in
 charset-normalizer==3.1.0
     # via
     #   -r requirements.txt

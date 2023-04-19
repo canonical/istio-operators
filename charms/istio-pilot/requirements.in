@@ -1,4 +1,6 @@
-charmed-kubeflow-chisme
+# TODO: Remove this when updated KRH is committed to chisme and used here
+# charmed-kubeflow-chisme
+git+https://github.com/canonical/charmed-kubeflow-chisme.git@0f8e4bac0b93395b5ae1102be65ee9b6d719326b
 jinja2
 lightkube
 oci-image
