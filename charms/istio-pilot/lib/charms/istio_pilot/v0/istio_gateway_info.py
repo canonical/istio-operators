@@ -186,6 +186,7 @@ class GatewayRequirer(Object):
             GatewayRelationMissingError: if there is no related application
         """
         # Run pre-flight checks
+        # Raises TooManyRelatedAppsError if related to more than one app
         relation = self.model.get_relation(self.relation_name)
         self._relation_preflight_checks(relation=relation)
 
