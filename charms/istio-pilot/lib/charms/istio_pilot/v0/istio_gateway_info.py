@@ -54,7 +54,6 @@ Class RequirerCharm(CharmBase):
 provides:
   gateway-info:
     interface: istio-gateway-info
-    limit: 1
 ```
 
 ### Instantiate the GatewayProvider class in charm.py
@@ -133,7 +132,8 @@ class GatewayRequirer(Object):
         self.requirer_charm = requirer_charm
         self.relation_name = relation_name
 
-    def _relation_preflight_checks(self, relation: Relation) -> None:
+    @staticmethod
+    def _relation_preflight_checks(relation: Relation) -> None:
         """Series of checks for the relation and relation data.
         Args:
             relation (Relation): the relation object to run the checks on
@@ -206,16 +206,17 @@ class GatewayProvider(Object):
             gateway_namespace(str): the namespace of the Gateway the provider knows about
         """
         # Update the relation data bag with localgateway information
-        relation = self.model.get_relation(self.relation_name)
+        relations = self.model.relations[self.relation_name]
 
         # Raise if there is no related applicaton
-        if not relation:
+        if not relations:
             raise GatewayRelationMissingError()
 
         # Update relation data
-        relation.data[self.provider_charm.app].update(
-            {
-                "gateway_name": gateway_name,
-                "gateway_namespace": gateway_namespace,
-            }
-        )
+        for relation in relations:
+            relation.data[self.provider_charm.app].update(
+                {
+                    "gateway_name": gateway_name,
+                    "gateway_namespace": gateway_namespace,
+                }
+            )

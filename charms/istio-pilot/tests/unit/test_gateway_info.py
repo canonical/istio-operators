@@ -152,6 +152,7 @@ def test_send_relation_data_passes(provider_charm_harness):
     provider_charm_harness.begin()
     provider_charm_harness.set_leader(True)
     relation_id = provider_charm_harness.add_relation(TEST_RELATION_NAME, "app")
+    provider_charm_harness.add_relation(TEST_RELATION_NAME, "app")
 
     # Instantiate GatewayProvider class
     provider_charm_harness.charm.gateway_provider = GatewayProvider(
@@ -165,10 +166,11 @@ def test_send_relation_data_passes(provider_charm_harness):
     provider_charm_harness.charm.gateway_provider.send_gateway_relation_data(
         gateway_name="test-gateway", gateway_namespace="test"
     )
-    relation = provider_charm_harness.model.get_relation(TEST_RELATION_NAME)
-    actual_relation_data = relation.data[provider_charm_harness.charm.app]
-    # Assert returns dictionary with expected values
-    assert actual_relation_data == expected_relation_data
+    relations = provider_charm_harness.model.relations[TEST_RELATION_NAME]
+    for relation in relations:
+        actual_relation_data = relation.data[provider_charm_harness.charm.app]
+        # Assert returns dictionary with expected values
+        assert actual_relation_data == expected_relation_data
 
 
 def test_provider_raise_no_relation(provider_charm_harness):
