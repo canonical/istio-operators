@@ -322,7 +322,9 @@ class TestCharmHelpers:
 
         mocked_remove_envoyfilter.assert_called_once()
 
-    def test_remove_gateway(self, harness, kubernetes_resource_handler_with_client_and_existing_gateway):
+    def test_remove_gateway(
+        self, harness, kubernetes_resource_handler_with_client_and_existing_gateway
+    ):
         """Tests that _remove_gateway works when expected.
 
         Uses the kubernetes_resource_handler_with_client_and_existing_gateway pre-made
@@ -349,7 +351,6 @@ class TestCharmHelpers:
 
         # Assert that we tried to remove the old gateway
         assert mocked_lightkube_client.delete.call_args.kwargs["name"] == existing_gateway_name
-
 
     @patch("charm.Client", return_value=MagicMock())
     def test_remove_envoyfilter(self, mocked_lightkube_client_class):
