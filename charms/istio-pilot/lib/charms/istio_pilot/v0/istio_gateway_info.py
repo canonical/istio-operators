@@ -78,7 +78,7 @@ class ProviderCharm(self):
 The data shared by this library has only two items:
 
 * gateway_name: the name of the Gateway the provider knows about. It corresponds to
-the `name` field in the Gateway definition:
+the `name` field in the Gateway definition. In the following example `gateway_name` value will be equal to `my-gateway`
 
 ```yaml
 apiVersion: networking.istio.io/v1alpha3
