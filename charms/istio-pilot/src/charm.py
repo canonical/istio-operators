@@ -8,7 +8,7 @@ import yaml
 from charmed_kubeflow_chisme.exceptions import GenericCharmRuntimeError
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.istio_pilot.v0.istio_gateway_info import (
-    RELATION_NAME,
+    DEFAULT_RELATION_NAME,
     GatewayProvider,
     GatewayRelationMissingError,
 )
@@ -106,7 +106,7 @@ class Operator(CharmBase):
         # FIXME: Calling handle_gateway_relation on update_status ensures gateway information is
         # sent eventually to the related units, this is temporal and we should find a way to
         # ensure all event handlers are called when they are supposed to.
-        for event in [self.on[RELATION_NAME].relation_changed, self.on.update_status]:
+        for event in [self.on[DEFAULT_RELATION_NAME].relation_changed, self.on.update_status]:
             self.framework.observe(event, self.handle_gateway_info_relation)
         self.framework.observe(self.on["istio-pilot"].relation_changed, self.send_info)
         self.framework.observe(self.on["ingress"].relation_changed, self.handle_ingress)
