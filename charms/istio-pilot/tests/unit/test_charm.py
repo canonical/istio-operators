@@ -231,7 +231,7 @@ class TestCharmHelpers:
         assert len(ingress_auth_data) == 0
 
     def test_get_ingress_auth_data_too_many_relations(self, harness):
-        """Tests that the _get_ingress_auth_data helper returns the correct relation data."""
+        """Tests that the _get_ingress_auth_data helper raises on too many relations data."""
         harness.begin()
         add_ingress_auth_to_harness(harness, other_app="other1")
         add_ingress_auth_to_harness(harness, other_app="other2")
@@ -242,12 +242,70 @@ class TestCharmHelpers:
         assert "Multiple ingress-auth" in err.value.msg
 
     def test_get_ingress_auth_data_waiting_on_version(self, harness):
-        """Tests that the _get_ingress_auth_data helper returns the correct relation data."""
+        """Tests that the _get_ingress_auth_data helper raises on incomplete data."""
         harness.begin()
         harness.add_relation("ingress-auth", "other")
 
         with pytest.raises(ErrorWithStatus) as err:
             harness.charm._get_ingress_auth_data()
+
+        assert "versions not found" in err.value.msg
+
+    def test_get_ingress_data(self, harness):
+        """Tests that the _get_ingress_data helper returns the correct relation data."""
+        harness.begin()
+        relation_info = [
+            add_ingress_to_harness(harness, 'other1'),
+            add_ingress_to_harness(harness, 'other2'),
+        ]
+
+        event = "not-a-relation-broken-event"
+
+        ingress_data = harness.charm._get_ingress_data(event)
+
+        assert len(ingress_data) == len(relation_info)
+        for i, this_relation_info in enumerate(relation_info):
+            this_relation = harness.model.get_relation("ingress", i)
+            assert ingress_data[(this_relation, this_relation.app)] == this_relation_info['data']
+
+    def test_get_ingress_data_for_broken_event(self, harness):
+        """Tests that _get_ingress_data helper returns the correct for a RelationBroken event."""
+        harness.begin()
+        relation_info = [
+            add_ingress_to_harness(harness, 'other0'),
+            add_ingress_to_harness(harness, 'other1'),
+        ]
+
+        # Check for data while pretending this is a RelationBrokenEvent for relation[1] of the
+        # above relations.
+        mock_relation_broken_event = MagicMock(spec=RelationBrokenEvent)
+        mock_relation_broken_event.relation = harness.model.get_relation("ingress", 1)
+        mock_relation_broken_event.app = harness.model.get_relation("ingress", 1).app
+
+        ingress_data = harness.charm._get_ingress_data(mock_relation_broken_event)
+
+        assert len(ingress_data) == 1
+        this_relation = harness.model.get_relation("ingress", 0)
+        assert ingress_data[(this_relation, this_relation.app)] == relation_info[0]['data']
+
+    def test_get_ingress_data_empty(self, harness):
+        """Tests that the _get_ingress_data helper returns the correct empty relation data."""
+        harness.begin()
+        event = "not-a-relation-broken-event"
+
+        ingress_data = harness.charm._get_ingress_data(event)
+
+        assert len(ingress_data) == 0
+
+    def test_get_ingress_data_waiting_on_version(self, harness):
+        """Tests that the _get_ingress_data helper raises on incomplete data."""
+        harness.begin()
+        harness.add_relation("ingress", "other")
+
+        event = "not-a-relation-broken-event"
+
+        with pytest.raises(ErrorWithStatus) as err:
+            harness.charm._get_ingress_data(event)
 
         assert "versions not found" in err.value.msg
 
@@ -765,7 +823,37 @@ def add_ingress_auth_to_harness(harness: Harness, other_app="other") -> dict:
     add_data_to_sdi_relation(harness, rel_id, other_app, data)
 
     return {
-        "other": other_app,
+        "other_app": other_app,
+        "other_unit": other_unit,
+        "rel_id": rel_id,
+        "data": data,
+    }
+
+
+def add_ingress_to_harness(harness: Harness, other_app="other") -> dict:
+    """Relates a new app and unit to the ingress relation.
+
+    Returns dict of:
+    * other (str): The name of the other app
+    * other_unit (str): The name of the other unit
+    * rel_id (int): The relation id
+    * data (dict): The relation data put to the relation
+    """
+    other_unit = f"{other_app}/0"
+    rel_id = harness.add_relation("ingress", other_app)
+
+    harness.add_relation_unit(rel_id, other_unit)
+    data = {
+        "service": f"{other_app}-service",
+        "port": 8888,
+        "namespace": f"{other_app}-namespace",
+        "prefix": f"{other_app}-prefix",
+        "rewrite": f"{other_app}-rewrite"
+    }
+    add_data_to_sdi_relation(harness, rel_id, other_app, data, supported_versions='- v2')
+
+    return {
+        "other_app": other_app,
         "other_unit": other_unit,
         "rel_id": rel_id,
         "data": data,

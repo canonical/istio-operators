@@ -15,7 +15,7 @@ from lightkube.core.exceptions import ApiError
 from lightkube.generic_resource import create_namespaced_resource
 from lightkube.resources.admissionregistration_v1 import ValidatingWebhookConfiguration
 from lightkube.resources.core_v1 import Secret, Service
-from ops.charm import CharmBase
+from ops.charm import CharmBase, RelationBrokenEvent
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from packaging.version import Version
@@ -44,6 +44,7 @@ KRH_GATEWAY_SCOPE = "gateway"
 METRICS_PORT = 15014
 INGRESS_AUTH_RELATION_NAME = "ingress-auth"
 INGRESS_AUTH_TEMPLATE_FILES = ["src/manifests/auth_filter.yaml.j2"]
+INGRESS_RELATION_NAME = "ingress"
 ISTIOCTL_PATH = "./istioctl"
 ISTIOCTL_DEPOYMENT_PROFILE = "minimal"
 UPGRADE_FAILED_MSG = (
@@ -211,6 +212,7 @@ class Operator(CharmBase):
                 # TODO: Log here?
                 self._remove_gateway()
         except ErrorWithStatus as err:
+            # TODO: Is there anything to catch here?
             handled_errors.append(err)
 
         try:
@@ -382,6 +384,7 @@ class Operator(CharmBase):
             raise ErrorWithStatus(err, BlockedStatus)
 
         # Filter out data we sent out.
+        # TODO: Is this needed here?
         if ingress_auth_interface:
             ingress_auth_data = {
                 (rel, app): route
@@ -400,6 +403,39 @@ class Operator(CharmBase):
             )
 
         return ingress_auth_data
+
+    def _get_ingress_data(self, event) -> dict:
+        """Retrieve the ingress relation data without touching other interface data.
+
+        This is a workaround to ensure that errors in other relation data, such as an incomplete
+        ingress-auth relation, do not block us from retrieving the ingress data.
+        """
+        try:
+            ingress_interface = get_interface(self, INGRESS_RELATION_NAME)
+        except NoVersionsListed as err:
+            raise ErrorWithStatus(err, WaitingStatus)
+        except NoCompatibleVersions as err:
+            raise ErrorWithStatus(err, BlockedStatus)
+
+        # Filter out data we sent out.
+        if ingress_interface:
+            routes = {
+                (rel, app): route
+                for (rel, app), route in sorted(
+                    ingress_interface.get_data().items(), key=lambda tup: tup[0][0].id
+                )
+                if app != self.app
+            }
+        else:
+            # If there is no ingress-auth relation, we have no data here
+            routes = {}
+
+        if isinstance(event, RelationBrokenEvent):
+            # The app-level data is still visible on a broken relation, but we
+            # shouldn't be keeping the VirtualService for that related app.
+            del routes[(event.relation, event.app)]
+
+        return routes
 
     def _get_gateway_service(self):
         """Returns a lightkube Service object for the gateway service."""
