@@ -7,6 +7,11 @@ import tenacity
 import yaml
 from charmed_kubeflow_chisme.exceptions import GenericCharmRuntimeError
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
+from charms.istio_pilot.v0.istio_gateway_info import (
+    RELATION_NAME,
+    GatewayProvider,
+    GatewayRelationMissingError,
+)
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from jinja2 import Environment, FileSystemLoader
 from lightkube import Client
@@ -19,7 +24,6 @@ from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingSta
 from packaging.version import Version
 from serialized_data_interface import NoCompatibleVersions, NoVersionsListed, get_interfaces
 
-from charms.istio_pilot.v0.istio_gateway_info import RELATION_NAME, GatewayProvider, GatewayRelationMissingError
 from istioctl import Istioctl, IstioctlError
 from resources_handler import ResourceHandler
 
