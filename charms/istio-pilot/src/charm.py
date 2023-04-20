@@ -7,6 +7,7 @@ import tenacity
 import yaml
 from charmed_kubeflow_chisme.exceptions import GenericCharmRuntimeError
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
+from charms.istio_pilot.v0.istio_gateway_info import DEFAULT_RELATION_NAME, GatewayProvider
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from jinja2 import Environment, FileSystemLoader
 from lightkube import Client
@@ -19,7 +20,6 @@ from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingSta
 from packaging.version import Version
 from serialized_data_interface import NoCompatibleVersions, NoVersionsListed, get_interfaces
 
-from istio_gateway_info_provider import RELATION_NAME, GatewayProvider
 from istioctl import Istioctl, IstioctlError
 from resources_handler import ResourceHandler
 
@@ -90,7 +90,7 @@ class Operator(CharmBase):
             "auth_filter.yaml.j2",
             "virtual_service.yaml.j2",
         ]
-        self.gateway = GatewayProvider(self)
+        self.gateway_provider = GatewayProvider(self)
 
         self.framework.observe(self.on.install, self.install)
         self.framework.observe(self.on.remove, self.remove)
@@ -102,7 +102,7 @@ class Operator(CharmBase):
         # FIXME: Calling handle_gateway_relation on update_status ensures gateway information is
         # sent eventually to the related units, this is temporal and we should find a way to
         # ensure all event handlers are called when they are supposed to.
-        for event in [self.on[RELATION_NAME].relation_changed, self.on.update_status]:
+        for event in [self.on[DEFAULT_RELATION_NAME].relation_changed, self.on.update_status]:
             self.framework.observe(event, self.handle_gateway_info_relation)
         self.framework.observe(self.on["istio-pilot"].relation_changed, self.send_info)
         self.framework.observe(self.on["ingress"].relation_changed, self.handle_ingress)
@@ -293,7 +293,8 @@ class Operator(CharmBase):
         # Update the ingress resources as they rely on the default_gateway
         self.handle_ingress(event)
 
-    def handle_gateway_info_relation(self, event):
+    def handle_gateway_info_relation(self, _) -> None:
+        """Sends the default-gateway info through the gateway-info relation."""
         if not self.model.relations["gateway-info"]:
             self.log.info("No gateway-info relation found")
             return
@@ -305,8 +306,8 @@ class Operator(CharmBase):
             resource_namespace=self.model.name,
         )
         if is_gateway_created:
-            self.gateway.send_gateway_relation_data(
-                self.app, self.model.config["default-gateway"], self.model.name
+            self.gateway_provider.send_gateway_relation_data(
+                self.model.config["default-gateway"], self.model.name
             )
         else:
             self.log.info("Gateway is not created yet. Skip sending gateway relation data.")
