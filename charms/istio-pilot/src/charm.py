@@ -845,6 +845,7 @@ def _wait_for_update_rollout(
 def get_routes_from_ingress_interface(
     ingress_interface: Optional[dict], this_app: Application
 ) -> dict:
+    """Returns a dict of route data from the ingress interface."""
     routes = {}
 
     if ingress_interface:
