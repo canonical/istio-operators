@@ -30,11 +30,17 @@ from istio_gateway_info_provider import RELATION_NAME as GATEWAY_INFO_RELATION_N
 from istio_gateway_info_provider import GatewayProvider
 from istioctl import Istioctl, IstioctlError
 
+ENVOYFILTER_LIGHTKUBE_RESOURCE = create_namespaced_resource(
+    group="networking.istio.io", version="v1alpha3", kind="EnvoyFilter", plural="envoyfilters"
+)
 GATEWAY_LIGHTKUBE_RESOURCE = create_namespaced_resource(
     group="networking.istio.io", version="v1beta1", kind="Gateway", plural="gateways"
 )
-ENVOYFILTER_LIGHTKUBE_RESOURCE = create_namespaced_resource(
-    group="networking.istio.io", version="v1alpha3", kind="EnvoyFilter", plural="envoyfilters"
+VIRTUAL_SERVICE_LIGHTKUBE_RESOURCE = create_namespaced_resource(
+    group="networking.istio.io",
+    version="v1alpha3",
+    kind="VirtualService",
+    plural="virtualservices",
 )
 
 GATEWAY_HTTP_PORT = 8080
@@ -45,6 +51,8 @@ METRICS_PORT = 15014
 INGRESS_AUTH_RELATION_NAME = "ingress-auth"
 INGRESS_AUTH_TEMPLATE_FILES = ["src/manifests/auth_filter.yaml.j2"]
 INGRESS_RELATION_NAME = "ingress"
+KRH_INGRESS_SCOPE = "ingress"
+VIRTUAL_SERVICE_TEMPLATE_FILES = ["src/manifests/virtual_service.yaml.j2"]
 ISTIOCTL_PATH = "./istioctl"
 ISTIOCTL_DEPOYMENT_PROFILE = "minimal"
 UPGRADE_FAILED_MSG = (
@@ -226,8 +234,8 @@ class Operator(CharmBase):
             #  up into its components easily due to how SDI is written.
             # If any relation in this group has a version error, this will fail fast and not
             # provide any data for us to work on.  This is a limitation of SDI.
-            interfaces = self._get_interfaces()
-            self._reconcile_ingress(interfaces["ingress"], event)
+            ingress_data = self._get_ingress_data(event)
+            self._reconcile_ingress(ingress_data)
         except ErrorWithStatus as err:
             # One or more related applications resulted in an error
             handled_errors.append(err)
@@ -486,10 +494,9 @@ class Operator(CharmBase):
             ssl_crt = None
             ssl_key = None
 
-        gateway_name = self.model.config["default-gateway"]
         context = {
-            "gateway_name": gateway_name,
-            "namespace": self.model.name,
+            "gateway_name": self._gateway_name,
+            "namespace": self._gateway_namespace,
             "port": self._gateway_port,
             "ssl_crt": ssl_crt,
             "ssl_key": ssl_key,
@@ -508,11 +515,38 @@ class Operator(CharmBase):
         )
         krh.reconcile()
 
-    def _reconcile_ingress(self, ingress_interface):
-        """Reconcile all Ingress relations, managing the VirtualService resources."""
-        # TODO: Make sure you delete any that are no longer relevant, without deleting everyone
-        #  else's
-        raise NotImplementedError()
+    def _reconcile_ingress(self, routes: list[dict]):
+        """Reconcile all Ingress relations, managing the VirtualService resources.
+
+        Args:
+            routes: a list of ingress relation data dicts, each containing data for keys:
+                service
+                port
+                namespace
+                prefix
+                rewrite
+        """
+        # We only need the route data, not the relation keys
+        routes = list(routes.values())
+        context = {
+            "charm_namespace": self.model.name,
+            "gateway_name": self._gateway_name,
+            "gateway_namespace": self._gateway_namespace(),
+            "routes": routes,
+        }
+
+        krh = KubernetesResourceHandler(
+            field_manager=self._field_manager,
+            template_files=VIRTUAL_SERVICE_TEMPLATE_FILES,
+            context=context,
+            logger=self.log,
+            labels=create_charm_default_labels(
+                application_name=self.app.name, model_name=self.model.name, scope=KRH_INGRESS_SCOPE
+            ),
+            child_resource_types=[VIRTUAL_SERVICE_LIGHTKUBE_RESOURCE],
+        )
+
+        krh.reconcile()
 
     def _reconcile_ingress_auth(self, ingress_auth_data: dict):
         """Reconcile the EnvoyFilter which is controlled by the ingress-auth relation data.
@@ -573,6 +607,15 @@ class Operator(CharmBase):
         """
         # TODO: Set Active otherwise?  Call a "check my status" function if we have no errors?
         raise NotImplementedError()
+
+    @property
+    def _gateway_name(self):
+        """Returns the name of the Gateway we will create."""
+        return self.model.config["default-gateway"]
+
+    def _gateway_namespace(self):
+        """Returns the namespace of the Gateway we will create, which is the same as the model."""
+        return self.model.name
 
     @property
     def _is_gateway_service_up(self):

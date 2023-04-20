@@ -44,8 +44,12 @@ GATEWAY_LIGHTKUBE_RESOURCE = create_namespaced_resource(
     group="networking.istio.io", version="v1beta1", kind="Gateway", plural="gateways"
 )
 
-g = GATEWAY_LIGHTKUBE_RESOURCE(metadata=ObjectMeta(name="a", namespace="b"))
-g
+VIRTUAL_SERVICE_LIGHTKUBE_RESOURCE = create_namespaced_resource(
+    group="networking.istio.io",
+    version="v1alpha3",
+    kind="VirtualService",
+    plural="virtualservices",
+)
 
 
 @pytest.fixture()
@@ -82,6 +86,29 @@ def kubernetes_resource_handler_with_client_and_existing_gateway(
     ]
 
     yield mocked_krh_class, mocked_lightkube_client, existing_gateway_name
+
+
+@pytest.fixture()
+def kubernetes_resource_handler_with_client_and_existing_virtualservice(
+    kubernetes_resource_handler_with_client,
+):
+    """Yields a KubernetesResourceHandlerWithClient with a mocked client and a mocked VS.
+
+    The mocked VirtualService is returned from lightkube_client.list() to simulate finding a VS
+    during reconciliation or deletion.
+    """
+    mocked_krh_class, mocked_lightkube_client = kubernetes_resource_handler_with_client
+
+    # Mock a previously existing resource so we have something to remove
+    existing_vs_name = "my-old-vs"
+    existing_vs_namespace = f"{existing_vs_name}-namespace"
+    mocked_lightkube_client.list.return_value = [
+        VIRTUAL_SERVICE_LIGHTKUBE_RESOURCE(
+            metadata=ObjectMeta(name=existing_vs_name, namespace=existing_vs_namespace)
+        )
+    ]
+
+    yield mocked_krh_class, mocked_lightkube_client, existing_vs_name
 
 
 class TestCharmEvents:
@@ -255,8 +282,8 @@ class TestCharmHelpers:
         """Tests that the _get_ingress_data helper returns the correct relation data."""
         harness.begin()
         relation_info = [
-            add_ingress_to_harness(harness, 'other1'),
-            add_ingress_to_harness(harness, 'other2'),
+            add_ingress_to_harness(harness, "other1"),
+            add_ingress_to_harness(harness, "other2"),
         ]
 
         event = "not-a-relation-broken-event"
@@ -266,14 +293,14 @@ class TestCharmHelpers:
         assert len(ingress_data) == len(relation_info)
         for i, this_relation_info in enumerate(relation_info):
             this_relation = harness.model.get_relation("ingress", i)
-            assert ingress_data[(this_relation, this_relation.app)] == this_relation_info['data']
+            assert ingress_data[(this_relation, this_relation.app)] == this_relation_info["data"]
 
     def test_get_ingress_data_for_broken_event(self, harness):
         """Tests that _get_ingress_data helper returns the correct for a RelationBroken event."""
         harness.begin()
         relation_info = [
-            add_ingress_to_harness(harness, 'other0'),
-            add_ingress_to_harness(harness, 'other1'),
+            add_ingress_to_harness(harness, "other0"),
+            add_ingress_to_harness(harness, "other1"),
         ]
 
         # Check for data while pretending this is a RelationBrokenEvent for relation[1] of the
@@ -286,7 +313,7 @@ class TestCharmHelpers:
 
         assert len(ingress_data) == 1
         this_relation = harness.model.get_relation("ingress", 0)
-        assert ingress_data[(this_relation, this_relation.app)] == relation_info[0]['data']
+        assert ingress_data[(this_relation, this_relation.app)] == relation_info[0]["data"]
 
     def test_get_ingress_data_empty(self, harness):
         """Tests that the _get_ingress_data helper returns the correct empty relation data."""
@@ -342,14 +369,116 @@ class TestCharmHelpers:
         assert mocked_lightkube_client.list.call_args_list[0].args[0] == GATEWAY_LIGHTKUBE_RESOURCE
         assert mocked_lightkube_client.list.call_args_list[1].args[0] == Secret
 
+        # Assert that we tried to remove the old gateway
+        assert mocked_lightkube_client.delete.call_args.kwargs["name"] == existing_gateway_name
+
         # Assert that we tried to create our gateway
         assert mocked_lightkube_client.apply.call_count == 1
         assert (
             mocked_lightkube_client.apply.call_args.kwargs["obj"].metadata.name == default_gateway
         )
 
-        # Assert that we tried to remove the old gateway
-        assert mocked_lightkube_client.delete.call_args.kwargs["name"] == existing_gateway_name
+    @pytest.mark.parametrize(
+        "related_applications",
+        [
+            ([]),  # No related applications
+            (["other1"]),  # A single related application
+            (["other1", "other2", "other3"]),  # Multiple related applications
+        ],
+    )
+    def test_reconcile_ingress(
+        self,
+        related_applications,
+        harness,
+        kubernetes_resource_handler_with_client_and_existing_virtualservice,
+    ):
+        """Tests that _reconcile_ingress succeeds as expected.
+
+        Asserts that previous VirtualServices are removed and that the any new ones are created.
+        """
+        # Arrange
+        (
+            mocked_krh_class,
+            mocked_lightkube_client,
+            existing_virtualservice_name,
+        ) = kubernetes_resource_handler_with_client_and_existing_virtualservice
+
+        harness.begin()
+        relation_info = [add_ingress_to_harness(harness, name) for name in related_applications]
+
+        event = "not-a-relation-broken-event"
+        ingress_data = harness.charm._get_ingress_data(event)
+
+        # Act
+        harness.charm._reconcile_ingress(ingress_data)
+
+        # Assert
+        # We've mocked the list method very broadly.  Ensure we only get called the time we expect
+        assert mocked_lightkube_client.list.call_count == 1
+        assert (
+            mocked_lightkube_client.list.call_args_list[0].args[0]
+            == VIRTUAL_SERVICE_LIGHTKUBE_RESOURCE
+        )
+
+        # Assert that we tried to remove the old VirtualService
+        assert (
+            mocked_lightkube_client.delete.call_args.kwargs["name"] == existing_virtualservice_name
+        )
+
+        # Assert that we tried to create a VirtualService for each related application
+        assert mocked_lightkube_client.apply.call_count == len(relation_info)
+        for i, this_relation_info in enumerate(relation_info):
+            assert (
+                mocked_lightkube_client.apply.call_args_list[i].kwargs["obj"].metadata.name
+                == this_relation_info["data"]["service"]
+            )
+
+    def test_reconcile_ingress_update_existing_virtualservice(
+        self, harness, kubernetes_resource_handler_with_client_and_existing_virtualservice
+    ):
+        """Tests that _reconcile_ingress works as expected when there are no related applications.
+
+        Asserts that previous VirtualServices are removed and that no new ones are created.
+        """
+        # Arrange
+        (
+            mocked_krh_class,
+            mocked_lightkube_client,
+            existing_virtualservice_name,
+        ) = kubernetes_resource_handler_with_client_and_existing_virtualservice
+
+        # Name this model the same as the existing VirtualService's namespace.  This means when
+        # we try to reconcile, we will see that existing VirtualService as the same as the desired
+        # one, and thus we try to update it instead of delete it
+        harness.set_model_name(f"{existing_virtualservice_name}-namespace")
+        harness.begin()
+
+        # Add a VirtualService that has the same name/namespace as the existing one
+        relation_info = [add_ingress_to_harness(harness, existing_virtualservice_name)]
+        event = "not-a-relation-broken-event"
+        ingress_data = harness.charm._get_ingress_data(event)
+
+        # Act
+        harness.charm._reconcile_ingress(ingress_data)
+
+        # Assert
+        # We've mocked the list method very broadly.  Ensure we only get called the time we expect
+        assert mocked_lightkube_client.list.call_count == 1
+        assert (
+            mocked_lightkube_client.list.call_args_list[0].args[0]
+            == VIRTUAL_SERVICE_LIGHTKUBE_RESOURCE
+        )
+
+        # Assert that we DO NOT try to remove the old VirtualService
+        assert mocked_lightkube_client.delete.call_count == 0
+
+        # Assert that we tried to apply our VirtualService to update it
+        assert mocked_lightkube_client.apply.call_count == len(relation_info)
+        for i, this_relation_info in enumerate(relation_info):
+            assert (
+                mocked_lightkube_client.apply.call_args_list[i].kwargs["obj"].metadata.name
+                == this_relation_info["data"]["service"]
+            )
 
     @patch("charm.KubernetesResourceHandler", return_value=MagicMock())
     def test_reconcile_ingress_auth(self, mocked_kubernetes_resource_handler_class, harness):
@@ -844,13 +973,13 @@ def add_ingress_to_harness(harness: Harness, other_app="other") -> dict:
 
     harness.add_relation_unit(rel_id, other_unit)
     data = {
-        "service": f"{other_app}-service",
+        "service": f"{other_app}",
         "port": 8888,
         "namespace": f"{other_app}-namespace",
         "prefix": f"{other_app}-prefix",
-        "rewrite": f"{other_app}-rewrite"
+        "rewrite": f"{other_app}-rewrite",
     }
-    add_data_to_sdi_relation(harness, rel_id, other_app, data, supported_versions='- v2')
+    add_data_to_sdi_relation(harness, rel_id, other_app, data, supported_versions="- v2")
 
     return {
         "other_app": other_app,
