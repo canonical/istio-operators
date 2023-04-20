@@ -51,6 +51,7 @@ METRICS_PORT = 15014
 INGRESS_AUTH_RELATION_NAME = "ingress-auth"
 INGRESS_AUTH_TEMPLATE_FILES = ["src/manifests/auth_filter.yaml.j2"]
 INGRESS_RELATION_NAME = "ingress"
+ISTIO_PILOT_RELATION_NAME = "istio-pilot"
 KRH_INGRESS_SCOPE = "ingress"
 VIRTUAL_SERVICE_TEMPLATE_FILES = ["src/manifests/virtual_service.yaml.j2"]
 ISTIOCTL_PATH = "./istioctl"
@@ -115,10 +116,8 @@ class Operator(CharmBase):
         # * relation_joined: because we send data to the other side whenever we see a related app
         # * relation_changed: because of SDI's data versioning model, which first agrees on the
         #                     schema version and then sends the rest of the data
-        # TODO: * relation_broken: is this needed?
         self.framework.observe(self.on["istio-pilot"].relation_created, self.reconcile)
         self.framework.observe(self.on["istio-pilot"].relation_changed, self.reconcile)
-        self.framework.observe(self.on["istio-pilot"].relation_broken, self.reconcile)
 
         # Watch:
         # * relation_changed: because if the remote data updates, we need to update our resources
@@ -202,6 +201,12 @@ class Operator(CharmBase):
         # This charm may hit multiple, non-fatal errors during the reconciliation.  Collect them
         # so that we can report them at the end.
         handled_errors = []
+
+        # Send istiod information to the istio-pilot relation
+        try:
+            self._handle_istio_pilot_relation()
+        except ErrorWithStatus as err:
+            handled_errors.append(err)
 
         ingress_auth_reconcile_successful = False
         try:
@@ -445,6 +450,20 @@ class Operator(CharmBase):
 
         return routes
 
+    def _get_istio_pilot_interface(self) -> dict:
+        """Retrieve the istio-pilot relation data without touching other interface data.
+
+        This is a workaround to ensure that errors in other relation data, such as an incomplete
+        ingress-auth relation, do not block us from retrieving the ingress data.
+        """
+        try:
+            istio_pilot_interface = get_interface(self, ISTIO_PILOT_RELATION_NAME)
+        except NoVersionsListed as err:
+            raise ErrorWithStatus(err, WaitingStatus)
+        except NoCompatibleVersions as err:
+            raise ErrorWithStatus(err, BlockedStatus)
+        return istio_pilot_interface
+
     def _get_gateway_service(self):
         """Returns a lightkube Service object for the gateway service."""
         # FIXME: service name is configured via config, but it should really be provided directly
@@ -459,6 +478,15 @@ class Operator(CharmBase):
             Service, name=self.model.config["gateway-service-name"], namespace=self.model.name
         )
         return svc
+
+    def _handle_istio_pilot_relation(self):
+        """Handles the istio-pilot relation, sending information about the Istio daemon."""
+        istio_pilot_interface = self._get_istio_pilot_interface()
+        if istio_pilot_interface:
+            # If something is related, send the data.  Otherwise skip
+            istio_pilot_interface.send_data(
+                {"service-name": f"istiod.{self.model.name}.svc", "service-port": "15012"}
+            )
 
     def _send_gateway_info(self):
         """Sends gateway information to all related apps."""
