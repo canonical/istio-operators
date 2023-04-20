@@ -2,7 +2,7 @@
 
 import logging
 import subprocess
-from typing import Optional
+from typing import List, Optional
 
 import tenacity
 from charmed_kubeflow_chisme.exceptions import ErrorWithStatus, GenericCharmRuntimeError
@@ -515,7 +515,7 @@ class Operator(CharmBase):
         )
         krh.reconcile()
 
-    def _reconcile_ingress(self, routes: list[dict]):
+    def _reconcile_ingress(self, routes: List[dict]):
         """Reconcile all Ingress relations, managing the VirtualService resources.
 
         Args:
