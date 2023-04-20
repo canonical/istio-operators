@@ -349,14 +349,16 @@ class TestCharmHelpers:
         # Must be leader because we write to the application part of the relation data
         model_name = "some-model"
         expected_data = {
-            'service-name': f"istiod.{model_name}.svc",
-            'service-port': "15012",
+            "service-name": f"istiod.{model_name}.svc",
+            "service-port": "15012",
         }
 
         harness.set_leader(True)
         harness.set_model_name(model_name)
 
-        relation_info = [add_istio_pilot_to_harness(harness, other_app=name) for name in related_applications]
+        relation_info = [
+            add_istio_pilot_to_harness(harness, other_app=name) for name in related_applications
+        ]
         harness.begin()
 
         # Act
@@ -364,11 +366,13 @@ class TestCharmHelpers:
 
         # Assert on the relation data
         # The correct number of relations exist
-        assert len(harness.model.relations['istio-pilot']) == len(relation_info)
+        assert len(harness.model.relations["istio-pilot"]) == len(relation_info)
 
         # For each relation, the relation data is correct
         for this_relation_info in relation_info:
-            actual_data = yaml.safe_load(harness.get_relation_data(this_relation_info['rel_id'], 'istio-pilot')['data'])
+            actual_data = yaml.safe_load(
+                harness.get_relation_data(this_relation_info["rel_id"], "istio-pilot")["data"]
+            )
             assert expected_data == actual_data
 
     def test_handle_istio_pilot_relation_waiting_on_version(self, harness):
