@@ -44,7 +44,23 @@ def provider_charm_harness():
     return Harness(GenericCharm, meta=PROVIDER_CHARM_META)
 
 
-def test_get_relation_data_passes(requirer_charm_harness):
+@pytest.mark.parametrize(
+    "relation_data, expected_returned_data",
+    [
+        (
+            # Regular operation
+            {"gateway_name": "name", "gateway_namespace": "namespace", "gateway_up": "true"},
+            {"gateway_name": "name", "gateway_namespace": "namespace", "gateway_up": True},
+        ),
+        (
+            # To test backward compatibility - Requirer should automatically set gateway_up to True
+            # if it is missing
+            {"gateway_name": "name", "gateway_namespace": "namespace"},
+            {"gateway_name": "name", "gateway_namespace": "namespace", "gateway_up": True},
+        ),
+    ],
+)
+def test_get_relation_data_passes(relation_data, expected_returned_data, requirer_charm_harness):
     """Assert the relation data is as expected."""
     # Initial configuration
     requirer_charm_harness.set_model_name("test-model")
@@ -58,15 +74,14 @@ def test_get_relation_data_passes(requirer_charm_harness):
     )
 
     # Add and update relation
-    expected_relation_data = {"gateway_name": "name", "gateway_namespace": "namespace"}
     requirer_charm_harness.add_relation_unit(relation_id, "app/0")
-    requirer_charm_harness.update_relation_data(relation_id, "app", expected_relation_data)
+    requirer_charm_harness.update_relation_data(relation_id, "app", relation_data)
 
     # Get the relation data
     actual_relation_data = requirer_charm_harness.charm.gateway_requirer.get_relation_data()
 
     # Assert returns dictionary with expected values
-    assert actual_relation_data == expected_relation_data
+    assert actual_relation_data == expected_returned_data
 
 
 def test_check_raise_too_many_relations(requirer_charm_harness):
@@ -145,7 +160,25 @@ def test_preflight_checks_raises_data_missing_attribute(requirer_charm_harness):
     assert str(error.value) == "Missing attributes: ['gateway_namespace']"
 
 
-def test_send_relation_data_passes(provider_charm_harness):
+@pytest.mark.parametrize(
+    "data_to_provide, expected_relation_data",
+    [
+        (
+            # Regular operation
+            {"gateway_name": "name", "gateway_namespace": "namespace", "gateway_up": True},
+            {"gateway_name": "name", "gateway_namespace": "namespace", "gateway_up": "true"},
+        ),
+        (
+            # To test backward compatibility - Provider should automatically set gateway_up to
+            # "true" if it is missing
+            {"gateway_name": "name", "gateway_namespace": "namespace"},
+            {"gateway_name": "name", "gateway_namespace": "namespace", "gateway_up": "true"},
+        ),
+    ],
+)
+def test_send_relation_data_passes(
+    data_to_provide, expected_relation_data, provider_charm_harness
+):
     """Assert the relation data is as expected."""
     # Initial configuration
     provider_charm_harness.set_model_name("test-model")
@@ -160,31 +193,11 @@ def test_send_relation_data_passes(provider_charm_harness):
     )
 
     # Add and update relation
-    expected_relation_data = {"gateway_name": "test-gateway", "gateway_namespace": "test"}
     provider_charm_harness.add_relation_unit(relation_id, "app/0")
 
-    provider_charm_harness.charm.gateway_provider.send_gateway_relation_data(
-        gateway_name="test-gateway", gateway_namespace="test"
-    )
+    provider_charm_harness.charm.gateway_provider.send_gateway_relation_data(**data_to_provide)
     relations = provider_charm_harness.model.relations[TEST_RELATION_NAME]
     for relation in relations:
         actual_relation_data = relation.data[provider_charm_harness.charm.app]
         # Assert returns dictionary with expected values
         assert actual_relation_data == expected_relation_data
-
-
-def test_provider_raise_no_relation(provider_charm_harness):
-    """Assert that GatewayRelationMissingError is raised in the absence of the relation."""
-    provider_charm_harness.set_model_name("test-model")
-    provider_charm_harness.begin()
-    provider_charm_harness.set_leader(True)
-
-    # Instantiate GatewayProvider class
-    provider_charm_harness.charm.gateway_provider = GatewayProvider(
-        provider_charm_harness.charm, relation_name=TEST_RELATION_NAME
-    )
-
-    with pytest.raises(GatewayRelationMissingError):
-        provider_charm_harness.charm.gateway_provider.send_gateway_relation_data(
-            gateway_name="test-gateway", gateway_namespace="test"
-        )
