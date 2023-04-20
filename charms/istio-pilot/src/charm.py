@@ -7,11 +7,7 @@ import tenacity
 import yaml
 from charmed_kubeflow_chisme.exceptions import GenericCharmRuntimeError
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
-from charms.istio_pilot.v0.istio_gateway_info import (
-    DEFAULT_RELATION_NAME,
-    GatewayProvider,
-    GatewayRelationMissingError,
-)
+from charms.istio_pilot.v0.istio_gateway_info import DEFAULT_RELATION_NAME, GatewayProvider
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from jinja2 import Environment, FileSystemLoader
 from lightkube import Client
@@ -298,13 +294,10 @@ class Operator(CharmBase):
         self.handle_ingress(event)
 
     def handle_gateway_info_relation(self, _) -> None:
-        """Sends the default-gateway info through the gateway-info relation.
-
-        Raises:
-            GenericCharmRuntimeError("default-gateway not present in cluster):
-                if the default-gateway is not present in the cluster
-        """
-        # Verify the default-gateway is present in the cluster
+        """Sends the default-gateway info through the gateway-info relation."""
+        if not self.model.relations["gateway-info"]:
+            self.log.info("No gateway-info relation found")
+            return
         is_gateway_created = self._resource_handler.validate_resource_exist(
             resource_type=self._resource_handler.get_custom_resource_class_from_filename(
                 "gateway.yaml.j2"
@@ -312,23 +305,12 @@ class Operator(CharmBase):
             resource_name=self.model.config["default-gateway"],
             resource_namespace=self.model.name,
         )
-
-        # Raise if the default-gateway is not created, it must be present always
-        if not is_gateway_created:
-            self.log.info("Gateway is not created yet. Skip sending gateway relation data.")
-            raise GenericCharmRuntimeError("default-gateway not present in cluster.")
-
-        # Send the default gateway name and namespace
-        try:
+        if is_gateway_created:
             self.gateway_provider.send_gateway_relation_data(
-                gateway_name=self.model.config["default-gateway"],
-                gateway_namespace=self.model.name,
+                self.model.config["default-gateway"], self.model.name
             )
-        except GatewayRelationMissingError:
-            # If there is no relation, we cannot send data. In reality, the execution
-            # should not get this far.
-            self.unit.status = BlockedStatus("Please add gateway-info relation.")
-            return
+        else:
+            self.log.info("Gateway is not created yet. Skip sending gateway relation data.")
 
     def send_info(self, event):
         if self.interfaces["istio-pilot"]:
