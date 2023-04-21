@@ -1,7 +1,7 @@
 import logging
 from contextlib import nullcontext as does_not_raise
 from typing import Optional
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, Mock, PropertyMock, patch
 
 import pytest
 import tenacity
@@ -20,7 +20,12 @@ from lightkube.models.admissionregistration_v1 import (
 )
 from lightkube.models.meta_v1 import ObjectMeta
 from lightkube.resources.core_v1 import Secret
-from ops.charm import RelationBrokenEvent, RelationChangedEvent, RelationCreatedEvent
+from ops.charm import (
+    RelationBrokenEvent,
+    RelationChangedEvent,
+    RelationCreatedEvent,
+    RelationJoinedEvent,
+)
 from ops.model import WaitingStatus
 from ops.testing import Harness
 
@@ -111,6 +116,14 @@ def kubernetes_resource_handler_with_client_and_existing_virtualservice(
     yield mocked_krh_class, mocked_lightkube_client, existing_vs_name
 
 
+def raise_apierror_with_code_400(*args, **kwargs):
+    raise FakeApiError(400)
+
+
+def raise_apierror_with_code_404(*args, **kwargs):
+    raise FakeApiError(404)
+
+
 class TestCharmEvents:
     """Test cross-cutting charm behavior.
 
@@ -135,14 +148,16 @@ class TestCharmEvents:
         assert_called_once_and_reset(mocked_upgrade_charm)
 
         exercise_relation(harness, "gateway-info")
-        assert mocked_reconcile.call_count == 1
+        assert mocked_reconcile.call_count == 2
         assert isinstance(mocked_reconcile.call_args_list[0][0][0], RelationCreatedEvent)
+        assert isinstance(mocked_reconcile.call_args_list[1][0][0], RelationJoinedEvent)
         mocked_reconcile.reset_mock()
 
         exercise_relation(harness, "istio-pilot")
-        assert mocked_reconcile.call_count == 2
+        assert mocked_reconcile.call_count == 3
         assert isinstance(mocked_reconcile.call_args_list[0][0][0], RelationCreatedEvent)
-        assert isinstance(mocked_reconcile.call_args_list[1][0][0], RelationChangedEvent)
+        assert isinstance(mocked_reconcile.call_args_list[1][0][0], RelationJoinedEvent)
+        assert isinstance(mocked_reconcile.call_args_list[2][0][0], RelationChangedEvent)
         mocked_reconcile.reset_mock()
 
         exercise_relation(harness, "ingress")
@@ -192,6 +207,32 @@ class TestCharmHelpers:
         with expected_context:
             gateway_port = harness.charm._gateway_port
             assert gateway_port == expected_port
+
+    @pytest.mark.parametrize(
+        "lightkube_client_get_side_effect, expected_is_up, context_raised",
+        [
+            (None, True, does_not_raise()),
+            (raise_apierror_with_code_404, False, does_not_raise()),
+            (raise_apierror_with_code_400, None, pytest.raises(ApiError)),
+            (ValueError, None, pytest.raises(ValueError)),
+        ],
+    )
+    def test_is_gateway_object_up(
+        self,
+        lightkube_client_get_side_effect,
+        expected_is_up,
+        context_raised,
+        harness,
+        mocked_lightkube_client,
+    ):
+        """Tests whether _is_gateway_object_up returns as expected."""
+        mocked_lightkube_client.get.side_effect = lightkube_client_get_side_effect
+
+        harness.begin()
+
+        with context_raised:
+            actual_is_up = harness.charm._is_gateway_object_up
+            assert actual_is_up == expected_is_up
 
     @pytest.mark.parametrize(
         "mock_service_fixture, is_gateway_up",
@@ -621,6 +662,54 @@ class TestCharmHelpers:
             _remove_envoyfilter(name, namespace)
 
     @pytest.mark.parametrize(
+        "related_applications, gateway_status",
+        [
+            ([], True),  # No related applications
+            (["other1"], True),  # A single related application
+            (["other1", "other2", "other3"], True),  # Multiple related applications
+            (["other1"], False),  # Gateway is offline
+        ],
+    )
+    @patch("charm.Operator._is_gateway_up", new_callable=PropertyMock)
+    def test_send_gateway_info(
+        self, mocked_is_gateway_up, related_applications, gateway_status, harness
+    ):
+        """Tests that send_gateway_info handler for the gateway-info relation works as expected."""
+        # Assert
+        # Must be leader because we write to the application part of the relation data
+        gateway_name = "test-gateway"
+        model_name = "some-model"
+        harness.update_config({"default-gateway": gateway_name})
+        harness.set_leader(True)
+        harness.set_model_name(model_name)
+
+        relation_info = [
+            add_gateway_info_to_harness(harness, other_app=name) for name in related_applications
+        ]
+        harness.begin()
+
+        # Mock the gateway service status
+        mocked_is_gateway_up.return_value = gateway_status
+
+        expected_data = {
+            "gateway_name": gateway_name,
+            "gateway_namespace": model_name,
+            "gateway_up": str(gateway_status).lower(),
+        }
+
+        # Act
+        harness.charm._send_gateway_info()
+
+        # Assert on the relation data
+        # The correct number of relations exist
+        assert len(harness.model.relations["gateway-info"]) == len(relation_info)
+
+        # For each relation, the relation data is correct
+        for this_relation_info in relation_info:
+            actual_data = harness.get_relation_data(this_relation_info["rel_id"], "istio-pilot")
+            assert expected_data == actual_data
+
+    @pytest.mark.parametrize(
         "ssl_crt, ssl_key, expected_return, expected_context",
         [
             ("", "", False, does_not_raise()),
@@ -978,6 +1067,29 @@ def add_data_to_sdi_relation(
         other,
         {"_supported_versions": supported_versions, "data": yaml.dump(data)},
     )
+
+
+def add_gateway_info_to_harness(harness: Harness, other_app="other") -> dict:
+    """Relates a new app and unit to the gateway-info relation.
+
+    Returns dict of:
+    * other (str): The name of the other app
+    * other_unit (str): The name of the other unit
+    * rel_id (int): The relation id
+    * data (dict): The relation data put to the relation
+    """
+    other_unit = f"{other_app}/0"
+    rel_id = harness.add_relation("gateway-info", other_app)
+
+    harness.add_relation_unit(rel_id, other_unit)
+    data = {}
+
+    return {
+        "other_app": other_app,
+        "other_unit": other_unit,
+        "rel_id": rel_id,
+        "data": data,
+    }
 
 
 def add_ingress_auth_to_harness(harness: Harness, other_app="other") -> dict:

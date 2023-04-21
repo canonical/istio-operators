@@ -10,6 +10,10 @@ from charmed_kubeflow_chisme.kubernetes import (
     KubernetesResourceHandler,
     create_charm_default_labels,
 )
+from charms.istio_pilot.v0.istio_gateway_info import (
+    DEFAULT_RELATION_NAME as GATEWAY_INFO_RELATION_NAME,
+)
+from charms.istio_pilot.v0.istio_gateway_info import GatewayProvider
 from lightkube import Client
 from lightkube.core.exceptions import ApiError
 from lightkube.generic_resource import create_namespaced_resource
@@ -26,8 +30,6 @@ from serialized_data_interface import (
     get_interfaces,
 )
 
-from istio_gateway_info_provider import RELATION_NAME as GATEWAY_INFO_RELATION_NAME
-from istio_gateway_info_provider import GatewayProvider
 from istioctl import Istioctl, IstioctlError
 
 ENVOYFILTER_LIGHTKUBE_RESOURCE = create_namespaced_resource(
@@ -84,9 +86,6 @@ class Operator(CharmBase):
         self.log = logging.getLogger(__name__)
 
         self._field_manager = self.app.name
-        # TODO: Refactor this?  Putting it in init means we have to always mock it in unit tests
-        # self.lightkube_client = Client(namespace=self.model.name, field_manager="lightkube")
-
         # TODO: Update resource_handler to use the newer handler
         # # Configure resource handler
         # self.env = Environment(loader=FileSystemLoader("src"))
@@ -107,16 +106,22 @@ class Operator(CharmBase):
         self.framework.observe(self.on.config_changed, self.reconcile)
 
         # Watch:
-        # * relation_joined: because we send data to the other side whenever we see a related app
+        # * relation_created: because we send data to the other side whenever we see a related app
+        # * relation_joined: because we send data to the other side whenever we see a related unit
         self.framework.observe(
             self.on[GATEWAY_INFO_RELATION_NAME].relation_created, self.reconcile
         )
+        self.framework.observe(self.on[GATEWAY_INFO_RELATION_NAME].relation_joined, self.reconcile)
+        # Configure the gateway-info provider
+        self.gateway_provider = GatewayProvider(self)
 
         # Watch:
-        # * relation_joined: because we send data to the other side whenever we see a related app
+        # * relation_created: because we send data to the other side whenever we see a related app
+        # * relation_joined: because we send data to the other side whenever we see a related unit
         # * relation_changed: because of SDI's data versioning model, which first agrees on the
         #                     schema version and then sends the rest of the data
         self.framework.observe(self.on["istio-pilot"].relation_created, self.reconcile)
+        self.framework.observe(self.on["istio-pilot"].relation_joined, self.reconcile)
         self.framework.observe(self.on["istio-pilot"].relation_changed, self.reconcile)
 
         # Watch:
@@ -140,14 +145,6 @@ class Operator(CharmBase):
         #       self, relation_name="grafana-dashboard"
         # )
 
-        # Configure the gateway-info provider
-        # TODO: Rename this to gateway_info?
-        # TODO: Can the gateway-info provider event handling just be moved to this class, and main
-        #  doesn't need to know about it (similar to obs libs)?  We'd probably want it to be after
-        #  the main handlers.
-        #  If we break this into a separate handler, it will need to trigger on anything that
-        #  triggers a reconcile because the Gateway's status could change during those events
-        self.gateway = GatewayProvider(self)
         # Configure Observability
         # TODO: Re-add this, but is there a way to do it without having to mock it in unit tests?
         # if self._istiod_svc:
@@ -464,7 +461,7 @@ class Operator(CharmBase):
 
         # Note: this assumes that the gateway service is deployed in the same namespace as this
         # charm
-        svc = self.lightkube_client.get(
+        svc = self._lightkube_client.get(
             Service, name=self.model.config["gateway-service-name"], namespace=self.model.name
         )
         return svc
@@ -478,24 +475,25 @@ class Operator(CharmBase):
                 {"service-name": f"istiod.{self.model.name}.svc", "service-port": "15012"}
             )
 
+    @property
+    def _lightkube_client(self):
+        """Returns a lightkube client configured for this charm."""
+        return Client(namespace=self.model.name, field_manager=self.app.name)
+
     def _send_gateway_info(self):
-        """Sends gateway information to all related apps."""
-        # TODO: Can any of this be put into the lib?
-        # TODO: Could this be a lib class that subscribes its own event handlers?  It needs to run
-        #  after the main event handlers - is the order guaranteed?
+        """Sends gateway information to all related apps.
 
-        # Maybe this always send data, but have an "is this up" field in the relation as well that
-        # captures the is_gateway_ready() part?
-
-        # Send the Gateway information if the Gateway is created, or send a null response if it is
-        # not up
-        # Should we also log something here about what we're sending?
-        # if self.is_gateway_ready():
-        #   self.gateway.send_gateway_relation_data(self.app, self.model.config["default-gateway"])
-        # else:
-        #   self.gateway.send_gateway_relation_data(self.app, "")  # ???
-
-        raise NotImplementedError()
+        Note, this should be done after any of the following:
+        * a new application relates to gateway-info
+        * config_changed occurs (because gateway_name may have changed)
+        * any changes are made to the Gateway or ingress-auth, because that may change the status
+          of the gateway
+        """
+        self.gateway_provider.send_gateway_relation_data(
+            gateway_name=self._gateway_name,
+            gateway_namespace=self._gateway_namespace,
+            gateway_up=self._is_gateway_up,
+        )
 
     def _reconcile_gateway(self):
         """Creates or updates the Gateway resources.
@@ -549,7 +547,7 @@ class Operator(CharmBase):
         context = {
             "charm_namespace": self.model.name,
             "gateway_name": self._gateway_name,
-            "gateway_namespace": self._gateway_namespace(),
+            "gateway_namespace": self._gateway_namespace,
             "routes": routes,
         }
 
@@ -631,9 +629,26 @@ class Operator(CharmBase):
         """Returns the name of the Gateway we will create."""
         return self.model.config["default-gateway"]
 
+    @property
     def _gateway_namespace(self):
         """Returns the namespace of the Gateway we will create, which is the same as the model."""
         return self.model.name
+
+    @property
+    def _is_gateway_object_up(self):
+        """Return whether the gateway object exists."""
+        try:
+            self._lightkube_client.get(
+                GATEWAY_LIGHTKUBE_RESOURCE,
+                name=self._gateway_name,
+                namespace=self._gateway_namespace,
+            )
+            return True
+        except ApiError as e:
+            # If the object is missing, return False.  For other errors, raise.
+            if e.status.code == 404:
+                return False
+            raise
 
     @property
     def _is_gateway_service_up(self):
@@ -650,9 +665,14 @@ class Operator(CharmBase):
         return False
 
     @property
+    def _is_gateway_up(self):
+        """Returns True if the Gateway object and its Service are both up."""
+        return self._is_gateway_service_up and self._is_gateway_object_up
+
+    @property
     def _istiod_svc(self):
         try:
-            exporter_service = self.lightkube_client.get(
+            exporter_service = self._lightkube_client.get(
                 res=Service, name="istiod", namespace=self.model.name
             )
             exporter_ip = exporter_service.spec.clusterIP
@@ -699,7 +719,7 @@ class Operator(CharmBase):
             "Attempting to patch istiod-default-validator webhook to ensure it points to"
             " correct namespace."
         )
-        lightkube_client = Client()
+        lightkube_client = self._lightkube_client
         try:
             vwc = lightkube_client.get(
                 ValidatingWebhookConfiguration, name="istiod-default-validator"
