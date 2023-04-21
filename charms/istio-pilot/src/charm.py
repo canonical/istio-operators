@@ -21,7 +21,7 @@ from lightkube.resources.admissionregistration_v1 import ValidatingWebhookConfig
 from lightkube.resources.core_v1 import Secret, Service
 from ops.charm import CharmBase, RelationBrokenEvent
 from ops.main import main
-from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
+from ops.model import ActiveStatus, Application, BlockedStatus, MaintenanceStatus, WaitingStatus
 from packaging.version import Version
 from serialized_data_interface import (
     NoCompatibleVersions,
@@ -427,23 +427,13 @@ class Operator(CharmBase):
         except NoCompatibleVersions as err:
             raise ErrorWithStatus(err, BlockedStatus)
 
-        # Filter out data we sent out.
-        if ingress_interface:
-            routes = {
-                (rel, app): route
-                for (rel, app), route in sorted(
-                    ingress_interface.get_data().items(), key=lambda tup: tup[0][0].id
-                )
-                if app != self.app
-            }
-        else:
-            # If there is no ingress-auth relation, we have no data here
-            routes = {}
+        # Get all route data from the ingress interface
+        routes = get_routes_from_ingress_interface(ingress_interface, self.app)
 
+        # The app-level data is still visible on a broken relation, but we
+        # shouldn't be keeping the VirtualService for that related app.
         if isinstance(event, RelationBrokenEvent):
-            # The app-level data is still visible on a broken relation, but we
-            # shouldn't be keeping the VirtualService for that related app.
-            del routes[(event.relation, event.app)]
+            routes.pop((event.relation, event.app))
 
         return routes
 
@@ -877,6 +867,27 @@ def _wait_for_update_rollout(
                     f" version - upgrade rollout complete"
                 )
     return versions
+
+
+def get_routes_from_ingress_interface(
+    ingress_interface: Optional[dict], this_app: Application
+) -> dict:
+    """Returns a dict of route data from the ingress interface."""
+    routes = {}
+
+    if ingress_interface:
+        sorted_interface_data = sorted(
+            ingress_interface.get_data().items(), key=lambda tup: tup[0][0].id
+        )
+
+        for (rel, app), route in sorted_interface_data:
+            if app != this_app:
+                routes[(rel, app)] = route
+    else:
+        # If there is no ingress-auth relation, we have no data here
+        pass
+
+    return routes
 
 
 def _xor(a, b):
