@@ -215,9 +215,16 @@ class TestCharmHelpers:
             (raise_apierror_with_code_404, False, does_not_raise()),
             (raise_apierror_with_code_400, None, pytest.raises(ApiError)),
             (ValueError, None, pytest.raises(ValueError)),
-        ]
+        ],
     )
-    def test_is_gateway_object_up(self, lightkube_client_get_side_effect, expected_is_up, context_raised, harness, mocked_lightkube_client):
+    def test_is_gateway_object_up(
+        self,
+        lightkube_client_get_side_effect,
+        expected_is_up,
+        context_raised,
+        harness,
+        mocked_lightkube_client,
+    ):
         """Tests whether _is_gateway_object_up returns as expected."""
         mocked_lightkube_client.get.side_effect = lightkube_client_get_side_effect
 
@@ -226,7 +233,6 @@ class TestCharmHelpers:
         with context_raised:
             actual_is_up = harness.charm._is_gateway_object_up
             assert actual_is_up == expected_is_up
-
 
     @pytest.mark.parametrize(
         "mock_service_fixture, is_gateway_up",

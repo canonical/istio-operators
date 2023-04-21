@@ -213,7 +213,6 @@ class Operator(CharmBase):
         except ErrorWithStatus as err:
             handled_errors.append(err)
 
-        gateway_creation_successful = False
         try:
             # If handling the ingress_auth relation fails, remove the Gateway to prevent
             # unauthenticated traffic
@@ -642,7 +641,7 @@ class Operator(CharmBase):
             self._lightkube_client.get(
                 GATEWAY_LIGHTKUBE_RESOURCE,
                 name=self._gateway_name,
-                namespace=self._gateway_namespace
+                namespace=self._gateway_namespace,
             )
             return True
         except ApiError as e:
@@ -669,7 +668,6 @@ class Operator(CharmBase):
     def _is_gateway_up(self):
         """Returns True if the Gateway object and its Service are both up."""
         return self._is_gateway_service_up and self._is_gateway_object_up
-
 
     @property
     def _istiod_svc(self):
