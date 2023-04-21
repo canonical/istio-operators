@@ -140,10 +140,9 @@ class TestCharmEvents:
         mocked_reconcile.reset_mock()
 
         exercise_relation(harness, "istio-pilot")
-        assert mocked_reconcile.call_count == 3
+        assert mocked_reconcile.call_count == 2
         assert isinstance(mocked_reconcile.call_args_list[0][0][0], RelationCreatedEvent)
         assert isinstance(mocked_reconcile.call_args_list[1][0][0], RelationChangedEvent)
-        assert isinstance(mocked_reconcile.call_args_list[2][0][0], RelationBrokenEvent)
         mocked_reconcile.reset_mock()
 
         exercise_relation(harness, "ingress")
@@ -334,6 +333,57 @@ class TestCharmHelpers:
         with pytest.raises(ErrorWithStatus) as err:
             harness.charm._get_ingress_data(event)
 
+        assert "versions not found" in err.value.msg
+
+    @pytest.mark.parametrize(
+        "related_applications",
+        [
+            ([]),  # No related applications
+            (["other1"]),  # A single related application
+            (["other1", "other2", "other3"]),  # Multiple related applications
+        ],
+    )
+    def test_handle_istio_pilot_relation(self, related_applications, harness):
+        """Tests that the handle_istio_pilot_relation helper works as expected."""
+        # Assert
+        # Must be leader because we write to the application part of the relation data
+        model_name = "some-model"
+        expected_data = {
+            "service-name": f"istiod.{model_name}.svc",
+            "service-port": "15012",
+        }
+
+        harness.set_leader(True)
+        harness.set_model_name(model_name)
+
+        relation_info = [
+            add_istio_pilot_to_harness(harness, other_app=name) for name in related_applications
+        ]
+        harness.begin()
+
+        # Act
+        harness.charm._handle_istio_pilot_relation()
+
+        # Assert on the relation data
+        # The correct number of relations exist
+        assert len(harness.model.relations["istio-pilot"]) == len(relation_info)
+
+        # For each relation, the relation data is correct
+        for this_relation_info in relation_info:
+            actual_data = yaml.safe_load(
+                harness.get_relation_data(this_relation_info["rel_id"], "istio-pilot")["data"]
+            )
+            assert expected_data == actual_data
+
+    def test_handle_istio_pilot_relation_waiting_on_version(self, harness):
+        """Tests that the _handle_istio_pilot_relation helper raises on incomplete data."""
+        # Arrange
+        harness.add_relation("istio-pilot", "other")
+        harness.begin()
+
+        # Act and assert
+        with pytest.raises(ErrorWithStatus) as err:
+            harness.charm._handle_istio_pilot_relation()
         assert "versions not found" in err.value.msg
 
     def test_reconcile_gateway(
@@ -980,6 +1030,30 @@ def add_ingress_to_harness(harness: Harness, other_app="other") -> dict:
         "rewrite": f"{other_app}-rewrite",
     }
     add_data_to_sdi_relation(harness, rel_id, other_app, data, supported_versions="- v2")
+
+    return {
+        "other_app": other_app,
+        "other_unit": other_unit,
+        "rel_id": rel_id,
+        "data": data,
+    }
+
+
+def add_istio_pilot_to_harness(harness: Harness, other_app="other") -> dict:
+    """Relates a new app and unit to the istio-pilot relation.
+
+    Returns dict of:
+    * other (str): The name of the other app
+    * other_unit (str): The name of the other unit
+    * rel_id (int): The relation id
+    * data (dict): The relation data put to the relation
+    """
+    other_unit = f"{other_app}/0"
+    rel_id = harness.add_relation("istio-pilot", other_app)
+
+    harness.add_relation_unit(rel_id, other_unit)
+    data = {}
+    add_data_to_sdi_relation(harness, rel_id, other_app, data, supported_versions="- v1")
 
     return {
         "other_app": other_app,
