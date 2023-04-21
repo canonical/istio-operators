@@ -116,6 +116,14 @@ def kubernetes_resource_handler_with_client_and_existing_virtualservice(
     yield mocked_krh_class, mocked_lightkube_client, existing_vs_name
 
 
+def raise_apierror_with_code_400(*args, **kwargs):
+    raise FakeApiError(400)
+
+
+def raise_apierror_with_code_404(*args, **kwargs):
+    raise FakeApiError(404)
+
+
 class TestCharmEvents:
     """Test cross-cutting charm behavior.
 
@@ -199,6 +207,26 @@ class TestCharmHelpers:
         with expected_context:
             gateway_port = harness.charm._gateway_port
             assert gateway_port == expected_port
+
+    @pytest.mark.parametrize(
+        "lightkube_client_get_side_effect, expected_is_up, context_raised",
+        [
+            (None, True, does_not_raise()),
+            (raise_apierror_with_code_404, False, does_not_raise()),
+            (raise_apierror_with_code_400, None, pytest.raises(ApiError)),
+            (ValueError, None, pytest.raises(ValueError)),
+        ]
+    )
+    def test_is_gateway_object_up(self, lightkube_client_get_side_effect, expected_is_up, context_raised, harness, mocked_lightkube_client):
+        """Tests whether _is_gateway_object_up returns as expected."""
+        mocked_lightkube_client.get.side_effect = lightkube_client_get_side_effect
+
+        harness.begin()
+
+        with context_raised:
+            actual_is_up = harness.charm._is_gateway_object_up
+            assert actual_is_up == expected_is_up
+
 
     @pytest.mark.parametrize(
         "mock_service_fixture, is_gateway_up",
@@ -636,9 +664,9 @@ class TestCharmHelpers:
             (["other1"], False),  # Gateway is offline
         ],
     )
-    @patch("charm.Operator._is_gateway_service_up", new_callable=PropertyMock)
+    @patch("charm.Operator._is_gateway_up", new_callable=PropertyMock)
     def test_send_gateway_info(
-        self, mocked_is_gateway_service_up, related_applications, gateway_status, harness
+        self, mocked_is_gateway_up, related_applications, gateway_status, harness
     ):
         """Tests that send_gateway_info handler for the gateway-info relation works as expected."""
         # Assert
@@ -655,7 +683,7 @@ class TestCharmHelpers:
         harness.begin()
 
         # Mock the gateway service status
-        mocked_is_gateway_service_up.return_value = gateway_status
+        mocked_is_gateway_up.return_value = gateway_status
 
         expected_data = {
             "gateway_name": gateway_name,

@@ -213,6 +213,7 @@ class Operator(CharmBase):
         except ErrorWithStatus as err:
             handled_errors.append(err)
 
+        gateway_creation_successful = False
         try:
             # If handling the ingress_auth relation fails, remove the Gateway to prevent
             # unauthenticated traffic
@@ -492,7 +493,7 @@ class Operator(CharmBase):
         self.gateway_provider.send_gateway_relation_data(
             gateway_name=self._gateway_name,
             gateway_namespace=self._gateway_namespace,
-            gateway_up=self._is_gateway_service_up,
+            gateway_up=self._is_gateway_up,
         )
 
     def _reconcile_gateway(self):
@@ -635,6 +636,22 @@ class Operator(CharmBase):
         return self.model.name
 
     @property
+    def _is_gateway_object_up(self):
+        """Return whether the gateway object exists."""
+        try:
+            self._lightkube_client.get(
+                GATEWAY_LIGHTKUBE_RESOURCE,
+                name=self._gateway_name,
+                namespace=self._gateway_namespace
+            )
+            return True
+        except ApiError as e:
+            # If the object is missing, return False.  For other errors, raise.
+            if e.status.code == 404:
+                return False
+            raise
+
+    @property
     def _is_gateway_service_up(self):
         """Returns True if the ingress gateway service is up, else False."""
         # TODO: This should really be something provided via a relation to istio-gateway, where it
@@ -647,6 +664,12 @@ class Operator(CharmBase):
         if _get_gateway_address_from_svc(svc) is not None:
             return True
         return False
+
+    @property
+    def _is_gateway_up(self):
+        """Returns True if the Gateway object and its Service are both up."""
+        return self._is_gateway_service_up and self._is_gateway_object_up
+
 
     @property
     def _istiod_svc(self):
