@@ -26,7 +26,7 @@ from ops.charm import (
     RelationCreatedEvent,
     RelationJoinedEvent,
 )
-from ops.model import WaitingStatus
+from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.testing import Harness
 
 from charm import (
@@ -55,6 +55,25 @@ VIRTUAL_SERVICE_LIGHTKUBE_RESOURCE = create_namespaced_resource(
     kind="VirtualService",
     plural="virtualservices",
 )
+
+
+@pytest.fixture()
+def all_operator_reconcile_handlers_mocked(mocker):
+    mocked = {
+        "_check_leader": mocker.patch("charm.Operator._check_leader"),
+        "_handle_istio_pilot_relation": mocker.patch(
+            "charm.Operator._handle_istio_pilot_relation"
+        ),
+        "_get_ingress_auth_data": mocker.patch("charm.Operator._get_ingress_auth_data"),
+        "_reconcile_ingress_auth": mocker.patch("charm.Operator._reconcile_ingress_auth"),
+        "_reconcile_gateway": mocker.patch("charm.Operator._reconcile_gateway"),
+        "_remove_gateway": mocker.patch("charm.Operator._remove_gateway"),
+        "_send_gateway_info": mocker.patch("charm.Operator._send_gateway_info"),
+        "_get_ingress_data": mocker.patch("charm.Operator._get_ingress_data"),
+        "_reconcile_ingress": mocker.patch("charm.Operator._reconcile_ingress"),
+        "_report_handled_errors": mocker.patch("charm.Operator._report_handled_errors"),
+    }
+    yield mocked
 
 
 @pytest.fixture()
@@ -182,6 +201,34 @@ class TestCharmEvents:
 
 class TestCharmHelpers:
     """Directly test charm helpers and private methods."""
+
+    def test_reconcile_handling_nonfatal_errors(
+        self, harness, all_operator_reconcile_handlers_mocked
+    ):
+        """Test does a charm e2e simulation of a reconcile loop which handles non-fatal errors."""
+        # Arrange
+        mocks = all_operator_reconcile_handlers_mocked
+        mocks["_handle_istio_pilot_relation"].side_effect = ErrorWithStatus(
+            "_handle_istio_pilot_relation", BlockedStatus
+        )
+        mocks["_reconcile_gateway"].side_effect = ErrorWithStatus(
+            "_reconcile_gateway", BlockedStatus
+        )
+        mocks["_send_gateway_info"].side_effect = ErrorWithStatus(
+            "_send_gateway_info", BlockedStatus
+        )
+        mocks["_get_ingress_data"].side_effect = ErrorWithStatus(
+            "_get_ingress_data", BlockedStatus
+        )
+
+        harness.begin()
+
+        # Act
+        harness.charm.reconcile("event")
+
+        # Assert
+        mocks["_report_handled_errors"].assert_called_once()
+        assert len(mocks["_report_handled_errors"].call_args.kwargs["errors"]) == 4
 
     def test_reconcile_not_leader(self, harness):
         """Assert that the reconcile handler does not perform any actions when not the leader."""
@@ -660,6 +707,45 @@ class TestCharmHelpers:
 
         with context_raised:
             _remove_envoyfilter(name, namespace)
+
+    @pytest.mark.parametrize(
+        "errors, expected_status_type",
+        [
+            ([], ActiveStatus),
+            (
+                [
+                    ErrorWithStatus("0", BlockedStatus),
+                    ErrorWithStatus("1", BlockedStatus),
+                    ErrorWithStatus("0", WaitingStatus),
+                    ErrorWithStatus("0", MaintenanceStatus),
+                ],
+                BlockedStatus,
+            ),
+            ([ErrorWithStatus("0", WaitingStatus)], WaitingStatus),
+        ],
+    )
+    def test_report_handled_errors(self, errors, expected_status_type, harness):
+        # Arrange
+        harness.begin()
+
+        # Mock the logger
+        harness.charm.log = MagicMock()
+
+        # Act
+        harness.charm._report_handled_errors(errors)
+
+        # Assert
+        assert isinstance(harness.model.unit.status, expected_status_type)
+        if isinstance(harness.model.unit.status, ActiveStatus):
+            assert harness.charm.log.info.call_count == 0
+        else:
+            assert f"handled {len(errors)} errors" in harness.model.unit.status.message
+            assert (
+                harness.charm.log.info.call_count
+                + harness.charm.log.warning.call_count
+                + harness.charm.log.error.call_count
+                == len(errors) + 1
+            )
 
     @pytest.mark.parametrize(
         "related_applications, gateway_status",

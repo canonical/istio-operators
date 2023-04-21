@@ -10,6 +10,7 @@ from charmed_kubeflow_chisme.kubernetes import (
     KubernetesResourceHandler,
     create_charm_default_labels,
 )
+from charmed_kubeflow_chisme.status_handling import get_first_worst_error
 from charms.istio_pilot.v0.istio_gateway_info import (
     DEFAULT_RELATION_NAME as GATEWAY_INFO_RELATION_NAME,
 )
@@ -239,14 +240,10 @@ class Operator(CharmBase):
             ingress_data = self._get_ingress_data(event)
             self._reconcile_ingress(ingress_data)
         except ErrorWithStatus as err:
-            # One or more related applications resulted in an error
             handled_errors.append(err)
-            self._log_and_set_status(err.status)
 
-        # TODO: If we have and handled_errors, report them
-        self._report_handled_errors(handled_errors)
-
-        raise NotImplementedError("this is just a pseudo-code example")
+        # Reports (status and logs) any handled errors, or sets to ActiveStatus
+        self._report_handled_errors(errors=handled_errors)
 
     def remove(self, event):
         """Remove charm."""
@@ -617,12 +614,17 @@ class Operator(CharmBase):
         krh.delete()
 
     def _report_handled_errors(self, errors):
-        """Sets status to the worst error's status and logs all messages, otherwise sets Active.
-
-        TODO: expand this
-        """
-        # TODO: Set Active otherwise?  Call a "check my status" function if we have no errors?
-        raise NotImplementedError()
+        """Sets status to the worst error's status and logs all messages, otherwise sets Active."""
+        if errors:
+            worst_error = get_first_worst_error(errors)
+            status_to_publish = worst_error.status_type(
+                f"Execution handled {len(errors)} errors.  See logs for details."
+            )
+            self._log_and_set_status(status_to_publish)
+            for i, error in enumerate(errors):
+                self.log.info(f"Handled error {i}/{len(errors)}: {error.status}")
+        else:
+            self.unit.status = ActiveStatus()
 
     @property
     def _gateway_name(self):
@@ -693,14 +695,11 @@ class Operator(CharmBase):
         """
         self.unit.status = status
 
-        # For some reason during unit tests, self.log is not available.  Workaround this for now
-        logger = logging.getLogger(__name__)
-
         log_destination_map = {
-            ActiveStatus: logger.info,
-            BlockedStatus: logger.warning,
-            MaintenanceStatus: logger.info,
-            WaitingStatus: logger.info,
+            ActiveStatus: self.log.info,
+            BlockedStatus: self.log.warning,
+            MaintenanceStatus: self.log.info,
+            WaitingStatus: self.log.info,
         }
 
         log_destination_map[type(status)](status.message)
