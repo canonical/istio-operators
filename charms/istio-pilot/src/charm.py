@@ -131,6 +131,15 @@ class Operator(CharmBase):
         #   application goes away we need to remove their resources
         self.framework.observe(self.on["ingress"].relation_changed, self.reconcile)
         self.framework.observe(self.on["ingress"].relation_broken, self.reconcile)
+
+        # Watch:
+        # * relation_created: because incomplete relation data should cause removal of the gateway
+        # * relation_joined: because incomplete relation data should cause removal of the gateway
+        # * relation_changed: because if the remote data updates, we need to update our resources
+        # * relation_broken: because this is an application-level data exchange, so if the related
+        #   application goes away we need to remove their resources
+        self.framework.observe(self.on["ingress-auth"].relation_created, self.reconcile)
+        self.framework.observe(self.on["ingress-auth"].relation_joined, self.reconcile)
         self.framework.observe(self.on["ingress-auth"].relation_changed, self.reconcile)
         self.framework.observe(self.on["ingress-auth"].relation_broken, self.reconcile)
 
@@ -208,7 +217,7 @@ class Operator(CharmBase):
 
         ingress_auth_reconcile_successful = False
         try:
-            ingress_auth_data = self._get_ingress_auth_data()
+            ingress_auth_data = self._get_ingress_auth_data(event)
             self._reconcile_ingress_auth(ingress_auth_data)
             ingress_auth_reconcile_successful = True
         except ErrorWithStatus as err:
@@ -377,12 +386,18 @@ class Operator(CharmBase):
             raise ErrorWithStatus(err, BlockedStatus)
         return interfaces
 
-    def _get_ingress_auth_data(self) -> dict:
+    def _get_ingress_auth_data(self, event) -> dict:
         """Retrieve the ingress-auth relation data without touching other interface data.
 
         This is a workaround to ensure that errors in other relation data, such as an incomplete
         ingress relation, do not block us from retrieving the ingress-auth data.
         """
+        # Do not process data if this is a relation-broken event for this relation
+        if (
+            isinstance(event, RelationBrokenEvent)
+            and event.relation.name == INGRESS_AUTH_RELATION_NAME
+        ):
+            return {}
         try:
             ingress_auth_interface = get_interface(self, INGRESS_AUTH_RELATION_NAME)
         except NoVersionsListed as err:
@@ -391,8 +406,8 @@ class Operator(CharmBase):
             raise ErrorWithStatus(err, BlockedStatus)
 
         # Filter out data we sent out.
-        # TODO: Is this needed here?
         if ingress_auth_interface:
+            # TODO: Is this needed here?
             ingress_auth_data = {
                 (rel, app): route
                 for (rel, app), route in sorted(
@@ -400,14 +415,20 @@ class Operator(CharmBase):
                 )
                 if app != self.app
             }
+
+            # We only support a single ingress-auth relation, so we can unpack and return just the
+            # contents
+            if len(ingress_auth_data) > 1:
+                raise ErrorWithStatus(
+                    "Multiple ingress-auth relations are not supported.  Remove all related apps"
+                    " and re-relate",
+                    BlockedStatus,
+                )
+            ingress_auth_data = list(ingress_auth_data.values())[0]
+
         else:
             # If there is no ingress-auth relation, we have no data here
             ingress_auth_data = {}
-
-        if len(ingress_auth_data) > 1:
-            raise ErrorWithStatus(
-                "Multiple ingress-auth relations are not supported", BlockedStatus
-            )
 
         return ingress_auth_data
 
@@ -429,7 +450,7 @@ class Operator(CharmBase):
 
         # The app-level data is still visible on a broken relation, but we
         # shouldn't be keeping the VirtualService for that related app.
-        if isinstance(event, RelationBrokenEvent):
+        if isinstance(event, RelationBrokenEvent) and event.relation.name == INGRESS_RELATION_NAME:
             routes.pop((event.relation, event.app))
 
         return routes
@@ -576,7 +597,7 @@ class Operator(CharmBase):
 
         if len(ingress_auth_data) == 0:
             self.log.info("No ingress-auth data found - deleting any existing EnvoyFilter")
-            _remove_envoyfilter(envoyfilter_name)
+            _remove_envoyfilter(name=envoyfilter_name, namespace=self.model.name)
             return
 
         context = {
@@ -584,10 +605,11 @@ class Operator(CharmBase):
             "auth_service_namespace": self.model.name,  # Assumed to be in the same namespace
             "app_name": self.app.name,
             "envoyfilter_name": envoyfilter_name,
+            "envoyfilter_namespace": self.model.name,
             "gateway_port": self._gateway_port,
             "port": ingress_auth_data["port"],
-            "request_headers": ingress_auth_data["request_headers"],
-            "response_headers": ingress_auth_data["response_headers"],
+            "request_headers": ingress_auth_data["allowed-request-headers"],
+            "response_headers": ingress_auth_data["allowed-response-headers"],
         }
 
         krh = KubernetesResourceHandler(
