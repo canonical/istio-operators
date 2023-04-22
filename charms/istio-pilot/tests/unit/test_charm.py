@@ -208,6 +208,14 @@ class TestCharmEvents:
         mocked_lightkube_client,
         kubernetes_resource_handler_with_client,
     ):
+        """Charm e2e test that asserts that we correctly manage our Gateway with/without Auth.
+
+        Asserts that we:
+        * create a gateway on a config_changed
+        * remove the gateway on an incomple ingress-auth relation
+        * recreate the gateway and create an EnvoyFilter on a complete ingress-auth relation
+
+        """
         krh_class, krh_lightkube_client = kubernetes_resource_handler_with_client
 
         model_name = "my-model"
@@ -261,6 +269,15 @@ class TestCharmEvents:
         mocked_lightkube_client,
         kubernetes_resource_handler_with_client,
     ):
+        """Charm e2e test that asserts that we correctly manage ingress relation.
+
+        Asserts that we:
+        * create a gateway on a config_changed
+        * create a single VirtualService when we add one related app to `ingress`
+        * create two VirtualServices when we add another related app to `ingress`
+        * create the VirtualServices for ingress even when other non-fatal errors occur
+
+        """
         krh_class, krh_lightkube_client = kubernetes_resource_handler_with_client
 
         model_name = "my-model"
@@ -321,6 +338,7 @@ class TestCharmEvents:
     def test_istio_pilot_relation(
         self, harness, mocked_lightkube_client, kubernetes_resource_handler_with_client
     ):
+        """Charm e2e test that asserts we correctly broadcast data on the istio-pilot relation."""
         krh_class, krh_lightkube_client = kubernetes_resource_handler_with_client
 
         model_name = "my-model"
@@ -353,9 +371,8 @@ class TestCharmEvents:
         mocked_lightkube_client,
         kubernetes_resource_handler_with_client,
     ):
+        """Charm e2e test that asserts we correctly broadcast data on the gateway-info relation."""
         # Arrange
-        krh_class, krh_lightkube_client = kubernetes_resource_handler_with_client
-
         model_name = "my-model"
         gateway_name = "my-gateway"
         harness.set_leader(True)
@@ -905,6 +922,7 @@ class TestCharmHelpers:
         ],
     )
     def test_report_handled_errors(self, errors, expected_status_type, harness):
+        """Tests that _report_handled_errors notifies users of errors via status and logging."""
         # Arrange
         harness.begin()
 
