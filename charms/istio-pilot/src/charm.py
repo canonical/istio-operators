@@ -138,6 +138,13 @@ class Operator(CharmBase):
         # * relation_changed: because if the remote data updates, we need to update our resources
         # * relation_broken: because this is an application-level data exchange, so if the related
         #   application goes away we need to remove their resources
+        # This charm acts on relation_created/relation_joined to prevent accidentally leaving the
+        # ingress unsecured.  If anything is related to ingress-auth, that indicates the user wants
+        # block unauthenticated traffic through the Ingress, even if the related application has
+        # not yet sent us the authentication details.  By monitoring
+        # relation_created/relation_joined, we can block traffic through the Gateway until the auth
+        # is set up. This prevents a broken application on the ingress-auth relation from resulting
+        # in an unsecured ingress.
         self.framework.observe(self.on["ingress-auth"].relation_created, self.reconcile)
         self.framework.observe(self.on["ingress-auth"].relation_joined, self.reconcile)
         self.framework.observe(self.on["ingress-auth"].relation_changed, self.reconcile)
