@@ -10,19 +10,30 @@ import requests
 import yaml
 from bs4 import BeautifulSoup
 from lightkube import codecs
-from lightkube.generic_resource import load_in_cluster_generic_resources
+from lightkube.generic_resource import (
+    create_namespaced_resource,
+    load_in_cluster_generic_resources,
+)
 from pytest_operator.plugin import OpsTest
 
 log = logging.getLogger(__name__)
-
 
 DEX_AUTH = "dex-auth"
 OIDC_GATEKEEPER = "oidc-gatekeeper"
 ISTIO_PILOT = "istio-pilot"
 ISTIO_GATEWAY_APP_NAME = "istio-gateway"
+TENSORBOARD_CONTROLLER = "tensorboard-controller"
+TENSORBOARDS_WEB_APP = "tensorboards-web-app"
 
 USERNAME = "user123"
 PASSWORD = "user123"
+
+VIRTUAL_SERVICE_LIGHTKUBE_RESOURCE = create_namespaced_resource(
+    group="networking.istio.io",
+    version="v1alpha3",
+    kind="VirtualService",
+    plural="virtualservices",
+)
 
 
 @pytest.mark.abort_on_fail
@@ -55,7 +66,7 @@ async def test_kubectl_access(ops_test: OpsTest):
 
 
 @pytest.mark.abort_on_fail
-async def test_deploy_istio_charms(ops_test: OpsTest):
+async def test_buld_and_deploy_istio_charms(ops_test: OpsTest):
     # Build, deploy, and relate istio charms
     charms_path = "./charms/istio"
     istio_charms = await ops_test.build_charms(f"{charms_path}-gateway", f"{charms_path}-pilot")
@@ -79,6 +90,58 @@ async def test_deploy_istio_charms(ops_test: OpsTest):
         status="active",
         raise_on_blocked=False,
         timeout=90 * 10,
+    )
+
+
+async def test_ingress_relation(ops_test: OpsTest):
+    """Tests that the ingress relation works as expected, creating a route through the ingress.
+
+    TODO: Change this from using a specific charm that implements ingress's requirer interface
+     to a generic charm, this way the entire test is encapsulated in this repo.
+    """
+    await ops_test.model.deploy(TENSORBOARDS_WEB_APP, channel="latest/edge", trust=True)
+
+    await ops_test.model.add_relation(f"{ISTIO_PILOT}:ingress", f"{TENSORBOARDS_WEB_APP}:ingress")
+
+    await ops_test.model.wait_for_idle(
+        status="active",
+        raise_on_blocked=False,
+        timeout=90 * 10,
+        idle_period=30,  # A hack because sometimes this proceeds without being Active
+    )
+
+    lightkube_client = lightkube.Client()
+
+    # Confirm that we have created the VirtualService we expect
+    lightkube_client.get(VIRTUAL_SERVICE_LIGHTKUBE_RESOURCE, TENSORBOARDS_WEB_APP)
+
+    # Confirm that the UI is reachable through the ingress
+    gateway_ip = await get_gateway_ip(ops_test)
+    async with aiohttp.ClientSession(raise_for_status=True) as client:
+        results = await client.get(f"http://{gateway_ip}/tensorboards/")
+        soup = BeautifulSoup(await results.text())
+
+    assert soup.title.string == "Tensorboards Manager UI"
+
+
+async def test_gateway_info_relation(ops_test: OpsTest):
+    """Tests that the gateway-info relation works as expected.
+
+    TODO: Change this from using a specific charm that implements gateway-info's requirer interface
+     to a generic charm, this way the entire test is encapsulated in this repo.
+    """
+    await ops_test.model.deploy(TENSORBOARD_CONTROLLER, channel="latest/edge", trust=True)
+
+    await ops_test.model.add_relation(
+        f"{ISTIO_PILOT}:gateway-info", f"{TENSORBOARD_CONTROLLER}:gateway-info"
+    )
+
+    # tensorboard_controller will go Active if the relation is established
+    await ops_test.model.wait_for_idle(
+        status="active",
+        raise_on_blocked=False,
+        timeout=90 * 10,
+        idle_period=30,  # A hack because sometimes this proceeds without being Active
     )
 
 
@@ -147,7 +210,8 @@ async def test_deploy_bookinfo_example(ops_test: OpsTest):
     assert soup.title.string == "Simple Bookstore App"
 
 
-async def test_ingress_auth(ops_test: OpsTest):
+@pytest.mark.abort_on_fail
+async def test_enable_ingress_auth(ops_test: OpsTest):
     """Tests that the ingress auth policy restricts traffic on (only the) kubeflow gateway.
 
     This test establishes the ingress-auth relation, which applies an auth policy to traffic
@@ -233,6 +297,30 @@ async def test_ingress_auth(ops_test: OpsTest):
     assert_url_get(
         f"http://{secondary_gateway_ip}/test", allowed_statuses=[200], disallowed_statuses=[302]
     )
+
+
+@pytest.mark.abort_on_fail
+async def test_disable_ingress_auth(ops_test: OpsTest):
+    """Tests that if we unrelate the ingress-auth relation, traffic is no longer restricted.
+
+    Uses the previously deployed bookinfo application for testing.
+    """
+    await ops_test.model.applications[ISTIO_PILOT].remove_relation("ingress-auth", f"{OIDC_GATEKEEPER}:ingress-auth")
+
+    # Wait for the istio-pilot charm to settle back down
+    await ops_test.model.wait_for_idle(
+        apps=[ISTIO_PILOT],
+        status="active",
+        raise_on_blocked=False,
+        timeout=60 * 10,
+    )
+
+    gateway_ip = await get_gateway_ip(ops_test)
+    async with aiohttp.ClientSession(raise_for_status=True) as client:
+        results = await client.get(f"http://{gateway_ip}/productpage")
+        soup = BeautifulSoup(await results.text())
+
+    assert soup.title.string == "Simple Bookstore App"
 
 
 def deploy_workload_with_gateway(workload_name: str, gateway_port: int, namespace: str):
