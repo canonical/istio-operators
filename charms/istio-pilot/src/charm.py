@@ -569,6 +569,13 @@ class Operator(CharmBase):
         """
         # We only need the route data, not the relation keys
         routes = list(routes.values())
+
+        # ingress relation schema v2+ requires `namespace`, but v1 did not have `namespace`.
+        # For backward compatibility support, use istio-pilot's namespace by default if omitted.
+        for route in routes:
+            if "namespace" not in route:
+                route["namespace"] = self.model.name
+
         context = {
             "charm_namespace": self.model.name,
             "gateway_name": self._gateway_name,
