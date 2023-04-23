@@ -26,7 +26,7 @@ from ops.charm import (
     RelationCreatedEvent,
     RelationJoinedEvent,
 )
-from ops.model import WaitingStatus
+from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.testing import Harness
 
 from charm import (
@@ -55,6 +55,25 @@ VIRTUAL_SERVICE_LIGHTKUBE_RESOURCE = create_namespaced_resource(
     kind="VirtualService",
     plural="virtualservices",
 )
+
+
+@pytest.fixture()
+def all_operator_reconcile_handlers_mocked(mocker):
+    mocked = {
+        "_check_leader": mocker.patch("charm.Operator._check_leader"),
+        "_handle_istio_pilot_relation": mocker.patch(
+            "charm.Operator._handle_istio_pilot_relation"
+        ),
+        "_get_ingress_auth_data": mocker.patch("charm.Operator._get_ingress_auth_data"),
+        "_reconcile_ingress_auth": mocker.patch("charm.Operator._reconcile_ingress_auth"),
+        "_reconcile_gateway": mocker.patch("charm.Operator._reconcile_gateway"),
+        "_remove_gateway": mocker.patch("charm.Operator._remove_gateway"),
+        "_send_gateway_info": mocker.patch("charm.Operator._send_gateway_info"),
+        "_get_ingress_data": mocker.patch("charm.Operator._get_ingress_data"),
+        "_reconcile_ingress": mocker.patch("charm.Operator._reconcile_ingress"),
+        "_report_handled_errors": mocker.patch("charm.Operator._report_handled_errors"),
+    }
+    yield mocked
 
 
 @pytest.fixture()
@@ -167,9 +186,11 @@ class TestCharmEvents:
         mocked_reconcile.reset_mock()
 
         exercise_relation(harness, "ingress-auth")
-        assert mocked_reconcile.call_count == 2
-        assert isinstance(mocked_reconcile.call_args_list[0][0][0], RelationChangedEvent)
-        assert isinstance(mocked_reconcile.call_args_list[1][0][0], RelationBrokenEvent)
+        assert mocked_reconcile.call_count == 4
+        assert isinstance(mocked_reconcile.call_args_list[0][0][0], RelationCreatedEvent)
+        assert isinstance(mocked_reconcile.call_args_list[1][0][0], RelationJoinedEvent)
+        assert isinstance(mocked_reconcile.call_args_list[2][0][0], RelationChangedEvent)
+        assert isinstance(mocked_reconcile.call_args_list[3][0][0], RelationBrokenEvent)
         mocked_reconcile.reset_mock()
 
     def test_not_leader(self, harness):
@@ -179,9 +200,233 @@ class TestCharmEvents:
         harness.charm.on.config_changed.emit()
         assert harness.charm.model.unit.status == WaitingStatus("Waiting for leadership")
 
+    @patch("charm.Operator._remove_gateway")
+    def test_ingress_auth_and_gateway(
+        self,
+        mocked_remove_gateway,
+        harness,
+        mocked_lightkube_client,
+        kubernetes_resource_handler_with_client,
+    ):
+        """Charm e2e test that asserts that we correctly manage our Gateway with/without Auth.
+
+        Asserts that we:
+        * create a gateway on a config_changed
+        * remove the gateway on an incomple ingress-auth relation
+        * recreate the gateway and create an EnvoyFilter on a complete ingress-auth relation
+
+        """
+        krh_class, krh_lightkube_client = kubernetes_resource_handler_with_client
+
+        model_name = "my-model"
+        gateway_name = "my-gateway"
+        harness.set_leader(True)
+        harness.set_model_name(model_name)
+        harness.update_config({"default-gateway": gateway_name})
+
+        harness.begin()
+
+        # Do a reconcile
+        harness.charm.on.config_changed.emit()
+
+        # Assert we have created a gateway during reconcile
+        assert krh_lightkube_client.apply.call_count == 1
+        assert is_lightkube_resource_in_call_args_list(
+            krh_lightkube_client.apply.call_args_list, gateway_name, model_name
+        )
+        krh_lightkube_client.reset_mock()
+
+        # Add "broken" ingress_auth (empty data) and check that we remove the gateway
+        rel_id = harness.add_relation("ingress-auth", "other")
+        mocked_remove_gateway.assert_called_once
+        mocked_remove_gateway.reset_mock()
+
+        # Remove ingress_auth relation and check that we re-add the gateway
+        harness.remove_relation(rel_id)
+        assert krh_lightkube_client.apply.call_count == 1
+        assert is_lightkube_resource_in_call_args_list(
+            krh_lightkube_client.apply.call_args_list, gateway_name, model_name
+        )
+        krh_lightkube_client.reset_mock()
+
+        # Add complete ingress_auth data and check that we created the gateway and envoyfilter
+        envoyfilter_name = f"{harness.model.app.name}-authn-filter"
+        add_ingress_auth_to_harness(harness, "other")
+        assert krh_lightkube_client.apply.call_count == 2
+        assert is_lightkube_resource_in_call_args_list(
+            krh_lightkube_client.apply.call_args_list, gateway_name, model_name
+        )
+        assert is_lightkube_resource_in_call_args_list(
+            krh_lightkube_client.apply.call_args_list, envoyfilter_name, model_name
+        )
+        krh_lightkube_client.reset_mock()
+
+    @patch("charm.Operator._handle_istio_pilot_relation")
+    def test_ingress_relation(
+        self,
+        mocked_handle_istio_pilot_relation,
+        harness,
+        mocked_lightkube_client,
+        kubernetes_resource_handler_with_client,
+    ):
+        """Charm e2e test that asserts that we correctly manage ingress relation.
+
+        Asserts that we:
+        * create a gateway on a config_changed
+        * create a single VirtualService when we add one related app to `ingress`
+        * create two VirtualServices when we add another related app to `ingress`
+        * create the VirtualServices for ingress even when other non-fatal errors occur
+
+        """
+        krh_class, krh_lightkube_client = kubernetes_resource_handler_with_client
+
+        model_name = "my-model"
+        gateway_name = "my-gateway"
+        harness.set_leader(True)
+        harness.set_model_name(model_name)
+        harness.update_config({"default-gateway": gateway_name})
+
+        harness.begin()
+
+        # Do a reconcile
+        harness.charm.on.config_changed.emit()
+
+        # Assert we have created a gateway during reconcile
+        assert krh_lightkube_client.apply.call_count == 1
+        assert is_lightkube_resource_in_call_args_list(
+            krh_lightkube_client.apply.call_args_list, gateway_name, model_name
+        )
+        krh_lightkube_client.reset_mock()
+
+        # Add ingress relation and check it results in VirtualServices being created
+        ingress_app1 = "other1"
+        add_ingress_to_harness(harness, ingress_app1)
+        assert is_lightkube_resource_in_call_args_list(
+            krh_lightkube_client.apply.call_args_list, ingress_app1, model_name
+        )
+        krh_lightkube_client.reset_mock()
+
+        # Add another ingress relation and check it results in 2 VirtualServices being created
+        ingress_app2 = "other2"
+        add_ingress_to_harness(harness, ingress_app2)
+        assert is_lightkube_resource_in_call_args_list(
+            krh_lightkube_client.apply.call_args_list, ingress_app1, model_name
+        )
+        assert is_lightkube_resource_in_call_args_list(
+            krh_lightkube_client.apply.call_args_list, ingress_app2, model_name
+        )
+        krh_lightkube_client.reset_mock()
+
+        # After everything, the unit should be active
+        assert harness.charm.model.unit.status == ActiveStatus()
+
+        # If we "break" part of the charm, we should still create the VirtualServices but the charm
+        # is not active
+        mocked_handle_istio_pilot_relation.side_effect = ErrorWithStatus(
+            "Test error", BlockedStatus
+        )
+        harness.charm.on.config_changed.emit()
+        assert is_lightkube_resource_in_call_args_list(
+            krh_lightkube_client.apply.call_args_list, ingress_app1, model_name
+        )
+        assert is_lightkube_resource_in_call_args_list(
+            krh_lightkube_client.apply.call_args_list, ingress_app2, model_name
+        )
+        assert isinstance(harness.charm.model.unit.status, BlockedStatus)
+        assert "handled 1 error" in harness.charm.model.unit.status.message
+
+    def test_istio_pilot_relation(
+        self, harness, mocked_lightkube_client, kubernetes_resource_handler_with_client
+    ):
+        """Charm e2e test that asserts we correctly broadcast data on the istio-pilot relation."""
+        krh_class, krh_lightkube_client = kubernetes_resource_handler_with_client
+
+        model_name = "my-model"
+        gateway_name = "my-gateway"
+        harness.set_leader(True)
+        harness.set_model_name(model_name)
+        harness.update_config({"default-gateway": gateway_name})
+
+        harness.begin()
+
+        # Do a reconcile
+        harness.charm.on.config_changed.emit()
+
+        # Add istio-pilot relation and check it posts data correctly
+        istio_pilot_relation_info = add_istio_pilot_to_harness(harness, "other")
+        expected_service_name = f"istiod.{model_name}.svc"
+        actual_service_name = yaml.safe_load(
+            harness.get_relation_data(istio_pilot_relation_info["rel_id"], harness.model.app)[
+                "data"
+            ]
+        )["service-name"]
+        assert actual_service_name == expected_service_name
+        krh_lightkube_client.reset_mock()
+
+    @patch("charm.Operator._is_gateway_service_up", new_callable=PropertyMock)
+    def test_gateway_info_relation(
+        self,
+        mocked_is_gateway_service_up,
+        harness,
+        mocked_lightkube_client,
+        kubernetes_resource_handler_with_client,
+    ):
+        """Charm e2e test that asserts we correctly broadcast data on the gateway-info relation."""
+        # Arrange
+        model_name = "my-model"
+        gateway_name = "my-gateway"
+        harness.set_leader(True)
+        harness.set_model_name(model_name)
+        harness.update_config({"default-gateway": gateway_name})
+
+        mocked_is_gateway_service_up.return_value = True
+
+        harness.begin()
+
+        # Act and assert
+        # Add gateway-info relation and check it posts data correctly
+        gateway_info_relation_info = add_gateway_info_to_harness(harness, "other")
+        actual_gateway_name = harness.get_relation_data(
+            gateway_info_relation_info["rel_id"], harness.model.app
+        )["gateway_name"]
+        assert actual_gateway_name == gateway_name
+        actual_gateway_up = harness.get_relation_data(
+            gateway_info_relation_info["rel_id"], harness.model.app
+        )["gateway_up"]
+        assert actual_gateway_up == "true"
+        assert harness.charm.model.unit.status == ActiveStatus()
+
 
 class TestCharmHelpers:
     """Directly test charm helpers and private methods."""
+
+    def test_reconcile_handling_nonfatal_errors(
+        self, harness, all_operator_reconcile_handlers_mocked
+    ):
+        """Test does a charm e2e simulation of a reconcile loop which handles non-fatal errors."""
+        # Arrange
+        mocks = all_operator_reconcile_handlers_mocked
+        mocks["_handle_istio_pilot_relation"].side_effect = ErrorWithStatus(
+            "_handle_istio_pilot_relation", BlockedStatus
+        )
+        mocks["_reconcile_gateway"].side_effect = ErrorWithStatus(
+            "_reconcile_gateway", BlockedStatus
+        )
+        mocks["_send_gateway_info"].side_effect = ErrorWithStatus(
+            "_send_gateway_info", BlockedStatus
+        )
+        mocks["_get_ingress_data"].side_effect = ErrorWithStatus(
+            "_get_ingress_data", BlockedStatus
+        )
+
+        harness.begin()
+
+        # Act
+        harness.charm.reconcile("event")
+
+        # Assert
+        mocks["_report_handled_errors"].assert_called_once()
+        assert len(mocks["_report_handled_errors"].call_args.kwargs["errors"]) == 4
 
     def test_reconcile_not_leader(self, harness):
         """Assert that the reconcile handler does not perform any actions when not the leader."""
@@ -285,15 +530,14 @@ class TestCharmHelpers:
         harness.begin()
         returned_data = add_ingress_auth_to_harness(harness)
 
-        ingress_auth_data = harness.charm._get_ingress_auth_data()
+        ingress_auth_data = harness.charm._get_ingress_auth_data("not-relation-broken-event")
 
-        assert len(ingress_auth_data) == 1
-        assert list(ingress_auth_data.values())[0] == returned_data["data"]
+        assert ingress_auth_data == returned_data["data"]
 
     def test_get_ingress_auth_data_empty(self, harness):
         """Tests that the _get_ingress_auth_data helper returns the correct relation data."""
         harness.begin()
-        ingress_auth_data = harness.charm._get_ingress_auth_data()
+        ingress_auth_data = harness.charm._get_ingress_auth_data("not-relation-broken-event")
 
         assert len(ingress_auth_data) == 0
 
@@ -304,7 +548,7 @@ class TestCharmHelpers:
         add_ingress_auth_to_harness(harness, other_app="other2")
 
         with pytest.raises(ErrorWithStatus) as err:
-            harness.charm._get_ingress_auth_data()
+            harness.charm._get_ingress_auth_data("not-relation-broken-event")
 
         assert "Multiple ingress-auth" in err.value.msg
 
@@ -314,7 +558,7 @@ class TestCharmHelpers:
         harness.add_relation("ingress-auth", "other")
 
         with pytest.raises(ErrorWithStatus) as err:
-            harness.charm._get_ingress_auth_data()
+            harness.charm._get_ingress_auth_data("not-relation-broken-event")
 
         assert "versions not found" in err.value.msg
 
@@ -578,8 +822,8 @@ class TestCharmHelpers:
         ingress_auth_data = {
             "port": 1234,
             "service": "some-service",
-            "request_headers": "header1",
-            "response_headers": "header2",
+            "allowed-request-headers": "header1",
+            "allowed-response-headers": "header2",
         }
         harness.begin()
 
@@ -660,6 +904,46 @@ class TestCharmHelpers:
 
         with context_raised:
             _remove_envoyfilter(name, namespace)
+
+    @pytest.mark.parametrize(
+        "errors, expected_status_type",
+        [
+            ([], ActiveStatus),
+            (
+                [
+                    ErrorWithStatus("0", BlockedStatus),
+                    ErrorWithStatus("1", BlockedStatus),
+                    ErrorWithStatus("0", WaitingStatus),
+                    ErrorWithStatus("0", MaintenanceStatus),
+                ],
+                BlockedStatus,
+            ),
+            ([ErrorWithStatus("0", WaitingStatus)], WaitingStatus),
+        ],
+    )
+    def test_report_handled_errors(self, errors, expected_status_type, harness):
+        """Tests that _report_handled_errors notifies users of errors via status and logging."""
+        # Arrange
+        harness.begin()
+
+        # Mock the logger
+        harness.charm.log = MagicMock()
+
+        # Act
+        harness.charm._report_handled_errors(errors)
+
+        # Assert
+        assert isinstance(harness.model.unit.status, expected_status_type)
+        if isinstance(harness.model.unit.status, ActiveStatus):
+            assert harness.charm.log.info.call_count == 0
+        else:
+            assert f"handled {len(errors)} errors" in harness.model.unit.status.message
+            assert (
+                harness.charm.log.info.call_count
+                + harness.charm.log.warning.call_count
+                + harness.charm.log.error.call_count
+                == len(errors) + 1
+            )
 
     @pytest.mark.parametrize(
         "related_applications, gateway_status",
@@ -1189,3 +1473,24 @@ def exercise_relation(harness, relation_name):
     harness.update_relation_data(rel_id, other_app, {"some_key": "some_value"})
     harness.remove_relation_unit(rel_id, other_unit)
     harness.remove_relation(rel_id)
+
+
+def is_lightkube_resource_in_call_args_list(call_args_list, name, namespace=None):
+    """Returns a boolean of whether a call in the list includes this lightkube resource.
+
+    Args:
+        call_args_list (list): The list of call args to search, as given by a mock.call_args_list
+        name (str): The name of the lightkube resource to search for (will check metadata.name)
+        namespace (str): The namespace of the lightkube resource to search for (will check
+                         metadata.namespace)
+    """
+    for call_args in call_args_list:
+        try:
+            if (
+                call_args.kwargs["obj"].metadata.name == name
+                and getattr(call_args.kwargs["obj"].metadata, "namespace", None) == namespace
+            ):
+                return True
+        except Exception:
+            continue
+    return False

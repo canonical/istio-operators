@@ -3,6 +3,7 @@ apiVersion: networking.istio.io/v1alpha3
 kind: EnvoyFilter
 metadata:
   name: {{ envoyfilter_name }}
+  namespace: {{ envoyfilter_namespace }}
   labels:
     app.{{ app_name }}.io/is-workload-entity: "true"
 spec:
