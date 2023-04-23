@@ -15,13 +15,14 @@ from lightkube.generic_resource import (
     load_in_cluster_generic_resources,
 )
 from pytest_operator.plugin import OpsTest
+import tenacity
 
 log = logging.getLogger(__name__)
 
 DEX_AUTH = "dex-auth"
 OIDC_GATEKEEPER = "oidc-gatekeeper"
 ISTIO_PILOT = "istio-pilot"
-ISTIO_GATEWAY_APP_NAME = "istio-gateway"
+ISTIO_GATEWAY_APP_NAME = "istio-ingressgateway"
 TENSORBOARD_CONTROLLER = "tensorboard-controller"
 TENSORBOARDS_WEB_APP = "tensorboards-web-app"
 
@@ -103,25 +104,23 @@ async def test_ingress_relation(ops_test: OpsTest):
 
     await ops_test.model.add_relation(f"{ISTIO_PILOT}:ingress", f"{TENSORBOARDS_WEB_APP}:ingress")
 
+    # TODO: This does not wait properly - it should wait for tensorboards_web_app to be active
+    #  and idle.  the wait_for_idle print statements say tensorboards-web-app is active/idle, but
+    #  `juju status` reports it is not.  As a workaround, all assertions below have a long retry
+    #  period
     await ops_test.model.wait_for_idle(
         status="active",
         raise_on_blocked=False,
         timeout=90 * 10,
-        idle_period=30,  # A hack because sometimes this proceeds without being Active
     )
 
-    lightkube_client = lightkube.Client()
-
-    # Confirm that we have created the VirtualService we expect
-    lightkube_client.get(VIRTUAL_SERVICE_LIGHTKUBE_RESOURCE, TENSORBOARDS_WEB_APP)
+    assert_virtualservice_exists(name=TENSORBOARDS_WEB_APP)
 
     # Confirm that the UI is reachable through the ingress
     gateway_ip = await get_gateway_ip(ops_test)
-    async with aiohttp.ClientSession(raise_for_status=True) as client:
-        results = await client.get(f"http://{gateway_ip}/tensorboards/")
-        soup = BeautifulSoup(await results.text())
-
-    assert soup.title.string == "Tensorboards Manager UI"
+    await assert_page_reachable(
+        url=f"http://{gateway_ip}/tensorboards/", title="Tensorboards Manager UI"
+    )
 
 
 async def test_gateway_info_relation(ops_test: OpsTest):
@@ -203,11 +202,9 @@ async def test_deploy_bookinfo_example(ops_test: OpsTest):
     )
 
     gateway_ip = await get_gateway_ip(ops_test)
-    async with aiohttp.ClientSession(raise_for_status=True) as client:
-        results = await client.get(f"http://{gateway_ip}/productpage")
-        soup = BeautifulSoup(await results.text())
-
-    assert soup.title.string == "Simple Bookstore App"
+    await assert_page_reachable(
+        url=f"http://{gateway_ip}/productpage", title="Simple Bookstore App"
+    )
 
 
 @pytest.mark.abort_on_fail
@@ -318,11 +315,7 @@ async def test_disable_ingress_auth(ops_test: OpsTest):
     )
 
     gateway_ip = await get_gateway_ip(ops_test)
-    async with aiohttp.ClientSession(raise_for_status=True) as client:
-        results = await client.get(f"http://{gateway_ip}/productpage")
-        soup = BeautifulSoup(await results.text())
-
-    assert soup.title.string == "Simple Bookstore App"
+    await assert_page_reachable(url=f"http://{gateway_ip}/productpage", title="Simple Bookstore App")
 
 
 def deploy_workload_with_gateway(workload_name: str, gateway_port: int, namespace: str):
@@ -359,6 +352,11 @@ async def get_gateway_ip(ops_test: OpsTest, service_name: str = "istio-ingressga
     return gateway_obj["status"]["loadBalancer"]["ingress"][0]["ip"]
 
 
+@tenacity.retry(
+    stop=tenacity.stop_after_delay(60),
+    wait=tenacity.wait_exponential(multiplier=1, min=1, max=10),
+    reraise=True,
+)
 def assert_url_get(url, allowed_statuses: list, disallowed_statuses: list):
     """Asserts that we receive one of a list of allowed status when we `get` an url, or raises.
 
@@ -381,3 +379,29 @@ def assert_url_get(url, allowed_statuses: list, disallowed_statuses: list):
     raise ValueError(
         "Timed out before getting an allowed status code.  Communication not as expected"
     )
+
+
+# Use a long stop_after_delay period because wait_for_idle is not reliable.
+@tenacity.retry(
+    stop=tenacity.stop_after_delay(300),
+    wait=tenacity.wait_exponential(multiplier=1, min=1, max=10),
+    reraise=True,
+)
+async def assert_page_reachable(url, title):
+    """Asserts that a page with a specific title is reachable at a given url."""
+    async with aiohttp.ClientSession(raise_for_status=True) as client:
+        results = await client.get(url)
+        soup = BeautifulSoup(await results.text())
+
+    assert soup.title.string == title
+
+
+@tenacity.retry(
+    stop=tenacity.stop_after_delay(300),
+    wait=tenacity.wait_exponential(multiplier=1, min=1, max=10),
+    reraise=True,
+)
+def assert_virtualservice_exists(name: str):
+    """Will raise a ApiError(404) if the virtualservice does not exist."""
+    lightkube_client = lightkube.Client()
+    lightkube_client.get(VIRTUAL_SERVICE_LIGHTKUBE_RESOURCE, TENSORBOARDS_WEB_APP)
