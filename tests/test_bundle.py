@@ -305,7 +305,9 @@ async def test_disable_ingress_auth(ops_test: OpsTest):
 
     Uses the previously deployed bookinfo application for testing.
     """
-    await ops_test.model.applications[ISTIO_PILOT].remove_relation("ingress-auth", f"{OIDC_GATEKEEPER}:ingress-auth")
+    await ops_test.model.applications[ISTIO_PILOT].remove_relation(
+        "ingress-auth", f"{OIDC_GATEKEEPER}:ingress-auth"
+    )
 
     # Wait for the istio-pilot charm to settle back down
     await ops_test.model.wait_for_idle(
