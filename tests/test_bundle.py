@@ -383,25 +383,29 @@ def assert_url_get(url, allowed_statuses: list, disallowed_statuses: list):
 
 # Use a long stop_after_delay period because wait_for_idle is not reliable.
 @tenacity.retry(
-    stop=tenacity.stop_after_delay(300),
+    stop=tenacity.stop_after_delay(600),
     wait=tenacity.wait_exponential(multiplier=1, min=1, max=10),
     reraise=True,
 )
 async def assert_page_reachable(url, title):
     """Asserts that a page with a specific title is reachable at a given url."""
+    log.info(f"Attempting to access url '{url}' to assert it has title '{title}'")
     async with aiohttp.ClientSession(raise_for_status=True) as client:
         results = await client.get(url)
         soup = BeautifulSoup(await results.text())
 
     assert soup.title.string == title
+    log.info(f"url '{url}' exists with title '{title}'.")
 
 
 @tenacity.retry(
-    stop=tenacity.stop_after_delay(300),
+    stop=tenacity.stop_after_delay(600),
     wait=tenacity.wait_exponential(multiplier=1, min=1, max=10),
     reraise=True,
 )
 def assert_virtualservice_exists(name: str):
     """Will raise a ApiError(404) if the virtualservice does not exist."""
+    log.info(f"Attempting to assert that  VirtualService '{name}' exists.")
     lightkube_client = lightkube.Client()
-    lightkube_client.get(VIRTUAL_SERVICE_LIGHTKUBE_RESOURCE, KUBEFLOW_VOLUMES)
+    lightkube_client.get(VIRTUAL_SERVICE_LIGHTKUBE_RESOURCE, name)
+    log.info(f"VirtualService '{name}' exists.")
