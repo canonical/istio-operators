@@ -10,19 +10,31 @@ import requests
 import yaml
 from bs4 import BeautifulSoup
 from lightkube import codecs
-from lightkube.generic_resource import load_in_cluster_generic_resources
+from lightkube.generic_resource import (
+    create_namespaced_resource,
+    load_in_cluster_generic_resources,
+)
 from pytest_operator.plugin import OpsTest
+import tenacity
 
 log = logging.getLogger(__name__)
-
 
 DEX_AUTH = "dex-auth"
 OIDC_GATEKEEPER = "oidc-gatekeeper"
 ISTIO_PILOT = "istio-pilot"
-ISTIO_GATEWAY_APP_NAME = "istio-gateway"
+ISTIO_GATEWAY_APP_NAME = "istio-ingressgateway"
+TENSORBOARD_CONTROLLER = "tensorboard-controller"
+KUBEFLOW_VOLUMES = "kubeflow-volumes"
 
 USERNAME = "user123"
 PASSWORD = "user123"
+
+VIRTUAL_SERVICE_LIGHTKUBE_RESOURCE = create_namespaced_resource(
+    group="networking.istio.io",
+    version="v1alpha3",
+    kind="VirtualService",
+    plural="virtualservices",
+)
 
 
 @pytest.mark.abort_on_fail
@@ -55,7 +67,7 @@ async def test_kubectl_access(ops_test: OpsTest):
 
 
 @pytest.mark.abort_on_fail
-async def test_deploy_istio_charms(ops_test: OpsTest):
+async def test_build_and_deploy_istio_charms(ops_test: OpsTest):
     # Build, deploy, and relate istio charms
     charms_path = "./charms/istio"
     istio_charms = await ops_test.build_charms(f"{charms_path}-gateway", f"{charms_path}-pilot")
@@ -80,6 +92,58 @@ async def test_deploy_istio_charms(ops_test: OpsTest):
         raise_on_blocked=False,
         timeout=90 * 10,
     )
+
+
+async def test_ingress_relation(ops_test: OpsTest):
+    """Tests that the ingress relation works as expected, creating a route through the ingress.
+
+    TODO: Change this from using a specific charm that implements ingress's requirer interface
+     to a generic charm, this way the entire test is encapsulated in this repo.
+    """
+    await ops_test.model.deploy(KUBEFLOW_VOLUMES, channel="latest/edge")
+
+    await ops_test.model.add_relation(f"{ISTIO_PILOT}:ingress", f"{KUBEFLOW_VOLUMES}:ingress")
+
+    # TODO: This does not wait properly - it should wait for tensorboards_web_app to be active
+    #  and idle.  the wait_for_idle print statements say tensorboards-web-app is active/idle, but
+    #  `juju status` reports it is not.  As a workaround, all assertions below have a long retry
+    #  period
+    await ops_test.model.wait_for_idle(
+        status="active",
+        raise_on_blocked=False,
+        timeout=90 * 10,
+    )
+
+    assert_application_and_units_active_idle(ops_test.model.applications[KUBEFLOW_VOLUMES])
+
+    assert_virtualservice_exists(name=KUBEFLOW_VOLUMES, namespace=ops_test.model_name)
+
+    # Confirm that the UI is reachable through the ingress
+    gateway_ip = await get_gateway_ip(ops_test)
+    await assert_page_reachable(url=f"http://{gateway_ip}/volumes/", title="Frontend")
+
+
+async def test_gateway_info_relation(ops_test: OpsTest):
+    """Tests that the gateway-info relation works as expected.
+
+    TODO: Change this from using a specific charm that implements gateway-info's requirer interface
+     to a generic charm, this way the entire test is encapsulated in this repo.
+    """
+    await ops_test.model.deploy(TENSORBOARD_CONTROLLER, channel="latest/edge", trust=True)
+
+    await ops_test.model.add_relation(
+        f"{ISTIO_PILOT}:gateway-info", f"{TENSORBOARD_CONTROLLER}:gateway-info"
+    )
+
+    # tensorboard_controller will go Active if the relation is established
+    await ops_test.model.wait_for_idle(
+        status="active",
+        raise_on_blocked=False,
+        timeout=90 * 10,
+        idle_period=30,  # A hack because sometimes this proceeds without being Active
+    )
+
+    assert_application_and_units_active_idle(ops_test.model.applications[TENSORBOARD_CONTROLLER])
 
 
 @pytest.mark.abort_on_fail
@@ -140,14 +204,13 @@ async def test_deploy_bookinfo_example(ops_test: OpsTest):
     )
 
     gateway_ip = await get_gateway_ip(ops_test)
-    async with aiohttp.ClientSession(raise_for_status=True) as client:
-        results = await client.get(f"http://{gateway_ip}/productpage")
-        soup = BeautifulSoup(await results.text())
-
-    assert soup.title.string == "Simple Bookstore App"
+    await assert_page_reachable(
+        url=f"http://{gateway_ip}/productpage", title="Simple Bookstore App"
+    )
 
 
-async def test_ingress_auth(ops_test: OpsTest):
+@pytest.mark.abort_on_fail
+async def test_enable_ingress_auth(ops_test: OpsTest):
     """Tests that the ingress auth policy restricts traffic on (only the) kubeflow gateway.
 
     This test establishes the ingress-auth relation, which applies an auth policy to traffic
@@ -235,6 +298,30 @@ async def test_ingress_auth(ops_test: OpsTest):
     )
 
 
+@pytest.mark.abort_on_fail
+async def test_disable_ingress_auth(ops_test: OpsTest):
+    """Tests that if we unrelate the ingress-auth relation, traffic is no longer restricted.
+
+    Uses the previously deployed bookinfo application for testing.
+    """
+    await ops_test.model.applications[ISTIO_PILOT].remove_relation(
+        "ingress-auth", f"{OIDC_GATEKEEPER}:ingress-auth"
+    )
+
+    # Wait for the istio-pilot charm to settle back down
+    await ops_test.model.wait_for_idle(
+        apps=[ISTIO_PILOT],
+        status="active",
+        raise_on_blocked=False,
+        timeout=60 * 10,
+    )
+
+    gateway_ip = await get_gateway_ip(ops_test)
+    await assert_page_reachable(
+        url=f"http://{gateway_ip}/productpage", title="Simple Bookstore App"
+    )
+
+
 def deploy_workload_with_gateway(workload_name: str, gateway_port: int, namespace: str):
     """Deploys an http server and opens a path through the existing istio proxy."""
     client = lightkube.Client()
@@ -269,6 +356,11 @@ async def get_gateway_ip(ops_test: OpsTest, service_name: str = "istio-ingressga
     return gateway_obj["status"]["loadBalancer"]["ingress"][0]["ip"]
 
 
+@tenacity.retry(
+    stop=tenacity.stop_after_delay(60),
+    wait=tenacity.wait_exponential(multiplier=1, min=1, max=10),
+    reraise=True,
+)
 def assert_url_get(url, allowed_statuses: list, disallowed_statuses: list):
     """Asserts that we receive one of a list of allowed status when we `get` an url, or raises.
 
@@ -291,3 +383,55 @@ def assert_url_get(url, allowed_statuses: list, disallowed_statuses: list):
     raise ValueError(
         "Timed out before getting an allowed status code.  Communication not as expected"
     )
+
+
+# Use a long stop_after_delay period because wait_for_idle is not reliable.
+@tenacity.retry(
+    stop=tenacity.stop_after_delay(600),
+    wait=tenacity.wait_exponential(multiplier=1, min=1, max=10),
+    reraise=True,
+)
+def assert_application_and_units_active_idle(app):
+    """Asserts that an applications and its units are all active/idle."""
+    log.info(f"Asserting that application {app} is active/idle")
+    log.info(f"Application status: {app.status}")
+    assert app.status.lower() == "active"
+
+    for unit in app.units:
+        log.info(f"Unit agent_status: {unit.agent_status}")
+        assert unit.agent_status.lower() == "idle"
+        log.info(
+            f"Unit workload_status: {unit.workload_status} with message "
+            f"'{unit.workload_status_message}'"
+        )
+        assert unit.workload_status.lower() == "active"
+
+
+# Use a long stop_after_delay period because wait_for_idle is not reliable.
+@tenacity.retry(
+    stop=tenacity.stop_after_delay(600),
+    wait=tenacity.wait_exponential(multiplier=1, min=1, max=10),
+    reraise=True,
+)
+async def assert_page_reachable(url, title):
+    """Asserts that a page with a specific title is reachable at a given url."""
+    log.info(f"Attempting to access url '{url}' to assert it has title '{title}'")
+    async with aiohttp.ClientSession(raise_for_status=True) as client:
+        results = await client.get(url)
+        soup = BeautifulSoup(await results.text())
+
+    assert soup.title.string == title
+    log.info(f"url '{url}' exists with title '{title}'.")
+
+
+@tenacity.retry(
+    stop=tenacity.stop_after_delay(600),
+    wait=tenacity.wait_exponential(multiplier=1, min=1, max=10),
+    reraise=True,
+)
+def assert_virtualservice_exists(name: str, namespace: str):
+    """Will raise a ApiError(404) if the virtualservice does not exist."""
+    log.info(f"Attempting to assert that  VirtualService '{name}' exists.")
+    lightkube_client = lightkube.Client()
+    lightkube_client.get(VIRTUAL_SERVICE_LIGHTKUBE_RESOURCE, name, namespace=namespace)
+    log.info(f"VirtualService '{name}' exists.")

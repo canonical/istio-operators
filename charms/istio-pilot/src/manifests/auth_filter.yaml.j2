@@ -4,8 +4,6 @@ kind: EnvoyFilter
 metadata:
   name: {{ envoyfilter_name }}
   namespace: {{ envoyfilter_namespace }}
-  labels:
-    app.{{ app_name }}.io/is-workload-entity: "true"
 spec:
   configPatches:
     - applyTo: HTTP_FILTER
@@ -31,10 +29,17 @@ spec:
                 timeout: 10s
               authorization_request:
                 allowed_headers:
-                  patterns: {{ request_headers }}
+                  patterns:
+                    {% for request_header in request_headers %}
+                    - exact: {{ request_header }}
+                    {% endfor %}
               authorization_response:
                 allowed_upstream_headers:
-                  patterns: {{ response_headers }}
+                  patterns:
+                      {% for response_header in response_headers %}
+                      - exact: {{ response_header }}
+                      {% endfor %}
+
   workloadSelector:
     labels:
       istio: ingressgateway

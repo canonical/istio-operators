@@ -569,6 +569,13 @@ class Operator(CharmBase):
         """
         # We only need the route data, not the relation keys
         routes = list(routes.values())
+
+        # ingress relation schema v2+ requires `namespace`, but v1 did not have `namespace`.
+        # For backward compatibility support, use istio-pilot's namespace by default if omitted.
+        for route in routes:
+            if "namespace" not in route:
+                route["namespace"] = self.model.name
+
         context = {
             "charm_namespace": self.model.name,
             "gateway_name": self._gateway_name,
@@ -686,13 +693,20 @@ class Operator(CharmBase):
         """Returns True if the ingress gateway service is up, else False."""
         # TODO: This should really be something provided via a relation to istio-gateway, where it
         #  tells us if things are working.
-        svc = self._get_gateway_service()
+        try:
+            svc = self._get_gateway_service()
+        except ApiError as e:
+            # If we cannot find the gateway service, the service is not up
+            if e.status.code == 404:
+                return False
 
         if svc.spec.type == "NodePort":
             # TODO: do we need to interrogate this further for status?
             return True
         if _get_gateway_address_from_svc(svc) is not None:
             return True
+
+        # The service is configured in an unknown way, or it does not have an IP address
         return False
 
     @property
