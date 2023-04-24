@@ -11,10 +11,12 @@ from charmed_kubeflow_chisme.kubernetes import (
     create_charm_default_labels,
 )
 from charmed_kubeflow_chisme.status_handling import get_first_worst_error
+from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.istio_pilot.v0.istio_gateway_info import (
     DEFAULT_RELATION_NAME as GATEWAY_INFO_RELATION_NAME,
 )
 from charms.istio_pilot.v0.istio_gateway_info import GatewayProvider
+from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from lightkube import Client
 from lightkube.core.exceptions import ApiError
 from lightkube.generic_resource import create_namespaced_resource
@@ -143,29 +145,14 @@ class Operator(CharmBase):
         self.framework.observe(self.on["ingress-auth"].relation_broken, self.reconcile)
 
         # Configure Observability
-        # TODO: Re-add this, but is there a way to do it without having to mock it in unit tests?
-        # if self._istiod_svc:
-        #     self._scraping = MetricsEndpointProvider(
-        #         self,
-        #         relation_name="metrics-endpoint",
-        #         jobs=[{"static_configs": [{"targets": [f"{self._istiod_svc}:{METRICS_PORT}"]}]}],
-        #     )
-        # self.grafana_dashboards = GrafanaDashboardProvider(
-        #       self, relation_name="grafana-dashboard"
-        # )
-
-        # Configure Observability
-        # TODO: Re-add this, but is there a way to do it without having to mock it in unit tests?
-        # if self._istiod_svc:
-        #     self._scraping = MetricsEndpointProvider(
-        #         self,
-        #         relation_name="metrics-endpoint",
-        #         jobs=[{"static_configs": [{"targets": [f"{self._istiod_svc}:{METRICS_PORT}"]}]}],
-        #     )
-        # self.grafana_dashboards = GrafanaDashboardProvider(
-        #     self,
-        #     relation_name="grafana-dashboard"
-        # )
+        self._scraping = MetricsEndpointProvider(
+            self,
+            relation_name="metrics-endpoint",
+            jobs=[
+                {"static_configs": [{"targets": [f"istiod.{self.model.name}.svc:{METRICS_PORT}"]}]}
+            ],
+        )
+        self.grafana_dashboards = GrafanaDashboardProvider(self, relation_name="grafana-dashboard")
 
     def install(self, _):
         """Install charm."""
