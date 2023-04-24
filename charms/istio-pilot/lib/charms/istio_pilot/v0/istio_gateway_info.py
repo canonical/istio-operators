@@ -73,13 +73,18 @@ class ProviderCharm(self):
             raise <your preferred exception with a message> from error
 ```
 
+Note that GatewayProvider.send_gateway_data() sends data to all related applications, and will
+execute without error even if no applications are related. If you want to ensure that the someone
+is listening for the data, please add checks separately.
+
 ## Relation data
 
 The data shared by this library is:
 * gateway_name: the name of the Gateway the provider knows about. It corresponds to
   the `name` field in the Gateway definition
 * gateway_namespace: the namespace where the Gateway is deployed.
-* gateway_up: (new in v0.3) boolean indicating whether the Gateway is up.
+* gateway_up: (new in v0.3) boolean indicating whether the Gateway is up.  This being True
+  indicates that the Gateway should be fully established and accepting traffic.
   If relating a Requirer of v0.3 to a Provider using v0.2 or earlier of this library, the Requirer
   will return gateway_up=True by default.
 
@@ -236,8 +241,8 @@ class GatewayProvider(Object):
         Args:
             gateway_name (str): the name of the Gateway the provider knows about
             gateway_namespace(str): the namespace of the Gateway the provider knows about
-            gateway_up (bool): (optional) the status of the Gateway.  Assumed to be True by the
-                               requirer if not provided.
+            gateway_up (bool): (optional) the status of the Gateway.  Defaults to True if not
+                               provided.
         """
         # Update the relation data bag with localgateway information
         relations = self.model.relations[self.relation_name]
