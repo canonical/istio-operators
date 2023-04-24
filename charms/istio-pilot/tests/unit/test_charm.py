@@ -41,7 +41,6 @@ from charm import (
 )
 from istioctl import IstioctlError
 
-
 GATEWAY_LIGHTKUBE_RESOURCE = create_namespaced_resource(
     group="networking.istio.io", version="v1beta1", kind="Gateway", plural="gateways"
 )
