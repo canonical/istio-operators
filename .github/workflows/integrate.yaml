@@ -75,11 +75,11 @@ jobs:
       run: |
         # Pinning juju agent to 2.9.42 to keep compatibility with pythonlib-juju<3
         sg microk8s -c 'juju bootstrap microk8s uk8s --agent-version=2.9.42'
-        sg microk8s -c 'juju add-model istio-system'
+        sg microk8s -c 'juju add-model kubeflow'
 
     - run: sg microk8s -c 'KUBECONFIG=/home/runner/.kube/config tox -e integration
-        -- --model istio-system --destructive-mode'
-      timeout-minutes: 40
+        -- --model kubeflow --destructive-mode'
+      timeout-minutes: 80
 
     - name: Setup Debug Artifact Collection
       run: mkdir tmp
@@ -106,13 +106,13 @@ jobs:
         kubectl describe gateways -A | tee tmp/kube-gateways.txt
         kubectl describe deployments -A | tee tmp/kube-deployments.txt
         kubectl describe replicasets -A | tee tmp/kubectl-replicasets.txt
-        kubectl exec -n istio-system istio-pilot-0 --container charm -- agents/unit-istio-pilot-0/charm/istioctl analyze -n default | tee tmp/istioctl-analyze.txt
+        kubectl exec -n kubeflow istio-pilot-0 --container charm -- agents/unit-istio-pilot-0/charm/istioctl analyze -n kubeflow | tee tmp/istioctl-analyze.txt
 
     - name: Collect Kube logs
       if: failure()
       run: |
-        kubectl logs -n istio-system --tail 1000 -lapp.kubernetes.io/name=istio-pilot -c charm | tee tmp/istio-pilot.log
-        kubectl logs -n istio-system --tail 1000 -lapp.kubernetes.io/name=istio-ingressgateway-operator -c charm | tee tmp/istio-ingressgateway-operator.log
+        kubectl logs -n kubeflow --tail 1000 -lapp.kubernetes.io/name=istio-pilot -c charm | tee tmp/istio-pilot.log
+        kubectl logs -n kubeflow --tail 1000 -lapp.kubernetes.io/name=istio-ingressgateway-operator -c charm | tee tmp/istio-ingressgateway-operator.log
 
     - name: Upload debug artifacts
       if: failure()

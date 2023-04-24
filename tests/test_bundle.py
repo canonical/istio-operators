@@ -67,7 +67,7 @@ async def test_kubectl_access(ops_test: OpsTest):
 
 
 @pytest.mark.abort_on_fail
-async def test_buld_and_deploy_istio_charms(ops_test: OpsTest):
+async def test_build_and_deploy_istio_charms(ops_test: OpsTest):
     # Build, deploy, and relate istio charms
     charms_path = "./charms/istio"
     istio_charms = await ops_test.build_charms(f"{charms_path}-gateway", f"{charms_path}-pilot")
@@ -114,13 +114,13 @@ async def test_ingress_relation(ops_test: OpsTest):
         timeout=90 * 10,
     )
 
-    assert_virtualservice_exists(name=KUBEFLOW_VOLUMES)
+    assert_application_and_units_active_idle(ops_test.model.applications[KUBEFLOW_VOLUMES])
+
+    assert_virtualservice_exists(name=KUBEFLOW_VOLUMES, namespace=ops_test.model_name)
 
     # Confirm that the UI is reachable through the ingress
     gateway_ip = await get_gateway_ip(ops_test)
-    await assert_page_reachable(
-        url=f"http://{gateway_ip}/volumes/", title="Frontend"
-    )
+    await assert_page_reachable(url=f"http://{gateway_ip}/volumes/", title="Frontend")
 
 
 async def test_gateway_info_relation(ops_test: OpsTest):
@@ -142,6 +142,8 @@ async def test_gateway_info_relation(ops_test: OpsTest):
         timeout=90 * 10,
         idle_period=30,  # A hack because sometimes this proceeds without being Active
     )
+
+    assert_application_and_units_active_idle(ops_test.model.applications[TENSORBOARD_CONTROLLER])
 
 
 @pytest.mark.abort_on_fail
@@ -315,7 +317,9 @@ async def test_disable_ingress_auth(ops_test: OpsTest):
     )
 
     gateway_ip = await get_gateway_ip(ops_test)
-    await assert_page_reachable(url=f"http://{gateway_ip}/productpage", title="Simple Bookstore App")
+    await assert_page_reachable(
+        url=f"http://{gateway_ip}/productpage", title="Simple Bookstore App"
+    )
 
 
 def deploy_workload_with_gateway(workload_name: str, gateway_port: int, namespace: str):
@@ -387,6 +391,28 @@ def assert_url_get(url, allowed_statuses: list, disallowed_statuses: list):
     wait=tenacity.wait_exponential(multiplier=1, min=1, max=10),
     reraise=True,
 )
+def assert_application_and_units_active_idle(app):
+    """Asserts that an applications and its units are all active/idle."""
+    log.info(f"Asserting that application {app} is active/idle")
+    log.info(f"Application status: {app.status}")
+    assert app.status.lower() == "active"
+
+    for unit in app.units:
+        log.info(f"Unit agent_status: {unit.agent_status}")
+        assert unit.agent_status.lower() == "idle"
+        log.info(
+            f"Unit workload_status: {unit.workload_status} with message "
+            f"'{unit.workload_status_message}'"
+        )
+        assert unit.workload_status.lower() == "active"
+
+
+# Use a long stop_after_delay period because wait_for_idle is not reliable.
+@tenacity.retry(
+    stop=tenacity.stop_after_delay(600),
+    wait=tenacity.wait_exponential(multiplier=1, min=1, max=10),
+    reraise=True,
+)
 async def assert_page_reachable(url, title):
     """Asserts that a page with a specific title is reachable at a given url."""
     log.info(f"Attempting to access url '{url}' to assert it has title '{title}'")
@@ -403,9 +429,9 @@ async def assert_page_reachable(url, title):
     wait=tenacity.wait_exponential(multiplier=1, min=1, max=10),
     reraise=True,
 )
-def assert_virtualservice_exists(name: str):
+def assert_virtualservice_exists(name: str, namespace: str):
     """Will raise a ApiError(404) if the virtualservice does not exist."""
     log.info(f"Attempting to assert that  VirtualService '{name}' exists.")
     lightkube_client = lightkube.Client()
-    lightkube_client.get(VIRTUAL_SERVICE_LIGHTKUBE_RESOURCE, name)
+    lightkube_client.get(VIRTUAL_SERVICE_LIGHTKUBE_RESOURCE, name, namespace=namespace)
     log.info(f"VirtualService '{name}' exists.")
