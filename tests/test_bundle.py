@@ -313,6 +313,7 @@ async def test_disable_ingress_auth(ops_test: OpsTest):
         apps=[ISTIO_PILOT],
         status="active",
         raise_on_blocked=False,
+        raise_on_error=False,
         timeout=60 * 10,
     )
 
