@@ -1,4 +1,3 @@
-# TODO: Remove this when updated KRH is committed to chisme and used here
 charmed-kubeflow-chisme>=0.0.9
 jinja2
 lightkube

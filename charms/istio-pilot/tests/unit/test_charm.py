@@ -41,10 +41,6 @@ from charm import (
 )
 from istioctl import IstioctlError
 
-# TODO: Fixtures to block lightkube
-# TODO: Fixtures to block istioctl
-
-
 GATEWAY_LIGHTKUBE_RESOURCE = create_namespaced_resource(
     group="networking.istio.io", version="v1beta1", kind="Gateway", plural="gateways"
 )
@@ -146,7 +142,8 @@ def raise_apierror_with_code_404(*args, **kwargs):
 class TestCharmEvents:
     """Test cross-cutting charm behavior.
 
-    TODO: Explain this better
+    This test class includes any end-to-end style unit tests (eg: that use Juju's events and test
+    their handling, etc).
     """
 
     def test_event_observing(self, harness, mocker):

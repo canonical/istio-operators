@@ -51,7 +51,7 @@ jobs:
 
     - uses: balchua/microk8s-actions@v0.3.2
       with:
-        # TODO: Pinned to <1.25 until we update to istio 1.15
+        # TODO: Pinned to <1.25 until we update to istio 1.16
         channel: '1.24/stable'
         addons: '["dns", "storage", "rbac", "metallb:10.64.140.43-10.64.140.49"]'
 
