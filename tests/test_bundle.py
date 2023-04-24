@@ -97,8 +97,8 @@ async def test_build_and_deploy_istio_charms(ops_test: OpsTest):
 async def test_ingress_relation(ops_test: OpsTest):
     """Tests that the ingress relation works as expected, creating a route through the ingress.
 
-    TODO: Change this from using a specific charm that implements ingress's requirer interface
-     to a generic charm, this way the entire test is encapsulated in this repo.
+    TODO (https://github.com/canonical/istio-operators/issues/259): Change this from using a
+     specific charm that implements ingress's requirer interface to a generic charm
     """
     await ops_test.model.deploy(KUBEFLOW_VOLUMES, channel="latest/edge")
 
@@ -126,8 +126,8 @@ async def test_ingress_relation(ops_test: OpsTest):
 async def test_gateway_info_relation(ops_test: OpsTest):
     """Tests that the gateway-info relation works as expected.
 
-    TODO: Change this from using a specific charm that implements gateway-info's requirer interface
-     to a generic charm, this way the entire test is encapsulated in this repo.
+    TODO (https://github.com/canonical/istio-operators/issues/259): Change this from using a
+     specific charm that implements ingress's requirer interface to a generic charm
     """
     await ops_test.model.deploy(TENSORBOARD_CONTROLLER, channel="latest/edge", trust=True)
 

@@ -84,17 +84,9 @@ RETRY_FOR_15_MINUTES = tenacity.Retrying(
 class Operator(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
-        self.log = logging.getLogger(__name__)
 
+        self.log = logging.getLogger(__name__)
         self._field_manager = self.app.name
-        # TODO: Update resource_handler to use the newer handler
-        # # Configure resource handler
-        # self.env = Environment(loader=FileSystemLoader("src"))
-        # self._resource_files = [
-        #     "gateway.yaml.j2",
-        #     "auth_filter.yaml.j2",
-        #     "virtual_service.yaml.j2",
-        # ]
 
         # Event handling for managing the Istio control plane
         self.framework.observe(self.on.install, self.install)
@@ -175,7 +167,7 @@ class Operator(CharmBase):
         #     relation_name="grafana-dashboard"
         # )
 
-    def install(self, event):
+    def install(self, _):
         """Install charm."""
         self._log_and_set_status(MaintenanceStatus("Deploying Istio control plane"))
 
@@ -203,7 +195,18 @@ class Operator(CharmBase):
     def reconcile(self, event):
         """Reconcile the state of the charm.
 
-        TODO: Add more details
+        This is the main entrypoint for the charm.  It:
+        * Checks if we are the leader, exiting early with WaitingStatus if we are not
+        * Sends data to the istio-pilot relation
+        * Reconciles the ingress-auth relation, establishing whether we need authentication on our
+          ingress gateway
+        * Sets up or removes a gateway based on the ingress-auth relation
+        * Sends data to the gateway-info relation
+        * Reconciles the ingress relation, setting up or removing VirtualServices as required
+
+        Throughout the above steps, any non-fatal error is caught and logged at the end of
+        processing.  The Charm status will be set to the worst error type, and all errors will
+        be reported in logs.
         """
         # If we are not the leader, the charm should do nothing else
         try:
@@ -222,6 +225,8 @@ class Operator(CharmBase):
         except ErrorWithStatus as err:
             handled_errors.append(err)
 
+        # Reconcile the ingress_auth relation, indicating whether we failed so we can later remove
+        # the Gateway if necessary
         ingress_auth_reconcile_successful = False
         try:
             ingress_auth_data = self._get_ingress_auth_data(event)
@@ -236,10 +241,11 @@ class Operator(CharmBase):
             if ingress_auth_reconcile_successful:
                 self._reconcile_gateway()
             else:
-                # TODO: Log here?
+                self.log.info(
+                    "Removing gateway due to errors in processing the ingress-auth relation."
+                )
                 self._remove_gateway()
         except ErrorWithStatus as err:
-            # TODO: Is there anything to catch here?
             handled_errors.append(err)
 
         try:
@@ -248,11 +254,9 @@ class Operator(CharmBase):
             handled_errors.append(err)
 
         try:
-            # TODO: Should I break these up so we can have more granular behaviour?
-            #  I could just get the ingress interface directly.  Although I can't break that
-            #  up into its components easily due to how SDI is written.
-            # If any relation in this group has a version error, this will fail fast and not
-            # provide any data for us to work on.  This is a limitation of SDI.
+            # If any one of the ingress relations has a version error, this will fail fast and not
+            # provide any data for us to work on (blocking reconcile on all ingress relations).
+            # This is a limitation of SDI.
             ingress_data = self._get_ingress_data(event)
             self._reconcile_ingress(ingress_data)
         except ErrorWithStatus as err:
@@ -261,7 +265,7 @@ class Operator(CharmBase):
         # Reports (status and logs) any handled errors, or sets to ActiveStatus
         self._report_handled_errors(errors=handled_errors)
 
-    def remove(self, event):
+    def remove(self, _):
         """Remove charm."""
 
         manifests = subprocess.check_output(
@@ -289,7 +293,7 @@ class Operator(CharmBase):
             manifests, namespace=self.model.name, ignore_not_found=True, ignore_unauthorized=True
         )
 
-    def upgrade_charm(self, event):
+    def upgrade_charm(self, _):
         """Upgrade charm.
 
         Supports upgrade of exactly one minor version at a time.
@@ -375,7 +379,6 @@ class Operator(CharmBase):
             self.log.info("Not a leader, skipping setup")
             raise ErrorWithStatus("Waiting for leadership", WaitingStatus)
 
-    # TODO: make this into a validation?  does it get used anywhere?  the template manages this
     @property
     def _gateway_port(self):
         if self._use_https():
@@ -414,7 +417,7 @@ class Operator(CharmBase):
 
         # Filter out data we sent out.
         if ingress_auth_interface:
-            # TODO: Is this needed here?
+            # TODO: This can probably be simplified.
             ingress_auth_data = {
                 (rel, app): route
                 for (rel, app), route in sorted(
@@ -477,15 +480,16 @@ class Operator(CharmBase):
         return istio_pilot_interface
 
     def _get_gateway_service(self):
-        """Returns a lightkube Service object for the gateway service."""
-        # FIXME: service name is configured via config, but it should really be provided directly
-        #  from the istio-gateway.  Providing here as a config at least makes this less rigid than
-        #  assuming the name.
-        # TODO: What happens if this service does not exist?  We should check on that and then add
-        #  tests to confirm this works
+        """Returns a lightkube Service object for the gateway service.
 
-        # Note: this assumes that the gateway service is deployed in the same namespace as this
-        # charm
+        Raises an ApiError(404) if the service does not exist.
+
+        Note: this assumes that the gateway service is deployed in the same namespace as this charm
+
+        TODO: The service name we look for is configured via the `gateway-service-name` config, but
+         it should be provided directly from the istio-gateway charm.  See:
+         https://github.com/canonical/istio-operators/issues/258.
+        """
         svc = self._lightkube_client.get(
             Service, name=self.model.config["gateway-service-name"], namespace=self.model.name
         )
@@ -527,7 +531,7 @@ class Operator(CharmBase):
         """
         # Secure the gateway, if enabled
         use_https = self._use_https()
-        # TODO: Validate the settings are consistent here too.  has correct port, etc
+
         if use_https:
             ssl_crt = self.model.config["ssl-crt"]
             ssl_key = self.model.config["ssl-key"]
@@ -637,8 +641,6 @@ class Operator(CharmBase):
 
     def _remove_gateway(self):
         """Remove any deployed Gateway resources."""
-        # TODO: Make this ignore when things were already removed.  Probably means updating
-        #  delete_many and then passing a flag in through the krh?
         krh = KubernetesResourceHandler(
             field_manager=self._field_manager,
             logger=self.log,
@@ -690,9 +692,11 @@ class Operator(CharmBase):
 
     @property
     def _is_gateway_service_up(self):
-        """Returns True if the ingress gateway service is up, else False."""
-        # TODO: This should really be something provided via a relation to istio-gateway, where it
-        #  tells us if things are working.
+        """Returns True if the ingress gateway service is up, else False.
+
+        TODO: This should be something provided via a relation to istio-gateway, which would know
+         this info better.
+        """
         try:
             svc = self._get_gateway_service()
         except ApiError as e:
