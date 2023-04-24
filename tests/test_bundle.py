@@ -24,7 +24,7 @@ OIDC_GATEKEEPER = "oidc-gatekeeper"
 ISTIO_PILOT = "istio-pilot"
 ISTIO_GATEWAY_APP_NAME = "istio-ingressgateway"
 TENSORBOARD_CONTROLLER = "tensorboard-controller"
-TENSORBOARDS_WEB_APP = "tensorboards-web-app"
+KUBEFLOW_VOLUMES = "kubeflow-volumes"
 
 USERNAME = "user123"
 PASSWORD = "user123"
@@ -100,9 +100,9 @@ async def test_ingress_relation(ops_test: OpsTest):
     TODO: Change this from using a specific charm that implements ingress's requirer interface
      to a generic charm, this way the entire test is encapsulated in this repo.
     """
-    await ops_test.model.deploy(TENSORBOARDS_WEB_APP, channel="latest/edge", trust=True)
+    await ops_test.model.deploy(KUBEFLOW_VOLUMES, channel="latest/edge")
 
-    await ops_test.model.add_relation(f"{ISTIO_PILOT}:ingress", f"{TENSORBOARDS_WEB_APP}:ingress")
+    await ops_test.model.add_relation(f"{ISTIO_PILOT}:ingress", f"{KUBEFLOW_VOLUMES}:ingress")
 
     # TODO: This does not wait properly - it should wait for tensorboards_web_app to be active
     #  and idle.  the wait_for_idle print statements say tensorboards-web-app is active/idle, but
@@ -114,12 +114,12 @@ async def test_ingress_relation(ops_test: OpsTest):
         timeout=90 * 10,
     )
 
-    assert_virtualservice_exists(name=TENSORBOARDS_WEB_APP)
+    assert_virtualservice_exists(name=KUBEFLOW_VOLUMES)
 
     # Confirm that the UI is reachable through the ingress
     gateway_ip = await get_gateway_ip(ops_test)
     await assert_page_reachable(
-        url=f"http://{gateway_ip}/tensorboards/", title="Tensorboards Manager UI"
+        url=f"http://{gateway_ip}/volumes/", title="Frontend"
     )
 
 
@@ -404,4 +404,4 @@ async def assert_page_reachable(url, title):
 def assert_virtualservice_exists(name: str):
     """Will raise a ApiError(404) if the virtualservice does not exist."""
     lightkube_client = lightkube.Client()
-    lightkube_client.get(VIRTUAL_SERVICE_LIGHTKUBE_RESOURCE, TENSORBOARDS_WEB_APP)
+    lightkube_client.get(VIRTUAL_SERVICE_LIGHTKUBE_RESOURCE, KUBEFLOW_VOLUMES)
