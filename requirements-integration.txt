@@ -200,6 +200,8 @@ soupsieve==2.4
     # via beautifulsoup4
 stack-data==0.6.2
     # via ipython
+tenacity==8.2.2
+# via -r requirements-integration.in
 theblues==0.5.2
     # via juju
 tomli==2.0.1

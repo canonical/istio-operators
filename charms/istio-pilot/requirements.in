@@ -1,4 +1,4 @@
-charmed-kubeflow-chisme
+charmed-kubeflow-chisme>=0.0.9
 jinja2
 lightkube
 oci-image

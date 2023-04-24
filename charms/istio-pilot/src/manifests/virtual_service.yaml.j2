@@ -1,0 +1,24 @@
+{% for route in routes %}
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: {{ route["service"] }}
+  namespace: {{ charm_namespace }}
+spec:
+  gateways:
+  - '{{ gateway_namespace }}/{{ gateway_name }}'
+  hosts:
+  - '*'
+  http:
+  - match:
+    - uri:
+        prefix: '{{ route["prefix"] }}'
+    rewrite:
+      uri: '{{ route["rewrite"] or route["prefix"] }}'
+    route:
+    - destination:
+        host: '{{ route["service"] }}.{{ route["namespace"] }}.svc.cluster.local'
+        port:
+          number: {{ route["port"] }}
+{% endfor %}

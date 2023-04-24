@@ -2,31 +2,63 @@
 
 import logging
 import subprocess
+from typing import List, Optional
 
 import tenacity
-import yaml
-from charmed_kubeflow_chisme.exceptions import GenericCharmRuntimeError
+from charmed_kubeflow_chisme.exceptions import ErrorWithStatus, GenericCharmRuntimeError
+from charmed_kubeflow_chisme.kubernetes import (
+    KubernetesResourceHandler,
+    create_charm_default_labels,
+)
+from charmed_kubeflow_chisme.status_handling import get_first_worst_error
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
-from charms.istio_pilot.v0.istio_gateway_info import DEFAULT_RELATION_NAME, GatewayProvider
+from charms.istio_pilot.v0.istio_gateway_info import (
+    DEFAULT_RELATION_NAME as GATEWAY_INFO_RELATION_NAME,
+)
+from charms.istio_pilot.v0.istio_gateway_info import GatewayProvider
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
-from jinja2 import Environment, FileSystemLoader
 from lightkube import Client
 from lightkube.core.exceptions import ApiError
+from lightkube.generic_resource import create_namespaced_resource
 from lightkube.resources.admissionregistration_v1 import ValidatingWebhookConfiguration
-from lightkube.resources.core_v1 import Service
+from lightkube.resources.core_v1 import Secret, Service
 from ops.charm import CharmBase, RelationBrokenEvent
 from ops.main import main
-from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
+from ops.model import ActiveStatus, Application, BlockedStatus, MaintenanceStatus, WaitingStatus
 from packaging.version import Version
-from serialized_data_interface import NoCompatibleVersions, NoVersionsListed, get_interfaces
+from serialized_data_interface import (
+    NoCompatibleVersions,
+    NoVersionsListed,
+    get_interface,
+    get_interfaces,
+)
 
 from istioctl import Istioctl, IstioctlError
-from resources_handler import ResourceHandler
+
+ENVOYFILTER_LIGHTKUBE_RESOURCE = create_namespaced_resource(
+    group="networking.istio.io", version="v1alpha3", kind="EnvoyFilter", plural="envoyfilters"
+)
+GATEWAY_LIGHTKUBE_RESOURCE = create_namespaced_resource(
+    group="networking.istio.io", version="v1beta1", kind="Gateway", plural="gateways"
+)
+VIRTUAL_SERVICE_LIGHTKUBE_RESOURCE = create_namespaced_resource(
+    group="networking.istio.io",
+    version="v1alpha3",
+    kind="VirtualService",
+    plural="virtualservices",
+)
 
 GATEWAY_HTTP_PORT = 8080
 GATEWAY_HTTPS_PORT = 8443
+GATEWAY_TEMPLATE_FILES = ["src/manifests/gateway.yaml.j2"]
+KRH_GATEWAY_SCOPE = "gateway"
 METRICS_PORT = 15014
-GATEWAY_WORKLOAD_SERVICE_NAME = "istio-ingressgateway-workload"
+INGRESS_AUTH_RELATION_NAME = "ingress-auth"
+INGRESS_AUTH_TEMPLATE_FILES = ["src/manifests/auth_filter.yaml.j2"]
+INGRESS_RELATION_NAME = "ingress"
+ISTIO_PILOT_RELATION_NAME = "istio-pilot"
+KRH_INGRESS_SCOPE = "ingress"
+VIRTUAL_SERVICE_TEMPLATE_FILES = ["src/manifests/virtual_service.yaml.j2"]
 ISTIOCTL_PATH = "./istioctl"
 ISTIOCTL_DEPOYMENT_PROFILE = "minimal"
 UPGRADE_FAILED_MSG = (
@@ -55,63 +87,74 @@ class Operator(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
 
-        # TODO: https://github.com/canonical/istio-operators/issues/196
-        if not self.unit.is_leader():
-            # We can't do anything useful when not the leader, so do nothing.
-            self.model.unit.status = WaitingStatus("Waiting for leadership")
-            return
-        try:
-            self.interfaces = get_interfaces(self)
-        except NoVersionsListed as err:
-            self.model.unit.status = WaitingStatus(str(err))
-            return
-        except NoCompatibleVersions as err:
-            self.model.unit.status = BlockedStatus(str(err))
-            return
-        else:
-            self.model.unit.status = ActiveStatus()
-
-        self.lightkube_client = Client(namespace=self.model.name, field_manager="lightkube")
-
-        if self._istiod_svc:
-            self._scraping = MetricsEndpointProvider(
-                self,
-                relation_name="metrics-endpoint",
-                jobs=[{"static_configs": [{"targets": [f"{self._istiod_svc}:{METRICS_PORT}"]}]}],
-            )
-        self.grafana_dashboards = GrafanaDashboardProvider(self, relation_name="grafana-dashboard")
         self.log = logging.getLogger(__name__)
+        self._field_manager = self.app.name
 
-        self.env = Environment(loader=FileSystemLoader("src"))
-        self._resource_handler = ResourceHandler(self.app.name, self.model.name)
-
-        self._resource_files = [
-            "gateway.yaml.j2",
-            "auth_filter.yaml.j2",
-            "virtual_service.yaml.j2",
-        ]
-        self.gateway_provider = GatewayProvider(self)
-
+        # Event handling for managing the Istio control plane
         self.framework.observe(self.on.install, self.install)
         self.framework.observe(self.on.remove, self.remove)
         self.framework.observe(self.on.upgrade_charm, self.upgrade_charm)
 
-        for event in [self.on.config_changed, self.on["ingress"].relation_created]:
-            self.framework.observe(event, self.handle_default_gateway)
+        # Event handling for managing our Istio resources
+        # Configuration changes always result in reconciliation
+        # This captures any changes to the default-gateway's config
+        self.framework.observe(self.on.config_changed, self.reconcile)
 
-        # FIXME: Calling handle_gateway_relation on update_status ensures gateway information is
-        # sent eventually to the related units, this is temporal and we should find a way to
-        # ensure all event handlers are called when they are supposed to.
-        for event in [self.on[DEFAULT_RELATION_NAME].relation_changed, self.on.update_status]:
-            self.framework.observe(event, self.handle_gateway_info_relation)
-        self.framework.observe(self.on["istio-pilot"].relation_changed, self.send_info)
-        self.framework.observe(self.on["ingress"].relation_changed, self.handle_ingress)
-        self.framework.observe(self.on["ingress"].relation_broken, self.handle_ingress)
-        self.framework.observe(self.on["ingress"].relation_departed, self.handle_ingress)
-        self.framework.observe(self.on["ingress-auth"].relation_changed, self.handle_ingress_auth)
-        self.framework.observe(self.on["ingress-auth"].relation_departed, self.handle_ingress_auth)
+        # Watch:
+        # * relation_created: because we send data to the other side whenever we see a related app
+        # * relation_joined: because we send data to the other side whenever we see a related unit
+        self.framework.observe(
+            self.on[GATEWAY_INFO_RELATION_NAME].relation_created, self.reconcile
+        )
+        self.framework.observe(self.on[GATEWAY_INFO_RELATION_NAME].relation_joined, self.reconcile)
+        # Configure the gateway-info provider
+        self.gateway_provider = GatewayProvider(self)
 
-    def install(self, event):
+        # Watch:
+        # * relation_created: because we send data to the other side whenever we see a related app
+        # * relation_joined: because we send data to the other side whenever we see a related unit
+        # * relation_changed: because of SDI's data versioning model, which first agrees on the
+        #                     schema version and then sends the rest of the data
+        self.framework.observe(self.on["istio-pilot"].relation_created, self.reconcile)
+        self.framework.observe(self.on["istio-pilot"].relation_joined, self.reconcile)
+        self.framework.observe(self.on["istio-pilot"].relation_changed, self.reconcile)
+
+        # Watch:
+        # * relation_changed: because if the remote data updates, we need to update our resources
+        # * relation_broken: because this is an application-level data exchange, so if the related
+        #   application goes away we need to remove their resources
+        self.framework.observe(self.on["ingress"].relation_changed, self.reconcile)
+        self.framework.observe(self.on["ingress"].relation_broken, self.reconcile)
+
+        # Watch:
+        # * relation_created: because incomplete relation data should cause removal of the gateway
+        # * relation_joined: because incomplete relation data should cause removal of the gateway
+        # * relation_changed: because if the remote data updates, we need to update our resources
+        # * relation_broken: because this is an application-level data exchange, so if the related
+        #   application goes away we need to remove their resources
+        # This charm acts on relation_created/relation_joined to prevent accidentally leaving the
+        # ingress unsecured.  If anything is related to ingress-auth, that indicates the user wants
+        # block unauthenticated traffic through the Ingress, even if the related application has
+        # not yet sent us the authentication details.  By monitoring
+        # relation_created/relation_joined, we can block traffic through the Gateway until the auth
+        # is set up. This prevents a broken application on the ingress-auth relation from resulting
+        # in an unsecured ingress.
+        self.framework.observe(self.on["ingress-auth"].relation_created, self.reconcile)
+        self.framework.observe(self.on["ingress-auth"].relation_joined, self.reconcile)
+        self.framework.observe(self.on["ingress-auth"].relation_changed, self.reconcile)
+        self.framework.observe(self.on["ingress-auth"].relation_broken, self.reconcile)
+
+        # Configure Observability
+        self._scraping = MetricsEndpointProvider(
+            self,
+            relation_name="metrics-endpoint",
+            jobs=[
+                {"static_configs": [{"targets": [f"istiod.{self.model.name}.svc:{METRICS_PORT}"]}]}
+            ],
+        )
+        self.grafana_dashboards = GrafanaDashboardProvider(self, relation_name="grafana-dashboard")
+
+    def install(self, _):
         """Install charm."""
         self._log_and_set_status(MaintenanceStatus("Deploying Istio control plane"))
 
@@ -136,7 +179,80 @@ class Operator(CharmBase):
 
         self.unit.status = ActiveStatus()
 
-    def remove(self, event):
+    def reconcile(self, event):
+        """Reconcile the state of the charm.
+
+        This is the main entrypoint for the charm.  It:
+        * Checks if we are the leader, exiting early with WaitingStatus if we are not
+        * Sends data to the istio-pilot relation
+        * Reconciles the ingress-auth relation, establishing whether we need authentication on our
+          ingress gateway
+        * Sets up or removes a gateway based on the ingress-auth relation
+        * Sends data to the gateway-info relation
+        * Reconciles the ingress relation, setting up or removing VirtualServices as required
+
+        Throughout the above steps, any non-fatal error is caught and logged at the end of
+        processing.  The Charm status will be set to the worst error type, and all errors will
+        be reported in logs.
+        """
+        # If we are not the leader, the charm should do nothing else
+        try:
+            self._check_leader()
+        except ErrorWithStatus as err:
+            self._log_and_set_status(err.status)
+            return
+
+        # This charm may hit multiple, non-fatal errors during the reconciliation.  Collect them
+        # so that we can report them at the end.
+        handled_errors = []
+
+        # Send istiod information to the istio-pilot relation
+        try:
+            self._handle_istio_pilot_relation()
+        except ErrorWithStatus as err:
+            handled_errors.append(err)
+
+        # Reconcile the ingress_auth relation, indicating whether we failed so we can later remove
+        # the Gateway if necessary
+        ingress_auth_reconcile_successful = False
+        try:
+            ingress_auth_data = self._get_ingress_auth_data(event)
+            self._reconcile_ingress_auth(ingress_auth_data)
+            ingress_auth_reconcile_successful = True
+        except ErrorWithStatus as err:
+            handled_errors.append(err)
+
+        try:
+            # If handling the ingress_auth relation fails, remove the Gateway to prevent
+            # unauthenticated traffic
+            if ingress_auth_reconcile_successful:
+                self._reconcile_gateway()
+            else:
+                self.log.info(
+                    "Removing gateway due to errors in processing the ingress-auth relation."
+                )
+                self._remove_gateway()
+        except ErrorWithStatus as err:
+            handled_errors.append(err)
+
+        try:
+            self._send_gateway_info()
+        except ErrorWithStatus as err:
+            handled_errors.append(err)
+
+        try:
+            # If any one of the ingress relations has a version error, this will fail fast and not
+            # provide any data for us to work on (blocking reconcile on all ingress relations).
+            # This is a limitation of SDI.
+            ingress_data = self._get_ingress_data(event)
+            self._reconcile_ingress(ingress_data)
+        except ErrorWithStatus as err:
+            handled_errors.append(err)
+
+        # Reports (status and logs) any handled errors, or sets to ActiveStatus
+        self._report_handled_errors(errors=handled_errors)
+
+    def remove(self, _):
         """Remove charm."""
 
         manifests = subprocess.check_output(
@@ -151,6 +267,7 @@ class Operator(CharmBase):
             ]
         )
 
+        # TODO: Update resource_handler to use the newer handler
         custom_resource_classes = [
             self._resource_handler.get_custom_resource_class_from_filename(resource_file)
             for resource_file in self._resource_files
@@ -163,7 +280,7 @@ class Operator(CharmBase):
             manifests, namespace=self.model.name, ignore_not_found=True, ignore_unauthorized=True
         )
 
-    def upgrade_charm(self, event):
+    def upgrade_charm(self, _):
         """Upgrade charm.
 
         Supports upgrade of exactly one minor version at a time.
@@ -243,224 +360,355 @@ class Operator(CharmBase):
         self.log.info("Upgrade complete.")
         self.unit.status = ActiveStatus()
 
-    def handle_default_gateway(self, event):
-        """Handles creating gateways from charm config
+    def _check_leader(self):
+        """Check if this unit is a leader."""
+        if not self.unit.is_leader():
+            self.log.info("Not a leader, skipping setup")
+            raise ErrorWithStatus("Waiting for leadership", WaitingStatus)
 
-        Side effect: self.handle_ingress() is also invoked by this handler as ingress
-        resources depend on the default_gateway
-        """
-        # Clean-up resources
-        self._resource_handler.delete_existing_resources(
-            resource=self._resource_handler.get_custom_resource_class_from_filename(
-                filename="gateway.yaml.j2"
-            ),
-            labels={
-                f"app.{self.app.name}.io/is-workload-entity": "true",
-            },
-            namespace=self.model.name,
-        )
-        t = self.env.get_template("gateway.yaml.j2")
-        gateway = self.model.config["default-gateway"]
-        secret_name = (
-            f"{self.app.name}-gateway-secret"
-            if self.model.config["ssl-crt"] and self.model.config["ssl-key"]
-            else None
-        )
-        manifest = None
-        if secret_name:
-            secret = self.env.get_template("gateway-secret.yaml.j2")
-            manifest_secret = secret.render(
-                secret_name=secret_name,
-                ssl_crt=self.model.config["ssl-crt"],
-                ssl_key=self.model.config["ssl-key"],
-                model_name=self.model.name,
-                app_name=self.app.name,
-            )
-            self._resource_handler.apply_manifest(manifest_secret)
-
-        manifest = t.render(
-            name=gateway,
-            secret_name=secret_name,
-            ssl_crt=self.model.config["ssl-crt"] or None,
-            ssl_key=self.model.config["ssl-key"] or None,
-            model_name=self.model.name,
-            app_name=self.app.name,
-            gateway_http_port=GATEWAY_HTTP_PORT,
-            gateway_https_port=GATEWAY_HTTPS_PORT,
-        )
-        self._resource_handler.apply_manifest(manifest)
-
-        # Update the ingress resources as they rely on the default_gateway
-        self.handle_ingress(event)
-
-    def handle_gateway_info_relation(self, _) -> None:
-        """Sends the default-gateway info through the gateway-info relation."""
-        if not self.model.relations["gateway-info"]:
-            self.log.info("No gateway-info relation found")
-            return
-        is_gateway_created = self._resource_handler.validate_resource_exist(
-            resource_type=self._resource_handler.get_custom_resource_class_from_filename(
-                "gateway.yaml.j2"
-            ),
-            resource_name=self.model.config["default-gateway"],
-            resource_namespace=self.model.name,
-        )
-        if is_gateway_created:
-            self.gateway_provider.send_gateway_relation_data(
-                self.model.config["default-gateway"], self.model.name
-            )
+    @property
+    def _gateway_port(self):
+        if self._use_https():
+            return GATEWAY_HTTPS_PORT
         else:
-            self.log.info("Gateway is not created yet. Skip sending gateway relation data.")
+            return GATEWAY_HTTP_PORT
 
-    def send_info(self, event):
-        if self.interfaces["istio-pilot"]:
-            self.interfaces["istio-pilot"].send_data(
-                {"service-name": f"istiod.{self.model.name}.svc", "service-port": "15012"}
-            )
-        else:
-            self.log.debug(f"Unable to send data, deferring event: {event}")
-            event.defer()
-
-    def handle_ingress(self, event):
-        # FIXME: sending the data every single time
-        # is not a great design, a better one involves refactoring and
-        # probably changing SDI
-        self.send_info(event)
-
+    def _get_interfaces(self):
+        """Retrieve interface object."""
         try:
-            if not self._is_gateway_service_up():
-                self.log.info(
-                    "No gateway address returned - this may be transitory, but "
-                    "if it persists it is likely an unexpected error. "
-                    "Deferring this event"
-                )
-                self.unit.status = WaitingStatus("Waiting for gateway address")
-                event.defer()
-                return
-        except (ApiError, TypeError) as e:
-            if isinstance(e, ApiError):
-                self.log.debug(
-                    "ApiError: Could not get istio-ingressgateway-workload, deferring this event"
-                )
-                self.unit.status = WaitingStatus(
-                    "Missing istio-ingressgateway-workload service, deferring this event"
-                )
-                event.defer()
-            elif isinstance(e, TypeError):
-                self.log.debug("TypeError: No ip address found, deferring this event")
-                self.unit.status = WaitingStatus("Waiting for ip address")
-                event.defer()
-            else:
-                self.log.error("Unexpected exception.  Exception was:")
-                self.log.exception(e)
-            return
+            interfaces = get_interfaces(self)
+        except NoVersionsListed as err:
+            raise ErrorWithStatus(err, WaitingStatus)
+        except NoCompatibleVersions as err:
+            raise ErrorWithStatus(err, BlockedStatus)
+        return interfaces
 
-        ingress = self.interfaces["ingress"]
+    def _get_ingress_auth_data(self, event) -> dict:
+        """Retrieve the ingress-auth relation data without touching other interface data.
 
-        if ingress:
-            # Filter out data we sent back.
-            routes = {
+        This is a workaround to ensure that errors in other relation data, such as an incomplete
+        ingress relation, do not block us from retrieving the ingress-auth data.
+        """
+        # Do not process data if this is a relation-broken event for this relation
+        if (
+            isinstance(event, RelationBrokenEvent)
+            and event.relation.name == INGRESS_AUTH_RELATION_NAME
+        ):
+            return {}
+        try:
+            ingress_auth_interface = get_interface(self, INGRESS_AUTH_RELATION_NAME)
+        except NoVersionsListed as err:
+            raise ErrorWithStatus(err, WaitingStatus)
+        except NoCompatibleVersions as err:
+            raise ErrorWithStatus(err, BlockedStatus)
+
+        # Filter out data we sent out.
+        if ingress_auth_interface:
+            # TODO: This can probably be simplified.
+            ingress_auth_data = {
                 (rel, app): route
                 for (rel, app), route in sorted(
-                    ingress.get_data().items(), key=lambda tup: tup[0][0].id
+                    ingress_auth_interface.get_data().items(), key=lambda tup: tup[0][0].id
                 )
                 if app != self.app
             }
+
+            # We only support a single ingress-auth relation, so we can unpack and return just the
+            # contents
+            if len(ingress_auth_data) > 1:
+                raise ErrorWithStatus(
+                    "Multiple ingress-auth relations are not supported.  Remove all related apps"
+                    " and re-relate",
+                    BlockedStatus,
+                )
+            ingress_auth_data = list(ingress_auth_data.values())[0]
+
         else:
-            routes = {}
+            # If there is no ingress-auth relation, we have no data here
+            ingress_auth_data = {}
 
-        if isinstance(event, (RelationBrokenEvent)):
-            # The app-level data is still visible on a broken relation, but we
-            # shouldn't be keeping the VirtualService for that related app.
-            del routes[(event.relation, event.app)]
+        return ingress_auth_data
 
-        t = self.env.get_template("virtual_service.yaml.j2")
-        gateway = self.model.config["default-gateway"]
+    def _get_ingress_data(self, event) -> dict:
+        """Retrieve the ingress relation data without touching other interface data.
 
-        self.unit.status = ActiveStatus()
+        This is a workaround to ensure that errors in other relation data, such as an incomplete
+        ingress-auth relation, do not block us from retrieving the ingress data.
+        """
+        try:
+            ingress_interface = get_interface(self, INGRESS_RELATION_NAME)
+        except NoVersionsListed as err:
+            raise ErrorWithStatus(err, WaitingStatus)
+        except NoCompatibleVersions as err:
+            raise ErrorWithStatus(err, BlockedStatus)
 
-        def get_kwargs(route):
-            """Handles both v1 and v2 ingress relations.
+        # Get all route data from the ingress interface
+        routes = get_routes_from_ingress_interface(ingress_interface, self.app)
 
-            v1 ingress schema doesn't allow sending over a namespace.
-            """
-            kwargs = {"gateway": gateway, "app_name": self.app.name, **route}
+        # The app-level data is still visible on a broken relation, but we
+        # shouldn't be keeping the VirtualService for that related app.
+        if isinstance(event, RelationBrokenEvent) and event.relation.name == INGRESS_RELATION_NAME:
+            routes.pop((event.relation, event.app))
 
-            if "namespace" not in kwargs:
-                kwargs["namespace"] = self.model.name
+        return routes
 
-            return kwargs
+    def _get_istio_pilot_interface(self) -> dict:
+        """Retrieve the istio-pilot relation data without touching other interface data.
 
-        # TODO: we could probably extract the rendering bits from the charm code
-        virtual_services = "\n---".join(
-            t.render(**get_kwargs(route)).strip().strip("---")
-            for ((_, app), route) in routes.items()
+        This is a workaround to ensure that errors in other relation data, such as an incomplete
+        ingress-auth relation, do not block us from retrieving the ingress data.
+        """
+        try:
+            istio_pilot_interface = get_interface(self, ISTIO_PILOT_RELATION_NAME)
+        except NoVersionsListed as err:
+            raise ErrorWithStatus(err, WaitingStatus)
+        except NoCompatibleVersions as err:
+            raise ErrorWithStatus(err, BlockedStatus)
+        return istio_pilot_interface
+
+    def _get_gateway_service(self):
+        """Returns a lightkube Service object for the gateway service.
+
+        Raises an ApiError(404) if the service does not exist.
+
+        Note: this assumes that the gateway service is deployed in the same namespace as this charm
+
+        TODO: The service name we look for is configured via the `gateway-service-name` config, but
+         it should be provided directly from the istio-gateway charm.  See:
+         https://github.com/canonical/istio-operators/issues/258.
+        """
+        svc = self._lightkube_client.get(
+            Service, name=self.model.config["gateway-service-name"], namespace=self.model.name
+        )
+        return svc
+
+    def _handle_istio_pilot_relation(self):
+        """Handles the istio-pilot relation, sending information about the Istio daemon."""
+        istio_pilot_interface = self._get_istio_pilot_interface()
+        if istio_pilot_interface:
+            # If something is related, send the data.  Otherwise skip
+            istio_pilot_interface.send_data(
+                {"service-name": f"istiod.{self.model.name}.svc", "service-port": "15012"}
+            )
+
+    @property
+    def _lightkube_client(self):
+        """Returns a lightkube client configured for this charm."""
+        return Client(namespace=self.model.name, field_manager=self.app.name)
+
+    def _send_gateway_info(self):
+        """Sends gateway information to all related apps.
+
+        Note, this should be done after any of the following:
+        * a new application relates to gateway-info
+        * config_changed occurs (because gateway_name may have changed)
+        * any changes are made to the Gateway or ingress-auth, because that may change the status
+          of the gateway
+        """
+        self.gateway_provider.send_gateway_relation_data(
+            gateway_name=self._gateway_name,
+            gateway_namespace=self._gateway_namespace,
+            gateway_up=self._is_gateway_up,
         )
 
-        self._resource_handler.reconcile_desired_resources(
-            resource=self._resource_handler.get_custom_resource_class_from_filename(
-                filename="virtual_service.yaml.j2"
+    def _reconcile_gateway(self):
+        """Creates or updates the Gateway resources.
+
+        If secured with TLS, this also deploys a secret with the certificate and key.
+        """
+        # Secure the gateway, if enabled
+        use_https = self._use_https()
+
+        if use_https:
+            ssl_crt = self.model.config["ssl-crt"]
+            ssl_key = self.model.config["ssl-key"]
+        else:
+            ssl_crt = None
+            ssl_key = None
+
+        context = {
+            "gateway_name": self._gateway_name,
+            "namespace": self._gateway_namespace,
+            "port": self._gateway_port,
+            "ssl_crt": ssl_crt,
+            "ssl_key": ssl_key,
+            "secure": use_https,
+        }
+
+        krh = KubernetesResourceHandler(
+            field_manager=self._field_manager,
+            template_files=GATEWAY_TEMPLATE_FILES,
+            context=context,
+            logger=self.log,
+            labels=create_charm_default_labels(
+                application_name=self.app.name, model_name=self.model.name, scope=KRH_GATEWAY_SCOPE
             ),
-            namespace=self.model.name,
-            desired_resources=virtual_services,
+            child_resource_types=[GATEWAY_LIGHTKUBE_RESOURCE, Secret],
+        )
+        krh.reconcile()
+
+    def _reconcile_ingress(self, routes: List[dict]):
+        """Reconcile all Ingress relations, managing the VirtualService resources.
+
+        Args:
+            routes: a list of ingress relation data dicts, each containing data for keys:
+                service
+                port
+                namespace
+                prefix
+                rewrite
+        """
+        # We only need the route data, not the relation keys
+        routes = list(routes.values())
+
+        # ingress relation schema v2+ requires `namespace`, but v1 did not have `namespace`.
+        # For backward compatibility support, use istio-pilot's namespace by default if omitted.
+        for route in routes:
+            if "namespace" not in route:
+                route["namespace"] = self.model.name
+
+        context = {
+            "charm_namespace": self.model.name,
+            "gateway_name": self._gateway_name,
+            "gateway_namespace": self._gateway_namespace,
+            "routes": routes,
+        }
+
+        krh = KubernetesResourceHandler(
+            field_manager=self._field_manager,
+            template_files=VIRTUAL_SERVICE_TEMPLATE_FILES,
+            context=context,
+            logger=self.log,
+            labels=create_charm_default_labels(
+                application_name=self.app.name, model_name=self.model.name, scope=KRH_INGRESS_SCOPE
+            ),
+            child_resource_types=[VIRTUAL_SERVICE_LIGHTKUBE_RESOURCE],
         )
 
-    def handle_ingress_auth(self, event):
-        auth_routes = self.interfaces["ingress-auth"]
-        if auth_routes:
-            auth_routes = list(auth_routes.get_data().values())
-        else:
-            auth_routes = []
+        krh.reconcile()
 
-        if not auth_routes:
-            self.log.info("Skipping auth route creation due to empty list")
+    def _reconcile_ingress_auth(self, ingress_auth_data: dict):
+        """Reconcile the EnvoyFilter which is controlled by the ingress-auth relation data.
+
+        If ingress_auth_data is an empty dict, this results in any existing ingress-auth
+        EnvoyFilter previously deployed here to be deleted.
+
+        Limitations:
+            * this function supports only ingress_auth_data with a single entry.  If we support
+              multiple entries, this needs refactoring
+            * the auth_filter yaml template has a hard-coded workloadSelector for the Gateway
+        """
+        envoyfilter_name = f"{self.app.name}-authn-filter"
+
+        if len(ingress_auth_data) == 0:
+            self.log.info("No ingress-auth data found - deleting any existing EnvoyFilter")
+            _remove_envoyfilter(name=envoyfilter_name, namespace=self.model.name)
             return
 
-        if not all(ar.get("service") for ar in auth_routes):
-            self.model.unit.status = WaitingStatus(
-                "Waiting for auth route connection information."
-            )
-            return
+        context = {
+            "auth_service_name": ingress_auth_data["service"],
+            "auth_service_namespace": self.model.name,  # Assumed to be in the same namespace
+            "app_name": self.app.name,
+            "envoyfilter_name": envoyfilter_name,
+            "envoyfilter_namespace": self.model.name,
+            "gateway_port": self._gateway_port,
+            "port": ingress_auth_data["port"],
+            "request_headers": ingress_auth_data["allowed-request-headers"],
+            "response_headers": ingress_auth_data["allowed-response-headers"],
+        }
 
-        if self.model.config["ssl-crt"] and self.model.config["ssl-key"]:
-            gateway_port = GATEWAY_HTTPS_PORT
-        else:
-            gateway_port = GATEWAY_HTTP_PORT
-
-        t = self.env.get_template("auth_filter.yaml.j2")
-        auth_filters = "".join(
-            t.render(
-                namespace=self.model.name,
-                app_name=self.app.name,
-                gateway_port=gateway_port,
-                **{
-                    "request_headers": yaml.safe_dump(
-                        [{"exact": h} for h in r.get("allowed-request-headers", [])],
-                        default_flow_style=True,
-                    ),
-                    "response_headers": yaml.safe_dump(
-                        [{"exact": h} for h in r.get("allowed-response-headers", [])],
-                        default_flow_style=True,
-                    ),
-                    "port": r["port"],
-                    "service": r["service"],
-                },
-            )
-            for r in auth_routes
+        krh = KubernetesResourceHandler(
+            field_manager=self._field_manager,
+            template_files=INGRESS_AUTH_TEMPLATE_FILES,
+            context=context,
+            logger=self.log,
         )
 
-        self._resource_handler.delete_existing_resources(
-            self._resource_handler.get_custom_resource_class_from_filename(
-                filename="auth_filter.yaml.j2"
+        krh.apply()
+
+    def _remove_gateway(self):
+        """Remove any deployed Gateway resources."""
+        krh = KubernetesResourceHandler(
+            field_manager=self._field_manager,
+            logger=self.log,
+            labels=create_charm_default_labels(
+                application_name=self.app.name, model_name=self.model.name, scope=KRH_GATEWAY_SCOPE
             ),
-            namespace=self.model.name,
+            child_resource_types=[GATEWAY_LIGHTKUBE_RESOURCE, Secret],
         )
-        self._resource_handler.apply_manifest(auth_filters, namespace=self.model.name)
+        krh.delete()
+
+    def _report_handled_errors(self, errors):
+        """Sets status to the worst error's status and logs all messages, otherwise sets Active."""
+        if errors:
+            worst_error = get_first_worst_error(errors)
+            status_to_publish = worst_error.status_type(
+                f"Execution handled {len(errors)} errors.  See logs for details."
+            )
+            self._log_and_set_status(status_to_publish)
+            for i, error in enumerate(errors):
+                self.log.info(f"Handled error {i}/{len(errors)}: {error.status}")
+        else:
+            self.unit.status = ActiveStatus()
+
+    @property
+    def _gateway_name(self):
+        """Returns the name of the Gateway we will create."""
+        return self.model.config["default-gateway"]
+
+    @property
+    def _gateway_namespace(self):
+        """Returns the namespace of the Gateway we will create, which is the same as the model."""
+        return self.model.name
+
+    @property
+    def _is_gateway_object_up(self):
+        """Return whether the gateway object exists."""
+        try:
+            self._lightkube_client.get(
+                GATEWAY_LIGHTKUBE_RESOURCE,
+                name=self._gateway_name,
+                namespace=self._gateway_namespace,
+            )
+            return True
+        except ApiError as e:
+            # If the object is missing, return False.  For other errors, raise.
+            if e.status.code == 404:
+                return False
+            raise
+
+    @property
+    def _is_gateway_service_up(self):
+        """Returns True if the ingress gateway service is up, else False.
+
+        TODO: This should be something provided via a relation to istio-gateway, which would know
+         this info better.
+        """
+        try:
+            svc = self._get_gateway_service()
+        except ApiError as e:
+            # If we cannot find the gateway service, the service is not up
+            if e.status.code == 404:
+                return False
+
+        if svc.spec.type == "NodePort":
+            # TODO: do we need to interrogate this further for status?
+            return True
+        if _get_gateway_address_from_svc(svc) is not None:
+            return True
+
+        # The service is configured in an unknown way, or it does not have an IP address
+        return False
+
+    @property
+    def _is_gateway_up(self):
+        """Returns True if the Gateway object and its Service are both up."""
+        return self._is_gateway_service_up and self._is_gateway_object_up
 
     @property
     def _istiod_svc(self):
         try:
-            exporter_service = self.lightkube_client.get(
+            exporter_service = self._lightkube_client.get(
                 res=Service, name="istiod", namespace=self.model.name
             )
             exporter_ip = exporter_service.spec.clusterIP
@@ -470,29 +718,6 @@ class Operator(CharmBase):
             raise
         else:
             return exporter_ip
-
-    def _is_gateway_service_up(self):
-        """Returns True if the ingress gateway service is up, else False."""
-        svc = self._get_gateway_service()
-
-        if svc.spec.type == "NodePort":
-            # TODO: do we need to interrogate this further for status?
-            return True
-        if _get_gateway_address_from_svc(svc) is not None:
-            return True
-        return False
-
-    def _get_gateway_service(self):
-        """Returns a lightkube Service object for the gateway service."""
-        # FIXME: service name is hardcoded and depends on the istio gateway application name being
-        #  `istio-ingressgateway`.  This is very fragile
-        # TODO: extract this from charm code
-        # TODO: What happens if this service does not exist?  We should check on that and then add
-        #  tests to confirm this works
-        svc = self.lightkube_client.get(
-            Service, name=GATEWAY_WORKLOAD_SERVICE_NAME, namespace=self.model.name
-        )
-        return svc
 
     def _log_and_set_status(self, status):
         """Sets the status of the charm and logs the status message.
@@ -504,14 +729,11 @@ class Operator(CharmBase):
         """
         self.unit.status = status
 
-        # For some reason during unit tests, self.log is not available.  Workaround this for now
-        logger = logging.getLogger(__name__)
-
         log_destination_map = {
-            ActiveStatus: logger.info,
-            BlockedStatus: logger.warning,
-            MaintenanceStatus: logger.info,
-            WaitingStatus: logger.info,
+            ActiveStatus: self.log.info,
+            BlockedStatus: self.log.warning,
+            MaintenanceStatus: self.log.info,
+            WaitingStatus: self.log.info,
         }
 
         log_destination_map[type(status)](status.message)
@@ -530,8 +752,9 @@ class Operator(CharmBase):
             "Attempting to patch istiod-default-validator webhook to ensure it points to"
             " correct namespace."
         )
+        lightkube_client = self._lightkube_client
         try:
-            vwc = self.lightkube_client.get(
+            vwc = lightkube_client.get(
                 ValidatingWebhookConfiguration, name="istiod-default-validator"
             )
         except ApiError as e:
@@ -543,7 +766,7 @@ class Operator(CharmBase):
 
         vwc.metadata.managedFields = None
         vwc.webhooks[0].clientConfig.service.namespace = self.model.name
-        self.lightkube_client.patch(
+        lightkube_client.patch(
             ValidatingWebhookConfiguration,
             "istiod-default-validator",
             vwc,
@@ -551,6 +774,18 @@ class Operator(CharmBase):
             force=True,
         )
         self.log.info("istiod-default-validator webhook successfully patched")
+
+    def _use_https(self):
+        if _xor(self.model.config["ssl-crt"], self.model.config["ssl-key"]):
+            # Fail if ssl is only partly configured as this is probably a mistake
+            raise ErrorWithStatus(
+                "Charm config for ssl-crt and ssl-key must either both be set or unset",
+                BlockedStatus,
+            )
+        if self.model.config["ssl-crt"] and self.model.config["ssl-key"]:
+            return True
+        else:
+            return False
 
 
 def _get_gateway_address_from_svc(svc):
@@ -600,6 +835,28 @@ def _get_address_from_loadbalancer(svc):
         return svc.status.loadBalancer.ingress[0].ip
     else:
         raise ValueError("Unknown situation - LoadBalancer service has no hostname or IP")
+
+
+def _remove_envoyfilter(name: str, namespace: str, logger: Optional[logging.Logger] = None):
+    """Remove an EnvoyFilter resource, ignoring if the resource is already removed.
+
+    Args:
+        name: The name of the EnvoyFilter resource to remove
+        namespace: The namespace of the EnvoyFilter resource to remove
+        logger: (optional) logger to log any messages to
+    """
+    lightkube_client = Client()
+    try:
+        lightkube_client.delete(ENVOYFILTER_LIGHTKUBE_RESOURCE, name=name, namespace=namespace)
+    except ApiError as e:
+        if logger:
+            logger.info(
+                f"Failed to remove EnvoyFilter {name} in namespace {namespace} -"
+                f" resource does not exist.  It may have been removed already."
+            )
+        if e.status.code == 404:
+            return
+        raise e
 
 
 def _validate_upgrade_version(versions) -> bool:
@@ -664,6 +921,35 @@ def _wait_for_update_rollout(
                     f" version - upgrade rollout complete"
                 )
     return versions
+
+
+def get_routes_from_ingress_interface(
+    ingress_interface: Optional[dict], this_app: Application
+) -> dict:
+    """Returns a dict of route data from the ingress interface."""
+    routes = {}
+
+    if ingress_interface:
+        sorted_interface_data = sorted(
+            ingress_interface.get_data().items(), key=lambda tup: tup[0][0].id
+        )
+
+        for (rel, app), route in sorted_interface_data:
+            if app != this_app:
+                routes[(rel, app)] = route
+    else:
+        # If there is no ingress-auth relation, we have no data here
+        pass
+
+    return routes
+
+
+def _xor(a, b):
+    """Returns True if exactly one of a and b is True, else False."""
+    if (a and not b) or (b and not a):
+        return True
+    else:
+        return False
 
 
 if __name__ == "__main__":
