@@ -1,0 +1,38 @@
+---
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: {{ gateway_name }}
+  namespace: {{ namespace }}
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - hosts:
+    - '*'
+{% if not secure %}
+    port:
+      name: http
+      number: {{ port }}
+      protocol: HTTP
+{% else %}
+    port:
+      name: https
+      number: {{ port }}
+      protocol: HTTPS
+    tls:
+      mode: SIMPLE
+      credentialName: {{ gateway_name }}-gateway-secret
+{% endif %}
+---
+{% if secure %}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ gateway_name }}-gateway-secret
+  namespace: {{ namespace }}
+type: kubernetes.io/tls
+data:
+  tls.crt: {{ ssl_crt }}
+  tls.key: {{ ssl_key }}
+{% endif %}

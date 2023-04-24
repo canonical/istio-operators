@@ -3,6 +3,10 @@ options:
     type: string
     default: istio-gateway
     description: Name to use as a default gateway
+  gateway-service-name:
+    type: string
+    default: istio-ingressgateway-workload
+    description: Name of the service created by istio-gateway to use as a Gateway
   ssl-crt:
     type: string
     default: ''
