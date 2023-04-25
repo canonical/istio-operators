@@ -90,7 +90,7 @@ jobs:
 
     - name: Collect Juju log
       if: failure()
-      run: juju debug-log --replay --no-tail | tee tmp/juju-status.txt
+      run: juju debug-log --replay --no-tail | tee tmp/juju-debug-log.txt
 
     - name: Collect Juju status log
       if: failure()
@@ -121,6 +121,7 @@ jobs:
       with:
         name: test-run-artifacts
         path: tmp
+        if-no-files-found: error
 
 # DEBUG: Removed during CI debugging
 #  integration-observability:
