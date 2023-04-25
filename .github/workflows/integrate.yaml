@@ -65,6 +65,11 @@ jobs:
       run: |
         sg microk8s -c "microk8s config > ~/.kube/config"
 
+    - name: Add model
+      run: |
+        juju add-model kubeflow
+        juju switch kubeflow
+
     # DEBUG: added keep-models to ensure our logs are available during dumping
     - run: sg microk8s -c 'KUBECONFIG=/home/runner/.kube/config tox -e integration
         -- --model kubeflow --destructive-mode --keep-models'
