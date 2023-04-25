@@ -115,6 +115,11 @@ jobs:
         kubectl logs -n kubeflow --tail 1000 -lapp.kubernetes.io/name=istio-pilot -c charm | tee tmp/istio-pilot.log
         kubectl logs -n kubeflow --tail 1000 -lapp.kubernetes.io/name=istio-ingressgateway-operator -c charm | tee tmp/istio-ingressgateway-operator.log
 
+    # This should get output by pytest-operator, but it is blocked by --keep-models until
+    # https://github.com/charmed-kubernetes/pytest-operator/pull/108 is merged
+    - name: Collect juju-crashdump explicitly
+      run: juju-crashdump -o /tmp
+
     - name: Upload debug artifacts
       if: failure()
       uses: actions/upload-artifact@v3
