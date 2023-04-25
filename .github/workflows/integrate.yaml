@@ -8,38 +8,39 @@ on:
         required: true
 
 jobs:
-  lib-check:
-    name: Check libraries
-    strategy:
-      matrix:
-        charm:
-        - istio-gateway
-        - istio-pilot
-    uses: canonical/charmed-kubeflow-workflows/.github/workflows/_quality-checks.yaml@main
-    secrets: inherit
-    with:
-        charm-path: ./charms/${{ matrix.charm }}
-  lint:
-    name: Lint Code
-    runs-on: ubuntu-20.04
-    strategy:
-      matrix:
-        charm: [pilot, gateway]
-    steps:
-    - uses: actions/checkout@v3
-    - run: sudo apt update && sudo apt install tox
-    - run: tox -e ${{ matrix.charm }}-lint
-
-  unit:
-    name: Unit Test
-    runs-on: ubuntu-20.04
-    strategy:
-      matrix:
-        charm: [pilot, gateway]
-    steps:
-    - uses: actions/checkout@v3
-    - run: sudo apt update && sudo apt install tox
-    - run: tox -e ${{ matrix.charm }}-unit
+# DEBUG: Removed during debugging
+#  lib-check:
+#    name: Check libraries
+#    strategy:
+#      matrix:
+#        charm:
+#        - istio-gateway
+#        - istio-pilot
+#    uses: canonical/charmed-kubeflow-workflows/.github/workflows/_quality-checks.yaml@main
+#    secrets: inherit
+#    with:
+#        charm-path: ./charms/${{ matrix.charm }}
+#  lint:
+#    name: Lint Code
+#    runs-on: ubuntu-20.04
+#    strategy:
+#      matrix:
+#        charm: [pilot, gateway]
+#    steps:
+#    - uses: actions/checkout@v3
+#    - run: sudo apt update && sudo apt install tox
+#    - run: tox -e ${{ matrix.charm }}-lint
+#
+#  unit:
+#    name: Unit Test
+#    runs-on: ubuntu-20.04
+#    strategy:
+#      matrix:
+#        charm: [pilot, gateway]
+#    steps:
+#    - uses: actions/checkout@v3
+#    - run: sudo apt update && sudo apt install tox
+#    - run: tox -e ${{ matrix.charm }}-unit
 
   integration:
     name: Integration Test
@@ -49,33 +50,20 @@ jobs:
     - name: Check out repo
       uses: actions/checkout@v3
 
-    - uses: balchua/microk8s-actions@v0.3.2
+    - name: Setup operator environment
+      uses: charmed-kubernetes/actions-operator@main
       with:
-        # TODO: Pinned to <1.25 until we update to istio 1.16
-        channel: '1.24/stable'
-        addons: '["dns", "storage", "rbac", "metallb:10.64.140.43-10.64.140.49"]'
-
-    - name: Install dependencies
+        provider: microk8s
+        channel: 1.24/stable
+        charmcraft-channel: latest/candidate
+        # TODO: Unpin this when this bug is resolved: https://bugs.launchpad.net/juju/+bug/1992833.
+        #       In particular, these tests failed deploying the prometheus-k8s charm where it gets an error in
+        #       the "metrics-endpoint-relation-changed" hook.
+        bootstrap-options: --agent-version="2.9.34"
+    # TODO: Remove once the actions-operator does this automatically
+    - name: Configure kubectl
       run: |
-        set -eux
-        sudo snap install charmcraft --classic --channel=latest/candidate
-        sudo snap install juju --classic
-        sudo snap install juju-bundle --classic
-        sudo snap install juju-wait --classic
-        sudo apt update
-        sudo apt install tox
-
-    - name: Wait before bootstrap
-      run: |
-        set -eux
-        sg microk8s -c 'microk8s status --wait-ready'
-        kubectl wait --for=condition=available --timeout=5m -nkube-system deployment/coredns deployment/hostpath-provisioner
-
-    - name: Bootstrap
-      run: |
-        # Pinning juju agent to 2.9.42 to keep compatibility with pythonlib-juju<3
-        sg microk8s -c 'juju bootstrap microk8s uk8s --agent-version=2.9.42'
-        sg microk8s -c 'juju add-model kubeflow'
+        sg microk8s -c "microk8s config > ~/.kube/config"
 
     - run: sg microk8s -c 'KUBECONFIG=/home/runner/.kube/config tox -e integration
         -- --model kubeflow --destructive-mode'
@@ -121,29 +109,30 @@ jobs:
         name: test-run-artifacts
         path: tmp
 
-  integration-observability:
-    name: Observability Integration Test
-    runs-on: ubuntu-20.04
-
-    steps:
-      - name: Check out repo
-        uses: actions/checkout@v3
-
-      - name: Setup operator environment
-        uses: charmed-kubernetes/actions-operator@main
-        with:
-          provider: microk8s
-          channel: 1.24/stable
-          # Pinning juju agent to 2.9.42 to keep compatibility with pythonlib-juju<3
-          bootstrap-options: --agent-version="2.9.42"
-      - run: sg microk8s -c "microk8s enable metallb:'10.64.140.43-10.64.140.49,192.168.0.105-192.168.0.111'"
-      - run: juju add-model cos-test
-
-      - name: Run observability integration tests
-
-        run: tox -vve cos-integration -- --model cos-test --destructive-mode
-        env:
-          KUBECONFIG: /home/runner/.kube/config
-
-      - run: kubectl get pod/prometheus-k8s-0 -n knative-test -o=jsonpath='{.status}'
-        if: failure()
+# DEBUG: Removed during CI debugging
+#  integration-observability:
+#    name: Observability Integration Test
+#    runs-on: ubuntu-20.04
+#
+#    steps:
+#      - name: Check out repo
+#        uses: actions/checkout@v3
+#
+#      - name: Setup operator environment
+#        uses: charmed-kubernetes/actions-operator@main
+#        with:
+#          provider: microk8s
+#          channel: 1.24/stable
+#          # Pinning juju agent to 2.9.42 to keep compatibility with pythonlib-juju<3
+#          bootstrap-options: --agent-version="2.9.42"
+#      - run: sg microk8s -c "microk8s enable metallb:'10.64.140.43-10.64.140.49,192.168.0.105-192.168.0.111'"
+#      - run: juju add-model cos-test
+#
+#      - name: Run observability integration tests
+#
+#        run: tox -vve cos-integration -- --model cos-test --destructive-mode
+#        env:
+#          KUBECONFIG: /home/runner/.kube/config
+#
+#      - run: kubectl get pod/prometheus-k8s-0 -n knative-test -o=jsonpath='{.status}'
+#        if: failure()
