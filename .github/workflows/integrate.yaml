@@ -65,8 +65,9 @@ jobs:
       run: |
         sg microk8s -c "microk8s config > ~/.kube/config"
 
+    # DEBUG: added keep-models to ensure our logs are available during dumping
     - run: sg microk8s -c 'KUBECONFIG=/home/runner/.kube/config tox -e integration
-        -- --model kubeflow --destructive-mode'
+        -- --model kubeflow --destructive-mode --keep-models'
       timeout-minutes: 80
 
     - name: Setup Debug Artifact Collection
@@ -86,12 +87,19 @@ jobs:
       if: failure()
       run: juju debug-log --replay --no-tail | tee tmp/juju-status.txt
 
+    - name: Collect Juju status log
+      if: failure()
+      run: |
+        juju show-status-log istio-pilot/0 | tee tmp/juju-status-log-istio-pilot.txt
+        juju show-status-log istio-ingressgateway/0 | tee tmp/juju-status-log-istio-ingressgateway.txt
+
     - name: Collect Kube status
       if: failure()
       run: |
         kubectl get all -A | tee tmp/kube-summary.txt
         kubectl describe virtualservices -A | tee tmp/kube-virtualservices.txt
         kubectl describe gateways -A | tee tmp/kube-gateways.txt
+        kubectl describe envoyfilters -A | tee tmp/kube-envoyfilters.txt
         kubectl describe deployments -A | tee tmp/kube-deployments.txt
         kubectl describe replicasets -A | tee tmp/kubectl-replicasets.txt
         kubectl exec -n kubeflow istio-pilot-0 --container charm -- agents/unit-istio-pilot-0/charm/istioctl analyze -n kubeflow | tee tmp/istioctl-analyze.txt
