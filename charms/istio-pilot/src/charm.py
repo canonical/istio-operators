@@ -822,10 +822,12 @@ def _get_address_from_loadbalancer(svc):
           (str): The hostname or IP address of the LoadBalancer service
     """
     ingresses = svc.status.loadBalancer.ingress
+
+    # May be due to the Kubernetes cluster not having a LoadBalancer provider
+    if ingresses is None or len(ingresses) == 0:
+        return None
+
     if len(ingresses) != 1:
-        if len(ingresses) == 0:
-            return None
-        else:
             raise ValueError("Unknown situation - LoadBalancer service has more than one ingress")
 
     ingress = svc.status.loadBalancer.ingress[0]
