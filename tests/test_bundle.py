@@ -71,12 +71,12 @@ async def test_build_and_deploy_istio_charms(ops_test: OpsTest):
     # Build, deploy, and relate istio charms
     charms_path = "./charms/istio"
     # DEBUG: For testing CI, do not build charms.  Just deploy from charmhub.
-    # istio_charms = await ops_test.build_charms(f"{charms_path}-gateway", f"{charms_path}-pilot")
+    istio_charms = await ops_test.build_charms(f"{charms_path}-gateway", f"{charms_path}-pilot")
     # Also using channel==edge
-    istio_charms = {
-        "istio-pilot": "istio-pilot",
-        "istio-gateway": "istio-gateway",
-    }
+    # istio_charms = {
+    #     "istio-pilot": "istio-pilot",
+    #     "istio-gateway": "istio-gateway",
+    # }
 
     await ops_test.model.deploy(
         istio_charms["istio-pilot"],
