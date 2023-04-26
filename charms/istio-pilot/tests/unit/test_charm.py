@@ -486,6 +486,7 @@ class TestCharmHelpers:
             ("mock_loadbalancer_ip_service", True),
             ("mock_loadbalancer_hostname_service_not_ready", False),
             ("mock_loadbalancer_ip_service_not_ready", False),
+            ("mock_loadbalancer_ip_service_missing", False),
         ],
     )
     def test_is_gateway_service_up(self, mock_service_fixture, is_gateway_up, harness, request):
@@ -1279,6 +1280,20 @@ def mock_loadbalancer_ip_service_not_ready():
             "apiVersion": "v1",
             "kind": "Service",
             "status": {"loadBalancer": {"ingress": []}},
+            "spec": {"type": "LoadBalancer", "clusterIP": "10.10.10.10"},
+        }
+    )
+    return mock_nodeport_service
+
+
+@pytest.fixture()
+def mock_loadbalancer_ip_service_missing():
+    """This happens if LoadBalancer external IP is <pending> like if there is no provisioner."""
+    mock_nodeport_service = codecs.from_dict(
+        {
+            "apiVersion": "v1",
+            "kind": "Service",
+            "status": {"loadBalancer": {}},
             "spec": {"type": "LoadBalancer", "clusterIP": "10.10.10.10"},
         }
     )
