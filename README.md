@@ -11,3 +11,4 @@ This Juju charm bundle incorporates both
 
  - The [Istio pilot charm](https://charmhub.io/istio-pilot)
  - The [Istio gateway charm](https://charmhub.io/istio-gateway)
+
