@@ -80,7 +80,10 @@ jobs:
       if: always()
 
     - name: Collect juju-crashdump from pytest-operator
-      run: mv juju-crashdump-* tmp
+      run: |
+        for f in `ls juju-crashdump-*`; do
+          cp $f tmp
+        done
       if: always()
 
     - name: Collect charmcraft logs
