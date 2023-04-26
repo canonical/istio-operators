@@ -64,6 +64,9 @@ def all_operator_reconcile_handlers_mocked(mocker):
         "_reconcile_ingress_auth": mocker.patch("charm.Operator._reconcile_ingress_auth"),
         "_reconcile_gateway": mocker.patch("charm.Operator._reconcile_gateway"),
         "_remove_gateway": mocker.patch("charm.Operator._remove_gateway"),
+        "_assert_gateway_service_status": mocker.patch(
+            "charm.Operator._assert_gateway_service_status"
+        ),
         "_send_gateway_info": mocker.patch("charm.Operator._send_gateway_info"),
         "_get_ingress_data": mocker.patch("charm.Operator._get_ingress_data"),
         "_reconcile_ingress": mocker.patch("charm.Operator._reconcile_ingress"),
@@ -259,8 +262,10 @@ class TestCharmEvents:
         krh_lightkube_client.reset_mock()
 
     @patch("charm.Operator._handle_istio_pilot_relation")
+    @patch("charm.Operator._is_gateway_service_up", new_callable=PropertyMock)
     def test_ingress_relation(
         self,
+        mocked_is_gateway_service_up,
         mocked_handle_istio_pilot_relation,
         harness,
         mocked_lightkube_client,
@@ -276,6 +281,7 @@ class TestCharmEvents:
 
         """
         krh_class, krh_lightkube_client = kubernetes_resource_handler_with_client
+        mocked_is_gateway_service_up.return_value = True
 
         model_name = "my-model"
         gateway_name = "my-gateway"
@@ -449,6 +455,24 @@ class TestCharmHelpers:
         with expected_context:
             gateway_port = harness.charm._gateway_port
             assert gateway_port == expected_port
+
+    @pytest.mark.parametrize(
+        "is_gateway_service_up, expected_context",
+        [
+            (True, does_not_raise()),
+            (False, pytest.raises(ErrorWithStatus)),
+        ],
+    )
+    @patch("charm.Operator._is_gateway_service_up", new_callable=PropertyMock)
+    def test_assert_gateway_service_status(
+        self, mocked_is_gateway_service_up, is_gateway_service_up, expected_context, harness
+    ):
+        """Tests whether _assert_gateway_service_status raises as expected when service is down."""
+        harness.begin()
+        mocked_is_gateway_service_up.return_value = is_gateway_service_up
+
+        with expected_context:
+            harness.charm._assert_gateway_service_status()
 
     @pytest.mark.parametrize(
         "lightkube_client_get_side_effect, expected_is_up, context_raised",
