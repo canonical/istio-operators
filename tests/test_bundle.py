@@ -40,6 +40,8 @@ VIRTUAL_SERVICE_LIGHTKUBE_RESOURCE = create_namespaced_resource(
 @pytest.mark.abort_on_fail
 async def test_kubectl_access(ops_test: OpsTest):
     """Fails if kubectl not available or if no cluster context exists"""
+    assert False
+
     _, stdout, _ = await ops_test.run(
         "kubectl",
         "config",
