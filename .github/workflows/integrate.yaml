@@ -60,6 +60,7 @@ jobs:
         #       In particular, these tests failed deploying the prometheus-k8s charm where it gets an error in
         #       the "metrics-endpoint-relation-changed" hook.
         bootstrap-options: --agent-version="2.9.34"
+        microk8s-addons: "dns storage rbac metallb:10.64.140.43-10.64.140.49"
     # TODO: Remove once the actions-operator does this automatically
     - name: Configure kubectl
       run: |
