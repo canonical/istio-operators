@@ -80,6 +80,9 @@ jobs:
       run: mkdir tmp
       if: failure()
 
+    - name: Collect juju-crashdump from pytest-operator
+      run: mv juju-crashdump-* tmp
+
     - name: Collect charmcraft logs
       if: failure()
       run: cat /home/runner/snap/charmcraft/common/cache/charmcraft/log/charmcraft-*.log
@@ -119,7 +122,7 @@ jobs:
     # This should get output by pytest-operator, but it is blocked by --keep-models until
     # https://github.com/charmed-kubernetes/pytest-operator/pull/108 is merged
     - name: Collect juju-crashdump explicitly
-      run: juju-crashdump -o /tmp
+      run: juju-crashdump -o tmp
 
     - name: Upload debug artifacts
       if: failure()
