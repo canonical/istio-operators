@@ -664,7 +664,7 @@ class Operator(CharmBase):
             )
             self._log_and_set_status(status_to_publish)
             for i, error in enumerate(errors):
-                self.log.info(f"Handled error {i}/{len(errors)}: {error.status}")
+                self.log.info(f"Handled error {i+1}/{len(errors)}: {error.status}")
         else:
             self.unit.status = ActiveStatus()
 
