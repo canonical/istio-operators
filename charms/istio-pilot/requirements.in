@@ -2,7 +2,7 @@ charmed-kubeflow-chisme>=0.0.9
 jinja2
 lightkube
 oci-image
-ops<2
+ops<3
 packaging
 requests
 serialized-data-interface
