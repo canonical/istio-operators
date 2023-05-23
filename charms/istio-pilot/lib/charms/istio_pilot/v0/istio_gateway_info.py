@@ -105,7 +105,6 @@ import logging
 
 from ops.framework import Object
 from ops.model import Model, Relation
-from ops.charm import CharmBase
 
 # The unique Charmhub library identifier, never change it
 LIBID = "354103422e7a43e2870e4203fbb5a649"
