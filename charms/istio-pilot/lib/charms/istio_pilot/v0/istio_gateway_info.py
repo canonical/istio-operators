@@ -32,6 +32,7 @@ requires:
 ### Instantiate the GatewayRequirer class in charm.py
 
 ```python
+from ops.charm import CharmBase
 from charms.istio_pilot.v0.istio_gateway_info import GatewayRequirer, GatewayRelationError
 
 class RequirerCharm(CharmBase):
@@ -59,8 +60,10 @@ provides:
 ### Instantiate the GatewayProvider class in charm.py
 
 ```python
+from ops.charm import CharmBase
 from charms.istio_pilot.v0.istio_gateway_info import GatewayProvider, GatewayRelationError
-class ProviderCharm(self):
+
+class ProviderCharm(CharmBase):
     def __init__(self, *args, **kwargs):
         ...
         self.gateway_provider = GatewayProvider(self)
@@ -70,7 +73,7 @@ class ProviderCharm(self):
         try:
             self.gateway_provider.send_gateway_data(charm, gateway_name, gateway_namespace)
         except GatewayRelationError as error:
-            raise <your preferred exception with a message> from error
+            "your error handler goes here"
 ```
 
 Note that GatewayProvider.send_gateway_data() sends data to all related applications, and will
