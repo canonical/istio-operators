@@ -236,7 +236,9 @@ class GatewayProvider(Object):
         self.provider_charm = provider_charm
         self.relation_name = relation_name
 
-    def send_gateway_relation_data(self, gateway_name: str, gateway_namespace: str, gateway_up: bool = True) -> None:
+    def send_gateway_relation_data(
+        self, gateway_name: str, gateway_namespace: str, gateway_up: bool = True
+    ) -> None:
         """Updates the relation data bag of any related applications with data from the localGateway.
 
         This method will complete successfully even if there are no related applications.
