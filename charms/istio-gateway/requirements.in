@@ -1,5 +1,5 @@
 jinja2
-ops
+ops<2
 requests
 serialized-data-interface
 lightkube
