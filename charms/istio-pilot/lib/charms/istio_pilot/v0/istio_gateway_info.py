@@ -107,7 +107,7 @@ metadata:
 import logging
 
 from ops.framework import Object
-from ops.model import Model, Relation
+from ops.model import Relation
 
 # The unique Charmhub library identifier, never change it
 LIBID = "354103422e7a43e2870e4203fbb5a649"
@@ -239,7 +239,7 @@ class GatewayProvider(Object):
     def send_gateway_relation_data(
         self, gateway_name: str, gateway_namespace: str, gateway_up: bool = True
     ) -> None:
-        """Updates the relation data bag of any related applications with data from the localGateway.
+        """Updates the relation data bag with data from the local gateway.
 
         This method will complete successfully even if there are no related applications.
 
