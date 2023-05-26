@@ -58,7 +58,7 @@ google-auth==2.18.1
     # via kubernetes
 h11==0.14.0
     # via httpcore
-httpcore==0.17.1
+httpcore==0.17.2
     # via httpx
 httpx==0.24.1
     # via lightkube
@@ -78,7 +78,7 @@ jedi==0.18.2
     # via ipython
 jinja2==3.1.2
     # via pytest-operator
-juju==3.0.4
+juju==2.9.42.2
     # via
     #   -r requirements-integration.in
     #   pytest-operator
@@ -216,7 +216,7 @@ typing-extensions==4.6.0
     #   typing-inspect
 typing-inspect==0.8.0
     # via juju
-urllib3==1.26.15
+urllib3==1.26.16
     # via
     #   google-auth
     #   kubernetes
