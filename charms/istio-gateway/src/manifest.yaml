@@ -254,7 +254,7 @@ spec:
             optional: true
             secretName: istio-{{ kind }}gateway-workload-ca-certs
 ---
-apiVersion: policy/v1beta1
+apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   labels:
