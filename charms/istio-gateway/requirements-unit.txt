@@ -4,7 +4,7 @@
 #
 #    pip-compile --resolver=backtracking requirements-unit.in
 #
-anyio==3.6.2
+anyio==3.7.0
     # via
     #   -r requirements.txt
     #   httpcore
@@ -25,7 +25,10 @@ charset-normalizer==3.1.0
 coverage==7.2.6
     # via -r requirements-unit.in
 exceptiongroup==1.1.1
-    # via pytest
+    # via
+    #   -r requirements.txt
+    #   anyio
+    #   pytest
 h11==0.14.0
     # via
     #   -r requirements.txt
