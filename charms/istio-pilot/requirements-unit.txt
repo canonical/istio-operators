@@ -24,7 +24,7 @@ charset-normalizer==3.1.0
     # via
     #   -r requirements.txt
     #   requests
-coverage==7.2.5
+coverage==7.2.6
     # via -r requirements-unit.in
 deepdiff==6.2.1
     # via
@@ -36,7 +36,7 @@ h11==0.14.0
     # via
     #   -r requirements.txt
     #   httpcore
-httpcore==0.17.1
+httpcore==0.17.2
     # via
     #   -r requirements.txt
     #   httpx
@@ -120,7 +120,7 @@ requests==2.31.0
     # via
     #   -r requirements.txt
     #   serialized-data-interface
-ruamel-yaml==0.17.26
+ruamel-yaml==0.17.28
     # via
     #   -r requirements.txt
     #   charmed-kubeflow-chisme
