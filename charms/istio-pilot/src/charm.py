@@ -48,8 +48,10 @@ VIRTUAL_SERVICE_LIGHTKUBE_RESOURCE = create_namespaced_resource(
     plural="virtualservices",
 )
 
-GATEWAY_HTTP_PORT = 8080
-GATEWAY_HTTPS_PORT = 8443
+GATEWAY_PORTS = {
+    "http": 8080,
+    "https": 8443,
+}
 GATEWAY_TEMPLATE_FILES = ["src/manifests/gateway.yaml.j2"]
 KRH_GATEWAY_SCOPE = "gateway"
 METRICS_PORT = 15014
@@ -369,9 +371,9 @@ class Operator(CharmBase):
     @property
     def _gateway_port(self):
         if self._use_https():
-            return GATEWAY_HTTPS_PORT
+            return GATEWAY_PORTS["https"]
         else:
-            return GATEWAY_HTTP_PORT
+            return GATEWAY_PORTS["http"]
 
     def _get_interfaces(self):
         """Retrieve interface object."""
