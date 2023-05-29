@@ -30,8 +30,7 @@ from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingSta
 from ops.testing import Harness
 
 from charm import (
-    GATEWAY_HTTP_PORT,
-    GATEWAY_HTTPS_PORT,
+    GATEWAY_PORTS,
     Operator,
     _get_gateway_address_from_svc,
     _remove_envoyfilter,
@@ -435,8 +434,8 @@ class TestCharmHelpers:
     @pytest.mark.parametrize(
         "ssl_crt, ssl_key, expected_port, expected_context",
         [
-            ("", "", GATEWAY_HTTP_PORT, does_not_raise()),
-            ("x", "x", GATEWAY_HTTPS_PORT, does_not_raise()),
+            ("", "", GATEWAY_PORTS["http"], does_not_raise()),
+            ("x", "x", GATEWAY_PORTS["https"], does_not_raise()),
             ("x", "", None, pytest.raises(ErrorWithStatus)),
             ("", "x", None, pytest.raises(ErrorWithStatus)),
         ],
