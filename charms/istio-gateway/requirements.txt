@@ -17,7 +17,7 @@ charset-normalizer==3.1.0
     # via requests
 h11==0.14.0
     # via httpcore
-httpcore==0.17.1
+httpcore==0.17.2
     # via httpx
 httpx==0.24.1
     # via lightkube
@@ -34,7 +34,7 @@ jsonschema==4.17.3
     # via serialized-data-interface
 lightkube==0.13.0
     # via -r requirements.in
-lightkube-models==1.22.0.4
+lightkube-models==1.27.1.4
     # via
     #   -r requirements.in
     #   lightkube
