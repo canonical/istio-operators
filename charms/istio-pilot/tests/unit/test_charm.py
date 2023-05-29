@@ -1480,13 +1480,33 @@ def is_lightkube_resource_in_call_args_list(call_args_list, name, namespace=None
         namespace (str): The namespace of the lightkube resource to search for (will check
                          metadata.namespace)
     """
+    try:
+        get_lightkube_resource_in_call_args_list(call_args_list=call_args_list, name=name, namespace=namespace)
+        return True
+    except KeyError:
+        return False
+
+
+def get_lightkube_resource_in_call_args_list(call_args_list, name, namespace=None):
+    """Returns the first call_args from a call_args_list that was for a given lightkube resource.
+
+    Raises a KeyError if the object does not exist.
+
+    Args:
+        call_args_list (list): The list of call args to search, as given by a mock.call_args_list
+        name (str): The name of the lightkube resource to search for (will check metadata.name)
+        namespace (str): The namespace of the lightkube resource to search for (will check
+                         metadata.namespace)
+
+    Return: The lightkube resource
+    """
     for call_args in call_args_list:
         try:
             if (
-                call_args.kwargs["obj"].metadata.name == name
-                and getattr(call_args.kwargs["obj"].metadata, "namespace", None) == namespace
+                    call_args.kwargs["obj"].metadata.name == name
+                    and getattr(call_args.kwargs["obj"].metadata, "namespace", None) == namespace
             ):
-                return True
+                return call_args
         except Exception:
             continue
-    return False
+    raise KeyError(f"Resource {name} in namespace {namespace} not found in this call_args list.")
