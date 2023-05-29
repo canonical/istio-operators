@@ -255,7 +255,9 @@ class TestCharmEvents:
         assert is_lightkube_resource_in_call_args_list(
             krh_lightkube_client.apply.call_args_list, envoyfilter_name, model_name
         )
-        krh_lightkube_client.reset_mock()
+        assert_envoyfilter_applied_to_all_gateway_ports(
+            krh_lightkube_client, envoyfilter_name, model_name
+        )
 
     @patch("charm.Operator._handle_istio_pilot_relation")
     def test_ingress_relation(
@@ -1471,6 +1473,21 @@ def exercise_relation(harness, relation_name):
     harness.remove_relation(rel_id)
 
 
+def assert_envoyfilter_applied_to_all_gateway_ports(
+    krh_lightkube_client, envoyfilter_name, model_name
+):
+    # Assert that the EnvoyFilter is applied to all relevant ports
+    envoyfilter_call_arg = get_lightkube_resource_in_call_args_list(
+        krh_lightkube_client.apply.call_args_list, envoyfilter_name, model_name
+    )
+    config_patches = envoyfilter_call_arg.kwargs["obj"]["spec"]["configPatches"]
+    patched_ports = set()
+    for config_patch in config_patches:
+        patched_ports.add(int(config_patch["match"]["listener"]["portNumber"]))
+    assert patched_ports.issubset(GATEWAY_PORTS.values())
+    krh_lightkube_client.reset_mock()
+
+
 def is_lightkube_resource_in_call_args_list(call_args_list, name, namespace=None):
     """Returns a boolean of whether a call in the list includes this lightkube resource.
 
@@ -1481,7 +1498,9 @@ def is_lightkube_resource_in_call_args_list(call_args_list, name, namespace=None
                          metadata.namespace)
     """
     try:
-        get_lightkube_resource_in_call_args_list(call_args_list=call_args_list, name=name, namespace=namespace)
+        get_lightkube_resource_in_call_args_list(
+            call_args_list=call_args_list, name=name, namespace=namespace
+        )
         return True
     except KeyError:
         return False
@@ -1503,8 +1522,8 @@ def get_lightkube_resource_in_call_args_list(call_args_list, name, namespace=Non
     for call_args in call_args_list:
         try:
             if (
-                    call_args.kwargs["obj"].metadata.name == name
-                    and getattr(call_args.kwargs["obj"].metadata, "namespace", None) == namespace
+                call_args.kwargs["obj"].metadata.name == name
+                and getattr(call_args.kwargs["obj"].metadata, "namespace", None) == namespace
             ):
                 return call_args
         except Exception:

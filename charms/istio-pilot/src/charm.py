@@ -613,7 +613,7 @@ class Operator(CharmBase):
             "app_name": self.app.name,
             "envoyfilter_name": envoyfilter_name,
             "envoyfilter_namespace": self.model.name,
-            "gateway_port": self._gateway_port,
+            "gateway_ports": list(GATEWAY_PORTS.values()),
             "port": ingress_auth_data["port"],
             "request_headers": ingress_auth_data["allowed-request-headers"],
             "response_headers": ingress_auth_data["allowed-response-headers"],
