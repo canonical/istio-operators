@@ -4,7 +4,7 @@
 #
 #    pip-compile --resolver=backtracking requirements-unit.in
 #
-anyio==3.6.2
+anyio==3.7.0
     # via
     #   -r requirements.txt
     #   httpcore
@@ -31,7 +31,10 @@ deepdiff==6.2.1
     #   -r requirements.txt
     #   charmed-kubeflow-chisme
 exceptiongroup==1.1.1
-    # via pytest
+    # via
+    #   -r requirements.txt
+    #   anyio
+    #   pytest
 h11==0.14.0
     # via
     #   -r requirements.txt
