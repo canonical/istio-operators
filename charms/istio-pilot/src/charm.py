@@ -545,7 +545,7 @@ class Operator(CharmBase):
             labels=create_charm_default_labels(
                 application_name=self.app.name, model_name=self.model.name, scope=KRH_GATEWAY_SCOPE
             ),
-            child_resource_types=[GATEWAY_LIGHTKUBE_RESOURCE, Secret],
+            resource_types={GATEWAY_LIGHTKUBE_RESOURCE, Secret},
         )
         krh.reconcile()
 
@@ -584,7 +584,7 @@ class Operator(CharmBase):
             labels=create_charm_default_labels(
                 application_name=self.app.name, model_name=self.model.name, scope=KRH_INGRESS_SCOPE
             ),
-            child_resource_types=[VIRTUAL_SERVICE_LIGHTKUBE_RESOURCE],
+            resource_types={VIRTUAL_SERVICE_LIGHTKUBE_RESOURCE},
         )
 
         krh.reconcile()
@@ -636,7 +636,7 @@ class Operator(CharmBase):
             labels=create_charm_default_labels(
                 application_name=self.app.name, model_name=self.model.name, scope=KRH_GATEWAY_SCOPE
             ),
-            child_resource_types=[GATEWAY_LIGHTKUBE_RESOURCE, Secret],
+            resource_types={GATEWAY_LIGHTKUBE_RESOURCE, Secret},
         )
         krh.delete()
 
