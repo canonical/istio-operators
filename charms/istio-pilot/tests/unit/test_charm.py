@@ -30,8 +30,7 @@ from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingSta
 from ops.testing import Harness
 
 from charm import (
-    GATEWAY_HTTP_PORT,
-    GATEWAY_HTTPS_PORT,
+    GATEWAY_PORTS,
     Operator,
     _get_gateway_address_from_svc,
     _remove_envoyfilter,
@@ -256,7 +255,9 @@ class TestCharmEvents:
         assert is_lightkube_resource_in_call_args_list(
             krh_lightkube_client.apply.call_args_list, envoyfilter_name, model_name
         )
-        krh_lightkube_client.reset_mock()
+        assert_envoyfilter_applied_to_all_gateway_ports(
+            krh_lightkube_client, envoyfilter_name, model_name
+        )
 
     @patch("charm.Operator._handle_istio_pilot_relation")
     def test_ingress_relation(
@@ -435,8 +436,8 @@ class TestCharmHelpers:
     @pytest.mark.parametrize(
         "ssl_crt, ssl_key, expected_port, expected_context",
         [
-            ("", "", GATEWAY_HTTP_PORT, does_not_raise()),
-            ("x", "x", GATEWAY_HTTPS_PORT, does_not_raise()),
+            ("", "", GATEWAY_PORTS["http"], does_not_raise()),
+            ("x", "x", GATEWAY_PORTS["https"], does_not_raise()),
             ("x", "", None, pytest.raises(ErrorWithStatus)),
             ("", "x", None, pytest.raises(ErrorWithStatus)),
         ],
@@ -1472,6 +1473,21 @@ def exercise_relation(harness, relation_name):
     harness.remove_relation(rel_id)
 
 
+def assert_envoyfilter_applied_to_all_gateway_ports(
+    krh_lightkube_client, envoyfilter_name, model_name
+):
+    # Assert that the EnvoyFilter is applied to all relevant ports
+    envoyfilter_call_arg = get_lightkube_resource_in_call_args_list(
+        krh_lightkube_client.apply.call_args_list, envoyfilter_name, model_name
+    )
+    config_patches = envoyfilter_call_arg.kwargs["obj"]["spec"]["configPatches"]
+    patched_ports = set()
+    for config_patch in config_patches:
+        patched_ports.add(int(config_patch["match"]["listener"]["portNumber"]))
+    assert patched_ports.issubset(GATEWAY_PORTS.values())
+    krh_lightkube_client.reset_mock()
+
+
 def is_lightkube_resource_in_call_args_list(call_args_list, name, namespace=None):
     """Returns a boolean of whether a call in the list includes this lightkube resource.
 
@@ -1481,13 +1497,35 @@ def is_lightkube_resource_in_call_args_list(call_args_list, name, namespace=None
         namespace (str): The namespace of the lightkube resource to search for (will check
                          metadata.namespace)
     """
+    try:
+        get_lightkube_resource_in_call_args_list(
+            call_args_list=call_args_list, name=name, namespace=namespace
+        )
+        return True
+    except KeyError:
+        return False
+
+
+def get_lightkube_resource_in_call_args_list(call_args_list, name, namespace=None):
+    """Returns the first call_args from a call_args_list that was for a given lightkube resource.
+
+    Raises a KeyError if the object does not exist.
+
+    Args:
+        call_args_list (list): The list of call args to search, as given by a mock.call_args_list
+        name (str): The name of the lightkube resource to search for (will check metadata.name)
+        namespace (str): The namespace of the lightkube resource to search for (will check
+                         metadata.namespace)
+
+    Return: The lightkube resource
+    """
     for call_args in call_args_list:
         try:
             if (
                 call_args.kwargs["obj"].metadata.name == name
                 and getattr(call_args.kwargs["obj"].metadata, "namespace", None) == namespace
             ):
-                return True
+                return call_args
         except Exception:
             continue
-    return False
+    raise KeyError(f"Resource {name} in namespace {namespace} not found in this call_args list.")

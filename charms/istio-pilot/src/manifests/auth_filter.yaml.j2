@@ -6,6 +6,7 @@ metadata:
   namespace: {{ envoyfilter_namespace }}
 spec:
   configPatches:
+  {% for gateway_port in gateway_ports %}
     - applyTo: HTTP_FILTER
       match:
         context: GATEWAY
@@ -39,6 +40,7 @@ spec:
                       {% for response_header in response_headers %}
                       - exact: {{ response_header }}
                       {% endfor %}
+  {% endfor %}
 
   workloadSelector:
     labels:
