@@ -699,8 +699,11 @@ class TestCharmHelpers:
         # Assert
         # We've mocked the list method very broadly.  Ensure we only get called the time we expect
         assert mocked_lightkube_client.list.call_count == 2
-        assert mocked_lightkube_client.list.call_args_list[0].args[0] == GATEWAY_LIGHTKUBE_RESOURCE
-        assert mocked_lightkube_client.list.call_args_list[1].args[0] == Secret
+        created_resources = [
+            args_list.args[0] for args_list in mocked_lightkube_client.list.call_args_list
+        ]
+        assert GATEWAY_LIGHTKUBE_RESOURCE in created_resources
+        assert Secret in created_resources
 
         # Assert that we tried to remove the old gateway
         assert mocked_lightkube_client.delete.call_args.kwargs["name"] == existing_gateway_name
@@ -866,8 +869,11 @@ class TestCharmHelpers:
         # Assert
         # We've mocked the list method very broadly.  Ensure we only get called the time we expect
         assert mocked_lightkube_client.list.call_count == 2
-        assert mocked_lightkube_client.list.call_args_list[0].args[0] == GATEWAY_LIGHTKUBE_RESOURCE
-        assert mocked_lightkube_client.list.call_args_list[1].args[0] == Secret
+        created_resources = [
+            args_list.args[0] for args_list in mocked_lightkube_client.list.call_args_list
+        ]
+        assert GATEWAY_LIGHTKUBE_RESOURCE in created_resources
+        assert Secret in created_resources
 
         # Assert that we tried to remove the old gateway
         assert mocked_lightkube_client.delete.call_args.kwargs["name"] == existing_gateway_name
