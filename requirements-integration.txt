@@ -40,7 +40,7 @@ charset-normalizer==3.1.0
     # via
     #   aiohttp
     #   requests
-cryptography==40.0.2
+cryptography==41.0.1
     # via paramiko
 decorator==5.1.1
     # via
@@ -56,7 +56,7 @@ frozenlist==1.3.3
     # via
     #   aiohttp
     #   aiosignal
-google-auth==2.19.0
+google-auth==2.19.1
     # via kubernetes
 h11==0.14.0
     # via httpcore
@@ -80,7 +80,7 @@ jedi==0.18.2
     # via ipython
 jinja2==3.1.2
     # via pytest-operator
-juju==2.9.42.3
+juju==2.9.42.4
     # via
     #   -r requirements-integration.in
     #   pytest-operator
@@ -96,7 +96,7 @@ macaroonbakery==1.3.1
     # via
     #   juju
     #   theblues
-markupsafe==2.1.2
+markupsafe==2.1.3
     # via jinja2
 matplotlib-inline==0.1.6
     # via ipython
@@ -212,7 +212,7 @@ traitlets==5.9.0
     # via
     #   ipython
     #   matplotlib-inline
-typing-extensions==4.6.2
+typing-extensions==4.6.3
     # via
     #   ipython
     #   typing-inspect
