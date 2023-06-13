@@ -87,9 +87,9 @@ tenacity==8.2.2
     # via
     #   -r requirements.in
     #   charmed-kubeflow-chisme
-urllib3==2.0.2
+urllib3==2.0.3
     # via requests
-websocket-client==1.5.2
+websocket-client==1.5.3
     # via ops
 zipp==3.15.0
     # via importlib-resources

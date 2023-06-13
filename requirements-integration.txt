@@ -150,7 +150,7 @@ pyrfc3339==1.1
     # via
     #   juju
     #   macaroonbakery
-pytest==7.3.1
+pytest==7.3.2
     # via
     #   pytest-asyncio
     #   pytest-operator
@@ -225,7 +225,7 @@ urllib3==1.26.16
     #   requests
 wcwidth==0.2.6
     # via prompt-toolkit
-websocket-client==1.5.2
+websocket-client==1.5.3
     # via kubernetes
 websockets==7.0
     # via juju
