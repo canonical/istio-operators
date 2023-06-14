@@ -90,7 +90,7 @@ class Operator(CharmBase):
         super().__init__(*args)
 
         self.log = logging.getLogger(__name__)
-        self._field_manager = self.app.name
+        self._field_manager = "lightkube"
 
         # Event handling for managing the Istio control plane
         self.framework.observe(self.on.install, self.install)
@@ -496,7 +496,7 @@ class Operator(CharmBase):
     @property
     def _lightkube_client(self):
         """Returns a lightkube client configured for this charm."""
-        return Client(namespace=self.model.name, field_manager=self.app.name)
+        return Client(namespace=self.model.name, field_manager=self._field_manager)
 
     def _send_gateway_info(self):
         """Sends gateway information to all related apps.
