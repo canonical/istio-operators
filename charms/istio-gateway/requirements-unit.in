@@ -1,5 +1,9 @@
 coverage
+jinja2
+lightkube
+ops
 pytest
 pytest-mock
 pytest-lazy-fixture
--r requirements.txt
+pyyaml
+serialized-data-interface

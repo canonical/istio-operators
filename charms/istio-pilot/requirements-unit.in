@@ -1,5 +1,9 @@
+charmed-kubeflow-chisme
 coverage
+jinja2
+lightkube
 pytest
 pytest-mock
 pytest-lazy-fixture
--r requirements.txt
+pyyaml
+serialized-data-interface

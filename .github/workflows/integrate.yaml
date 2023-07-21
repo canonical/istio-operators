@@ -26,9 +26,9 @@ jobs:
       matrix:
         charm: [pilot, gateway]
     steps:
-    - uses: actions/checkout@v3
-    - run: sudo apt update && sudo apt install tox
-    - run: tox -e ${{ matrix.charm }}-lint
+      - uses: actions/checkout@v3
+      - run: sudo apt update && sudo apt install tox
+      - run: tox -e ${{ matrix.charm }}-lint
 
   unit:
     name: Unit Test
@@ -37,89 +37,70 @@ jobs:
       matrix:
         charm: [pilot, gateway]
     steps:
-    - uses: actions/checkout@v3
-    - run: sudo apt update && sudo apt install tox
-    - run: tox -e ${{ matrix.charm }}-unit
+      - uses: actions/checkout@v3
+      - run: sudo apt update && sudo apt install tox
+      - run: tox -e ${{ matrix.charm }}-unit
 
   integration:
     name: Integration Test
     runs-on: ubuntu-20.04
-
     steps:
-    - name: Check out repo
-      uses: actions/checkout@v3
-
-    - uses: balchua/microk8s-actions@v0.3.2
-      with:
-        # TODO: Pinned to <1.25 until we update to istio 1.16
-        channel: '1.24/stable'
-        addons: '["dns", "storage", "rbac", "metallb:10.64.140.43-10.64.140.49"]'
-
-    - name: Install dependencies
-      run: |
-        set -eux
-        sudo snap install charmcraft --classic --channel=latest/candidate
-        sudo snap install juju --classic
-        sudo snap install juju-bundle --classic
-        sudo snap install juju-wait --classic
-        sudo apt update
-        sudo apt install tox
-
-    - name: Wait before bootstrap
-      run: |
-        set -eux
-        sg microk8s -c 'microk8s status --wait-ready'
-        kubectl wait --for=condition=available --timeout=5m -nkube-system deployment/coredns deployment/hostpath-provisioner
-
-    - name: Bootstrap
-      run: |
-        # Pinning juju agent to 2.9.42 to keep compatibility with pythonlib-juju<3
-        sg microk8s -c 'juju bootstrap microk8s uk8s --agent-version=2.9.42'
-        sg microk8s -c 'juju add-model kubeflow'
-
-    - run: sg microk8s -c 'KUBECONFIG=/home/runner/.kube/config tox -e integration
-        -- --model kubeflow --destructive-mode'
-      timeout-minutes: 80
-
-    - name: Setup Debug Artifact Collection
-      run: mkdir tmp
-      if: failure()
-
-    - name: Collect charmcraft logs
-      if: failure()
-      run: cat /home/runner/snap/charmcraft/common/cache/charmcraft/log/charmcraft-*.log
-        | tee tmp/charmcraft.log
-
-    - name: Collect Juju status
-      if: failure()
-      run: juju status | tee tmp/juju-status.txt
-
-    - name: Collect Juju log
-      if: failure()
-      run: juju debug-log --replay --no-tail | tee tmp/juju-status.txt
-
-    - name: Collect Kube status
-      if: failure()
-      run: |
-        kubectl get all -A | tee tmp/kube-summary.txt
-        kubectl describe virtualservices -A | tee tmp/kube-virtualservices.txt
-        kubectl describe gateways -A | tee tmp/kube-gateways.txt
-        kubectl describe deployments -A | tee tmp/kube-deployments.txt
-        kubectl describe replicasets -A | tee tmp/kubectl-replicasets.txt
-        kubectl exec -n kubeflow istio-pilot-0 --container charm -- agents/unit-istio-pilot-0/charm/istioctl analyze -n kubeflow | tee tmp/istioctl-analyze.txt
-
-    - name: Collect Kube logs
-      if: failure()
-      run: |
-        kubectl logs -n kubeflow --tail 1000 -lapp.kubernetes.io/name=istio-pilot -c charm | tee tmp/istio-pilot.log
-        kubectl logs -n kubeflow --tail 1000 -lapp.kubernetes.io/name=istio-ingressgateway-operator -c charm | tee tmp/istio-ingressgateway-operator.log
-
-    - name: Upload debug artifacts
-      if: failure()
-      uses: actions/upload-artifact@v3
-      with:
-        name: test-run-artifacts
-        path: tmp
+      - name: Check out repo
+        uses: actions/checkout@v3
+  
+      - name: Setup operator environment
+        uses: charmed-kubernetes/actions-operator@main
+        with:
+          provider: microk8s
+          channel: 1.24/stable
+          microk8s-addons: "dns storage rbac metallb:10.64.140.43-10.64.140.49"
+          juju-channel: 2.9/stable
+          charmcraft-channel: latest/candidate
+  
+      - run: |
+          sg microk8s -c 'juju add-model kubeflow'
+          sg microk8s -c 'tox -e integration -- --model kubeflow'
+        timeout-minutes: 80
+  
+      - name: Setup Debug Artifact Collection
+        run: mkdir tmp
+        if: failure()
+  
+      - name: Collect charmcraft logs
+        if: failure()
+        run: cat /home/runner/snap/charmcraft/common/cache/charmcraft/log/charmcraft-*.log
+          | tee tmp/charmcraft.log
+  
+      - name: Collect Juju status
+        if: failure()
+        run: juju status | tee tmp/juju-status.txt
+  
+      - name: Collect Juju log
+        if: failure()
+        run: juju debug-log --replay --no-tail | tee tmp/juju-status.txt
+  
+      - name: Collect Kube status
+        if: failure()
+        run: |
+          kubectl get all -A | tee tmp/kube-summary.txt
+          kubectl describe virtualservices -A | tee tmp/kube-virtualservices.txt
+          kubectl describe gateways -A | tee tmp/kube-gateways.txt
+          kubectl describe deployments -A | tee tmp/kube-deployments.txt
+          kubectl describe replicasets -A | tee tmp/kubectl-replicasets.txt
+          kubectl exec -n kubeflow istio-pilot-0 --container charm -- agents/unit-istio-pilot-0/charm/istioctl analyze -n kubeflow | tee tmp/istioctl-analyze.txt
+  
+      - name: Collect Kube logs
+        if: failure()
+        run: |
+          kubectl logs -n kubeflow --tail 1000 -lapp.kubernetes.io/name=istio-pilot -c charm | tee tmp/istio-pilot.log
+          kubectl logs -n kubeflow --tail 1000 -lapp.kubernetes.io/name=istio-ingressgateway-operator -c charm | tee tmp/istio-ingressgateway-operator.log
+  
+      - name: Upload debug artifacts
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-run-artifacts
+          path: tmp
 
   integration-observability:
     name: Observability Integration Test
@@ -129,6 +110,15 @@ jobs:
       - name: Check out repo
         uses: actions/checkout@v3
 
+      - name: Setup operator environment
+        uses: charmed-kubernetes/actions-operator@main
+        with:
+          provider: microk8s
+          channel: 1.24/stable
+          microk8s-addons: "dns storage rbac metallb:10.64.140.43-10.64.140.49"
+          juju-channel: 2.9/stable
+          charmcraft-channel: latest/candidate
+ 
       - name: Setup operator environment
         uses: charmed-kubernetes/actions-operator@main
         with:
