@@ -57,9 +57,12 @@ jobs:
           juju-channel: 2.9/stable
           charmcraft-channel: latest/candidate
   
-      - run: |
+      - name: Run integration tests
+        run: |
           sg microk8s -c 'juju add-model kubeflow'
-          sg microk8s -c 'tox -e integration -- --model kubeflow'
+          # Using destructive mode because of https://github.com/canonical/charmcraft/issues/1132
+          # and https://github.com/canonical/charmcraft/issues/1138
+          sg microk8s -c 'tox -e integration -- --model kubeflow --destructive-mode'
         timeout-minutes: 80
   
       - name: Setup Debug Artifact Collection
@@ -119,21 +122,12 @@ jobs:
           juju-channel: 2.9/stable
           charmcraft-channel: latest/candidate
  
-      - name: Setup operator environment
-        uses: charmed-kubernetes/actions-operator@main
-        with:
-          provider: microk8s
-          channel: 1.24/stable
-          # Pinning juju agent to 2.9.42 to keep compatibility with pythonlib-juju<3
-          bootstrap-options: --agent-version="2.9.42"
-      - run: sg microk8s -c "microk8s enable metallb:'10.64.140.43-10.64.140.49,192.168.0.105-192.168.0.111'"
-      - run: juju add-model cos-test
-
       - name: Run observability integration tests
-
-        run: tox -vve cos-integration -- --model cos-test --destructive-mode
-        env:
-          KUBECONFIG: /home/runner/.kube/config
+        run: |
+          sg microk8s -c "juju add-model cos-test"
+          # Using destructive mode because of https://github.com/canonical/charmcraft/issues/1132
+          # and https://github.com/canonical/charmcraft/issues/1138
+          sg microk8s -c "tox -vve cos-integration -- --model cos-test --destructive-mode"
 
       - run: kubectl get pod/prometheus-k8s-0 -n knative-test -o=jsonpath='{.status}'
         if: failure()
