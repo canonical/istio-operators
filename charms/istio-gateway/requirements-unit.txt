@@ -68,10 +68,7 @@ pyrsistent==0.19.3
 pytest==7.4.0
     # via
     #   -r ./requirements-unit.in
-    #   pytest-lazy-fixture
     #   pytest-mock
-pytest-lazy-fixture==0.6.3
-    # via -r ./requirements-unit.in
 pytest-mock==3.11.1
     # via -r ./requirements-unit.in
 pyyaml==6.0.1

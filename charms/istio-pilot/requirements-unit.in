@@ -20,6 +20,6 @@ lightkube
 ops
 pytest
 pytest-mock
-pytest-lazy-fixture
 pyyaml
 tenacity
+-r requirements.in

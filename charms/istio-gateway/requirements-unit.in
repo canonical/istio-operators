@@ -18,6 +18,5 @@ lightkube
 ops
 pytest
 pytest-mock
-pytest-lazy-fixture
 pyyaml
 -r requirements.in
