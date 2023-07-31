@@ -1,10 +1,8 @@
-charmed-kubeflow-chisme>=0.0.9
+charmed-kubeflow-chisme
 jinja2
 lightkube
-oci-image
-ops<3
+ops
 packaging
 requests
 serialized-data-interface
 tenacity
-# Needs to be pinned else unit test failing 

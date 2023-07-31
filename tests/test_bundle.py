@@ -7,6 +7,7 @@ import aiohttp
 import lightkube
 import pytest
 import requests
+import tenacity
 import yaml
 from bs4 import BeautifulSoup
 from lightkube import codecs
@@ -15,7 +16,6 @@ from lightkube.generic_resource import (
     load_in_cluster_generic_resources,
 )
 from pytest_operator.plugin import OpsTest
-import tenacity
 
 log = logging.getLogger(__name__)
 
