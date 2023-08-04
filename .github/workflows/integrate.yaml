@@ -59,7 +59,7 @@ jobs:
       run: |
         set -eux
         sudo snap install charmcraft --classic --channel=latest/candidate
-        sudo snap install juju --classic
+        sudo snap install juju --channel=2.9/stable --classic
         sudo snap install juju-bundle --classic
         sudo snap install juju-wait --classic
         sudo apt update
@@ -136,6 +136,8 @@ jobs:
           channel: 1.24/stable
           # Pinning juju agent to 2.9.42 to keep compatibility with pythonlib-juju<3
           bootstrap-options: --agent-version="2.9.42"
+          juju-channel: 2.9/stable
+
       - run: sg microk8s -c "microk8s enable metallb:'10.64.140.43-10.64.140.49,192.168.0.105-192.168.0.111'"
       - run: juju add-model cos-test
 
