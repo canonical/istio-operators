@@ -12,12 +12,6 @@ from charmed_kubeflow_chisme.lightkube.mocking import FakeApiError
 from lightkube import codecs
 from lightkube.core.exceptions import ApiError
 from lightkube.generic_resource import create_namespaced_resource
-from lightkube.models.admissionregistration_v1 import (
-    ServiceReference,
-    ValidatingWebhook,
-    ValidatingWebhookConfiguration,
-    WebhookClientConfig,
-)
 from lightkube.models.meta_v1 import ObjectMeta
 from lightkube.resources.core_v1 import Secret
 from ops.charm import (
@@ -1124,7 +1118,6 @@ class TestCharmUpgrade:
     def test_validate_upgrade_version(self, versions, context_raised):
         with context_raised:
             _validate_upgrade_version(versions)
-
 
     @patch("charm.Istioctl", return_value=MagicMock())
     def test_wait_for_update_rollout(self, mocked_istioctl_class):
