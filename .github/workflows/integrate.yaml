@@ -44,6 +44,11 @@ jobs:
   integration:
     name: Integration Test
     runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        microk8s-versions:
+          - 1.25-strict/stable
+          - 1.26-strict/stable
     steps:
       - name: Check out repo
         uses: actions/checkout@v3
@@ -52,8 +57,8 @@ jobs:
         uses: charmed-kubernetes/actions-operator@main
         with:
           provider: microk8s
-          channel: 1.24/stable
-          microk8s-addons: "dns storage rbac metallb:10.64.140.43-10.64.140.49"
+          channel: ${{ matrix.microk8s-versions }}
+          microk8s-addons: "dns hostpath-storage rbac metallb:10.64.140.43-10.64.140.49"
           juju-channel: 2.9/stable
           charmcraft-channel: latest/candidate
   
@@ -108,7 +113,11 @@ jobs:
   integration-observability:
     name: Observability Integration Test
     runs-on: ubuntu-20.04
-
+    strategy:
+      matrix:
+        microk8s-versions:
+          - 1.25-strict/stable
+          - 1.26-strict/stable
     steps:
       - name: Check out repo
         uses: actions/checkout@v3
@@ -117,8 +126,8 @@ jobs:
         uses: charmed-kubernetes/actions-operator@main
         with:
           provider: microk8s
-          channel: 1.24/stable
-          microk8s-addons: "dns storage rbac metallb:10.64.140.43-10.64.140.49"
+          channel: ${{ matrix.microk8s-versions }}
+          microk8s-addons: "dns hostpath-storage rbac metallb:10.64.140.43-10.64.140.49"
           juju-channel: 2.9/stable
           charmcraft-channel: latest/candidate
  
