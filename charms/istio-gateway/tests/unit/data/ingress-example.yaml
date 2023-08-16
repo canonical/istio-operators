@@ -226,10 +226,6 @@ spec:
             optional: true
             secretName: istio-ingressgateway-workload-ca-certs
 ---
-# Remove the PodDisruptionBudget as a workaround for https://github.com/istio/istio/issues/12602
-# and https://github.com/istio/istio/issues/24000
-# According to kubeflow/manifests istio installation instruction as well
-$patch: delete
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
