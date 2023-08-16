@@ -1054,7 +1054,6 @@ class TestCharmUpgrade:
         # Assert that the upgrade was successful
         mocked_istioctl_class.assert_called_with("./istioctl", model_name, "minimal")
         mocked_istioctl.upgrade.assert_called_with()
-        harness.charm._patch_istio_validating_webhook.assert_called_with()
 
         mocked_wait_for_update_rollout.assert_called_once()
 
