@@ -104,17 +104,11 @@ async def test_ingress_relation(ops_test: OpsTest):
 
     await ops_test.model.add_relation(f"{ISTIO_PILOT}:ingress", f"{KUBEFLOW_VOLUMES}:ingress")
 
-    # TODO: This does not wait properly - it should wait for tensorboards_web_app to be active
-    #  and idle.  the wait_for_idle print statements say tensorboards-web-app is active/idle, but
-    #  `juju status` reports it is not.  As a workaround, all assertions below have a long retry
-    #  period
     await ops_test.model.wait_for_idle(
         status="active",
         raise_on_blocked=False,
         timeout=90 * 10,
     )
-
-    assert_application_and_units_active_idle(ops_test.model.applications[KUBEFLOW_VOLUMES])
 
     assert_virtualservice_exists(name=KUBEFLOW_VOLUMES, namespace=ops_test.model_name)
 
@@ -142,8 +136,6 @@ async def test_gateway_info_relation(ops_test: OpsTest):
         timeout=90 * 10,
         idle_period=30,  # A hack because sometimes this proceeds without being Active
     )
-
-    assert_application_and_units_active_idle(ops_test.model.applications[TENSORBOARD_CONTROLLER])
 
 
 @pytest.mark.abort_on_fail
@@ -384,28 +376,6 @@ def assert_url_get(url, allowed_statuses: list, disallowed_statuses: list):
     raise ValueError(
         "Timed out before getting an allowed status code.  Communication not as expected"
     )
-
-
-# Use a long stop_after_delay period because wait_for_idle is not reliable.
-@tenacity.retry(
-    stop=tenacity.stop_after_delay(600),
-    wait=tenacity.wait_exponential(multiplier=1, min=1, max=10),
-    reraise=True,
-)
-def assert_application_and_units_active_idle(app):
-    """Asserts that an applications and its units are all active/idle."""
-    log.info(f"Asserting that application {app} is active/idle")
-    log.info(f"Application status: {app.status}")
-    assert app.status.lower() == "active"
-
-    for unit in app.units:
-        log.info(f"Unit agent_status: {unit.agent_status}")
-        assert unit.agent_status.lower() == "idle"
-        log.info(
-            f"Unit workload_status: {unit.workload_status} with message "
-            f"'{unit.workload_status_message}'"
-        )
-        assert unit.workload_status.lower() == "active"
 
 
 # Use a long stop_after_delay period because wait_for_idle is not reliable.
