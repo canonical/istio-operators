@@ -597,6 +597,26 @@ class TestCharmHelpers:
         this_relation = harness.model.get_relation("ingress", 0)
         assert ingress_data[(this_relation, this_relation.app)] == relation_info[0]["data"]
 
+    def test_get_ingress_data_for_broken_event_none_event_app(self, harness):
+        """Tests that _get_ingress_data helper returns the correct for a RelationBroken event when event.app is None."""
+        harness.begin()
+        relation_info = [
+            add_ingress_to_harness(harness, "other0"),
+            add_ingress_to_harness(harness, "other1"),
+        ]
+
+        # Check for data while pretending this is a RelationBrokenEvent for relation[1] of the
+        # above relations.
+        mock_relation_broken_event = MagicMock(spec=RelationBrokenEvent)
+        mock_relation_broken_event.relation = harness.model.get_relation("ingress", 1)
+        mock_relation_broken_event.app = None
+
+        # Mock the logger
+        harness.charm.log = MagicMock()
+
+        ingress_data = harness.charm._get_ingress_data(mock_relation_broken_event)
+        assert harness.charm.log.info.call_count == 1
+
     def test_get_ingress_data_empty(self, harness):
         """Tests that the _get_ingress_data helper returns the correct empty relation data."""
         harness.begin()
