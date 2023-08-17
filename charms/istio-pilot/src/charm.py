@@ -39,7 +39,7 @@ ENVOYFILTER_LIGHTKUBE_RESOURCE = create_namespaced_resource(
     group="networking.istio.io", version="v1alpha3", kind="EnvoyFilter", plural="envoyfilters"
 )
 GATEWAY_LIGHTKUBE_RESOURCE = create_namespaced_resource(
-    group="networking.istio.io", version="v1beta1", kind="Gateway", plural="gateways"
+    group="networking.istio.io", version="v1alpha3", kind="Gateway", plural="gateways"
 )
 VIRTUAL_SERVICE_LIGHTKUBE_RESOURCE = create_namespaced_resource(
     group="networking.istio.io",
