@@ -44,6 +44,11 @@ jobs:
   integration:
     name: Integration Test
     runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        microk8s-versions:
+          - 1.25-strict/stable
+          - 1.26-strict/stable
     steps:
       - name: Check out repo
         uses: actions/checkout@v3
@@ -52,17 +57,17 @@ jobs:
         uses: charmed-kubernetes/actions-operator@main
         with:
           provider: microk8s
-          channel: 1.24/stable
-          microk8s-addons: "dns storage rbac metallb:10.64.140.43-10.64.140.49"
+          channel: ${{ matrix.microk8s-versions }}
+          microk8s-addons: "dns hostpath-storage rbac metallb:10.64.140.43-10.64.140.49"
           juju-channel: 2.9/stable
           charmcraft-channel: latest/candidate
   
       - name: Run integration tests
         run: |
-          sg microk8s -c 'juju add-model kubeflow'
+          juju add-model kubeflow
           # Using destructive mode because of https://github.com/canonical/charmcraft/issues/1132
           # and https://github.com/canonical/charmcraft/issues/1138
-          sg microk8s -c 'tox -e integration -- --model kubeflow --destructive-mode'
+          tox -e integration -- --model kubeflow --destructive-mode
         timeout-minutes: 80
   
       - name: Setup Debug Artifact Collection
@@ -108,7 +113,11 @@ jobs:
   integration-observability:
     name: Observability Integration Test
     runs-on: ubuntu-20.04
-
+    strategy:
+      matrix:
+        microk8s-versions:
+          - 1.25-strict/stable
+          - 1.26-strict/stable
     steps:
       - name: Check out repo
         uses: actions/checkout@v3
@@ -117,17 +126,17 @@ jobs:
         uses: charmed-kubernetes/actions-operator@main
         with:
           provider: microk8s
-          channel: 1.24/stable
-          microk8s-addons: "dns storage rbac metallb:10.64.140.43-10.64.140.49"
+          channel: ${{ matrix.microk8s-versions }}
+          microk8s-addons: "dns hostpath-storage rbac metallb:10.64.140.43-10.64.140.49"
           juju-channel: 2.9/stable
           charmcraft-channel: latest/candidate
  
       - name: Run observability integration tests
         run: |
-          sg microk8s -c "juju add-model cos-test"
+          juju add-model cos-test
           # Using destructive mode because of https://github.com/canonical/charmcraft/issues/1132
           # and https://github.com/canonical/charmcraft/issues/1138
-          sg microk8s -c "tox -vve cos-integration -- --model cos-test --destructive-mode"
+          tox -vve cos-integration -- --model cos-test --destructive-mode
 
       - run: kubectl get pod/prometheus-k8s-0 -n knative-test -o=jsonpath='{.status}'
         if: failure()
