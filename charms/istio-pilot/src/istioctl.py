@@ -1,9 +1,8 @@
 import logging
 import subprocess
 
+import lightkube.resources.policy_v1beta1  # noqa: F401
 import yaml
-from charmed_kubeflow_chisme.lightkube.batch import delete_many
-from lightkube import Client, codecs
 
 
 class IstioctlError(Exception):
@@ -95,18 +94,26 @@ class Istioctl:
             ) from cpe
 
     def remove(self):
-        """Removes the Istio installation using istioctl and Lightkube.
+        """Removes the Istio installation using istioctl.
 
-        TODO: Should we use `istioctl x uninstall` here instead of lightkube?  It is an
-        experimental feature but included in all istioctl versions we support.
+        Raises:
+            IstioctlError: if the istioctl uninstall subprocess fails
         """
-        manifest = self.manifest()
-
-        # Render YAML into Lightkube Objects
-        k8s_objects = codecs.load_all_yaml(manifest, create_resources_for_crds=True)
-
-        client = Client()
-        delete_many(client=client, objs=k8s_objects)
+        try:
+            subprocess.check_output(
+                [
+                    self._istioctl_path,
+                    "x",
+                    "uninstall",
+                    "--purge",
+                    "-y",
+                ]
+            )
+        except subprocess.CalledProcessError as cpe:
+            raise IstioctlError(
+                "Remove failed during `istioctl x uninstall --purge` with error code"
+                f" {cpe.returncode}"
+            ) from cpe
 
     def upgrade(self):
         """Upgrades the Istio installation using istioctl.
