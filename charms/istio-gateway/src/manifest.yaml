@@ -55,37 +55,8 @@ spec:
     spec:
       affinity:
         nodeAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - preference:
-                matchExpressions:
-                  - key: kubernetes.io/arch
-                    operator: In
-                    values:
-                      - amd64
-              weight: 2
-            - preference:
-                matchExpressions:
-                  - key: kubernetes.io/arch
-                    operator: In
-                    values:
-                      - ppc64le
-              weight: 2
-            - preference:
-                matchExpressions:
-                  - key: kubernetes.io/arch
-                    operator: In
-                    values:
-                      - s390x
-              weight: 2
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-              - matchExpressions:
-                  - key: kubernetes.io/arch
-                    operator: In
-                    values:
-                      - amd64
-                      - ppc64le
-                      - s390x
+          preferredDuringSchedulingIgnoredDuringExecution: null
+          requiredDuringSchedulingIgnoredDuringExecution: null
       containers:
         - args:
             - proxy
@@ -145,9 +116,11 @@ spec:
               value: standard
             - name: ISTIO_META_CLUSTER_ID
               value: Kubernetes
-          image: docker.io/istio/proxyv2:1.16.2
+          image: docker.io/istio/proxyv2:1.17.3
           name: istio-proxy
           ports:
+            - containerPort: 15021
+              protocol: TCP
             - containerPort: 8080
               protocol: TCP
             - containerPort: 8443
@@ -180,12 +153,12 @@ spec:
             privileged: false
             readOnlyRootFilesystem: true
           volumeMounts:
-            - name: workload-socket
-              mountPath: /var/run/secrets/workload-spiffe-uds
-            - name: credential-socket
-              mountPath: /var/run/secrets/credential-uds
-            - name: workload-certs
-              mountPath: /var/run/secrets/workload-spiffe-credentials
+            - mountPath: /var/run/secrets/workload-spiffe-uds
+              name: workload-socket
+            - mountPath: /var/run/secrets/credential-uds
+              name: credential-socket
+            - mountPath: /var/run/secrets/workload-spiffe-credentials
+              name: workload-certs
             - mountPath: /etc/istio/proxy
               name: istio-envoy
             - mountPath: /etc/istio/config
@@ -254,6 +227,10 @@ spec:
             optional: true
             secretName: istio-{{ kind }}gateway-workload-ca-certs
 ---
+# Remove the PodDisruptionBudget as a workaround for https://github.com/istio/istio/issues/12602
+# and https://github.com/istio/istio/issues/24000
+# According to kubeflow/manifests istio installation instruction as well
+$patch: delete
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:

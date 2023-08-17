@@ -20,7 +20,6 @@ from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from lightkube import Client
 from lightkube.core.exceptions import ApiError
 from lightkube.generic_resource import create_namespaced_resource
-from lightkube.resources.admissionregistration_v1 import ValidatingWebhookConfiguration
 from lightkube.resources.core_v1 import Secret, Service
 from ops.charm import CharmBase, RelationBrokenEvent
 from ops.main import main
@@ -39,7 +38,7 @@ ENVOYFILTER_LIGHTKUBE_RESOURCE = create_namespaced_resource(
     group="networking.istio.io", version="v1alpha3", kind="EnvoyFilter", plural="envoyfilters"
 )
 GATEWAY_LIGHTKUBE_RESOURCE = create_namespaced_resource(
-    group="networking.istio.io", version="v1beta1", kind="Gateway", plural="gateways"
+    group="networking.istio.io", version="v1alpha3", kind="Gateway", plural="gateways"
 )
 VIRTUAL_SERVICE_LIGHTKUBE_RESOURCE = create_namespaced_resource(
     group="networking.istio.io",
@@ -171,13 +170,6 @@ class Operator(CharmBase):
                 f"values.global.istioNamespace={self.model.name}",
             ]
         )
-
-        # Patch any known issues with the install
-        # Istioctl v1.12-1.14 have a bug where the validating webhook is not deployed to the
-        # correct namespace (see https://github.com/canonical/istio-operators/issues/204)
-        # This has no effect if the webhook does not exist or is already correct
-        self._log_and_set_status(MaintenanceStatus("Patching webhooks"))
-        self._patch_istio_validating_webhook()
 
         self.unit.status = ActiveStatus()
 
@@ -350,14 +342,6 @@ class Operator(CharmBase):
             MaintenanceStatus("Waiting for Istio upgrade to roll out in cluster")
         )
         _wait_for_update_rollout(istioctl, RETRY_FOR_15_MINUTES, self.log)
-
-        # Patch any known issues with the upgrade
-        client_version = Version(versions["client"])
-        if Version("1.12.0") <= client_version < Version("1.15.0"):
-            self._log_and_set_status(
-                MaintenanceStatus(f"Fixing webhooks from upgrade to {str(client_version)}")
-            )
-            self._patch_istio_validating_webhook()
 
         self.log.info("Upgrade complete.")
         self.unit.status = ActiveStatus()
@@ -747,43 +731,6 @@ class Operator(CharmBase):
         }
 
         log_destination_map[type(status)](status.message)
-
-    def _patch_istio_validating_webhook(self):
-        """Patch ValidatingWebhookConfiguration from istioctl v1.12-v1.14 to use correct namespace.
-
-        istioctl v1.12, v1.13, and v1.14 have a bug where the ValidatingWebhookConfiguration
-        istiod-default-validator looks for istiod in the `istio-system` namespace rather than the
-        namespace actually used for istio.  This function patches this webhook configuration to
-        use the correct namespace.
-
-        If the webhook configuration does not exist or is already correct, this has no effect.
-        """
-        self.log.info(
-            "Attempting to patch istiod-default-validator webhook to ensure it points to"
-            " correct namespace."
-        )
-        lightkube_client = self._lightkube_client
-        try:
-            vwc = lightkube_client.get(
-                ValidatingWebhookConfiguration, name="istiod-default-validator"
-            )
-        except ApiError as e:
-            # If the webhook doesn't exist, we don't need to patch it
-            self.log.info("No istiod-default-validator webhook found - skipping patch operation.")
-            if e.status.code == 404:
-                return
-            raise e
-
-        vwc.metadata.managedFields = None
-        vwc.webhooks[0].clientConfig.service.namespace = self.model.name
-        lightkube_client.patch(
-            ValidatingWebhookConfiguration,
-            "istiod-default-validator",
-            vwc,
-            field_manager=self.app.name,
-            force=True,
-        )
-        self.log.info("istiod-default-validator webhook successfully patched")
 
     def _use_https(self):
         if _xor(self.model.config["ssl-crt"], self.model.config["ssl-key"]):

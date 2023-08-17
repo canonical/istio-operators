@@ -12,12 +12,6 @@ from charmed_kubeflow_chisme.lightkube.mocking import FakeApiError
 from lightkube import codecs
 from lightkube.core.exceptions import ApiError
 from lightkube.generic_resource import create_namespaced_resource
-from lightkube.models.admissionregistration_v1 import (
-    ServiceReference,
-    ValidatingWebhook,
-    ValidatingWebhookConfiguration,
-    WebhookClientConfig,
-)
 from lightkube.models.meta_v1 import ObjectMeta
 from lightkube.resources.core_v1 import Secret
 from ops.charm import (
@@ -41,7 +35,7 @@ from charm import (
 from istioctl import IstioctlError
 
 GATEWAY_LIGHTKUBE_RESOURCE = create_namespaced_resource(
-    group="networking.istio.io", version="v1beta1", kind="Gateway", plural="gateways"
+    group="networking.istio.io", version="v1alpha3", kind="Gateway", plural="gateways"
 )
 
 VIRTUAL_SERVICE_LIGHTKUBE_RESOURCE = create_namespaced_resource(
@@ -1049,7 +1043,6 @@ class TestCharmHelpers:
 class TestCharmUpgrade:
     """Tests for charm upgrade handling."""
 
-    @patch("charm.Operator._patch_istio_validating_webhook")  # Do not patch istio installs
     @patch("charm._wait_for_update_rollout")  # Do not wait for upgrade to finish
     @patch("charm._validate_upgrade_version")  # Do not validate versions
     @patch("charm.Istioctl", return_value=MagicMock())
@@ -1058,7 +1051,6 @@ class TestCharmUpgrade:
         mocked_istioctl_class,
         _mocked_validate_upgrade_version,
         mocked_wait_for_update_rollout,
-        _mocked_patch_istio_validating_webhook,
         harness,
     ):
         """Tests that charm.upgrade_charm works successfully when expected."""
@@ -1068,7 +1060,7 @@ class TestCharmUpgrade:
         mocked_istioctl = mocked_istioctl_class.return_value
 
         # Return valid version data from istioctl.versions
-        mocked_istioctl.version.return_value = {"client": "1.12.5", "control_plane": "1.12.5"}
+        mocked_istioctl.version.return_value = {"client": "1.15.7", "control_plane": "1.15.7"}
 
         # Simulate the upgrade
         harness.begin()
@@ -1077,7 +1069,6 @@ class TestCharmUpgrade:
         # Assert that the upgrade was successful
         mocked_istioctl_class.assert_called_with("./istioctl", model_name, "minimal")
         mocked_istioctl.upgrade.assert_called_with()
-        harness.charm._patch_istio_validating_webhook.assert_called_with()
 
         mocked_wait_for_update_rollout.assert_called_once()
 
@@ -1141,55 +1132,6 @@ class TestCharmUpgrade:
     def test_validate_upgrade_version(self, versions, context_raised):
         with context_raised:
             _validate_upgrade_version(versions)
-
-    def test_patch_istio_validating_webhook(self, harness, mocked_lightkube_client):
-        """Tests that _patch_istio_validating_webhook works as expected."""
-        model_name = "test-model"
-        harness.set_model_name(model_name)
-        harness.begin()
-
-        mock_vwc = ValidatingWebhookConfiguration(
-            metadata=ObjectMeta(name="istiod-default-validator"),
-            webhooks=[
-                ValidatingWebhook(
-                    admissionReviewVersions=[""],
-                    name="",
-                    sideEffects=None,
-                    clientConfig=WebhookClientConfig(
-                        service=ServiceReference(
-                            name="istiod",
-                            namespace="istio-system",
-                        )
-                    ),
-                )
-            ],
-        )
-
-        mocked_lightkube_client.get.return_value = mock_vwc
-
-        harness.charm._patch_istio_validating_webhook()
-
-        # Confirm we've tried to apply a patched version of the webhook
-        patch_call = mocked_lightkube_client.patch.call_args_list[0]
-        # Assert the expected webhook is being patched
-        assert patch_call[0][1] == "istiod-default-validator"
-        # Assert that we've patched to the expected model name
-        vwc = patch_call[0][2]
-        assert vwc.webhooks[0].clientConfig.service.namespace == model_name
-
-    def test_patch_istio_validating_webhook_for_webhook_does_not_exist(
-        self, harness, mocked_lightkube_client
-    ):
-        """Tests that charm._patch_istio_validating_webhook does not fail if webhook missing."""
-        harness.begin()
-
-        mocked_lightkube_client = MagicMock()
-        mocked_lightkube_client.get.side_effect = FakeApiError(404)
-
-        harness.charm._patch_istio_validating_webhook()
-
-        # Confirm we've not tried to apply anything
-        assert mocked_lightkube_client.patch.call_count == 0
 
     @patch("charm.Istioctl", return_value=MagicMock())
     def test_wait_for_update_rollout(self, mocked_istioctl_class):
