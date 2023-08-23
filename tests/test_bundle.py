@@ -317,6 +317,8 @@ async def test_disable_ingress_auth(ops_test: OpsTest):
 
 async def test_charms_removal(ops_test: OpsTest):
     """Test the istio-operators can be removed without errors."""
+    # NOTE: the istio-gateway charm has to be removed before istio-pilot since
+    # the latter contains all the CRDs that istio-gateway depends on.
     await ops_test.model.remove_application(ISTIO_GATEWAY_APP_NAME, block_until_done=True)
     await ops_test.model.remove_application(ISTIO_PILOT, block_until_done=True)
 
