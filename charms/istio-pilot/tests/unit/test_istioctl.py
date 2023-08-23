@@ -5,7 +5,6 @@ from unittest.mock import MagicMock
 import pytest
 import yaml
 from jinja2 import Environment, FileSystemLoader
-from lightkube import ApiError
 
 from istioctl import Istioctl, IstioctlError, get_client_version, get_control_plane_version
 
@@ -136,7 +135,8 @@ def test_istioctl_remove_error(mocked_check_call_failing):
     ictl = Istioctl(istioctl_path=ISTIOCTL_BINARY, namespace=NAMESPACE, profile=PROFILE)
 
     with pytest.raises(IstioctlError):
-       ictl.remove()
+        ictl.remove()
+
 
 def test_istioctl_precheck(mocked_check_call):
     ictl = Istioctl(istioctl_path=ISTIOCTL_BINARY, namespace=NAMESPACE, profile=PROFILE)
