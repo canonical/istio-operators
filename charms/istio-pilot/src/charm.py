@@ -472,10 +472,18 @@ class Operator(CharmBase):
         # Get all route data from the ingress interface
         routes = get_routes_from_ingress_interface(ingress_interface, self.app)
 
-        # The app-level data is still visible on a broken relation, but we
+        # The app-level data may still be visible on a broken relation, but we
         # shouldn't be keeping the VirtualService for that related app.
         if isinstance(event, RelationBrokenEvent) and event.relation.name == INGRESS_RELATION_NAME:
-            routes.pop((event.relation, event.app))
+            if event.app is None:
+                self.log.info(
+                    f"When handling event '{event}', event.app found to be None.  We cannot pop"
+                    f" the departing application's data from 'routes' because we do not know the"
+                    f" departing application's name.  We assume that the departing application's"
+                    f" is not in routes.keys='{list(routes.keys())}'."
+                )
+            else:
+                routes.pop((event.relation, event.app))
 
         return routes
 
