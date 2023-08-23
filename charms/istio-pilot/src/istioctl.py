@@ -100,7 +100,7 @@ class Istioctl:
             IstioctlError: if the istioctl uninstall subprocess fails
         """
         try:
-            subprocess.check_output(
+            subprocess.check_call(
                 [
                     self._istioctl_path,
                     "x",
