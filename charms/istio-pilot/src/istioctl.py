@@ -1,7 +1,7 @@
 import logging
 import subprocess
 
-import lightkube.resources.policy_v1beta1  # noqa: F401
+import lightkube.resources.policy_v1
 import yaml
 
 
