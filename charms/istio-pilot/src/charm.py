@@ -35,7 +35,6 @@ from serialized_data_interface import (
     get_interfaces,
 )
 
-from image_management import parse_image_config, remove_empty_images, update_images
 from istioctl import Istioctl, IstioctlError
 
 ENVOYFILTER_LIGHTKUBE_RESOURCE = create_namespaced_resource(
@@ -56,9 +55,10 @@ GATEWAY_PORTS = {
     "https": 8443,
 }
 GATEWAY_TEMPLATE_FILES = ["src/manifests/gateway.yaml.j2"]
-CONTROL_PLANE_EXTERNAL_MANIFESTS=["src/manifests/istio_control_plane_1.17.3.yaml.j2"]
+CONTROL_PLANE_RESOURCES="src/manifests/istio-control-plane/istio_control_plane_resources_1.17.3.yaml"
+CONTROL_PLANE_TEMPLATED_RESOURCES="src/manifests/istio-control-plane/istio_control_plane_templated_resources_1.17.3.yaml.j2"
 DEFAULT_IMAGES = {}
-CUSTOM_IMAGE_CONFIG_NAME = "custom_images"
+IMAGE_CONFIGURATION = "image_configuration"
 KRH_GATEWAY_SCOPE = "gateway"
 METRICS_PORT = 15014
 INGRESS_AUTH_RELATION_NAME = "ingress-auth"
@@ -164,9 +164,9 @@ class Operator(CharmBase):
 
     def _path_rendered_external_manifests(self) -> str:
         """Renders and save a manifest file to be used during installation of the control plane."""
-        path_to_rendered_external_manifest = "src/manifests/istio_control_plane_rendered_external_manifests.yaml"
-        image_configuration = yaml.safe_load(self.model.config[CUSTOM_IMAGE_CONFIG_NAME])
-        template = Template(Path(CONTROL_PLANE_EXTERNAL_MANIFESTS).read_text())
+        path_to_rendered_external_manifest = "src/manifests/istio-control-plane/istio_control_plane_rendered_external_manifests.yaml"
+        image_configuration = yaml.safe_load(self.model.config[IMAGE_CONFIGURATION])
+        template = Template(Path(CONTROL_PLANE_TEMPLATED_RESOURCES).read_text())
         rendered_template = template.render(**image_configuration)
         with open(path_to_rendered_external_manifest, "w") as f:
             f.write(rendered_template)
