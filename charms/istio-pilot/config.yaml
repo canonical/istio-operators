@@ -10,6 +10,7 @@ options:
     description: >
       YAML or JSON formatted input defining image configuration to use when installing the Istio control plane.
       For reference https://istio.io/v1.5/docs/reference/config/installation-options/
+    type: string
   default-gateway:
     type: string
     default: istio-gateway
