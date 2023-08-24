@@ -1,8 +1,11 @@
 charmed-kubeflow-chisme>=0.0.9
 jinja2
 lightkube
-oci-image
-ops<3
+# Pinning lightkube-models to keep compatibility with istio 1.17
+# which supports versions 1.23, 1.24, 1.25, 1.26 of k8s
+# Update the pin when this charm is upgraded to <=1.18
+lightkube-models<1.27
+ops
 packaging
 requests
 serialized-data-interface
