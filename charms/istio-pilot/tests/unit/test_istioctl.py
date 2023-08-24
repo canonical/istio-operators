@@ -5,7 +5,6 @@ from unittest.mock import MagicMock
 import pytest
 import yaml
 from jinja2 import Environment, FileSystemLoader
-from lightkube import ApiError
 
 from istioctl import Istioctl, IstioctlError, get_client_version, get_control_plane_version
 
@@ -124,26 +123,18 @@ def mocked_lightkube_client(mocker):
     yield mocked_lightkube_client
 
 
-def test_istioctl_remove(mocked_check_output, mocked_lightkube_client):
-    mocked_check_output.return_value = Path(EXAMPLE_MANIFEST).read_text()
-
+def test_istioctl_remove(mocked_check_call):
     ictl = Istioctl(istioctl_path=ISTIOCTL_BINARY, namespace=NAMESPACE, profile=PROFILE)
 
     ictl.remove()
 
-    assert mocked_lightkube_client.delete.call_count == 3
+    mocked_check_call.assert_called_once_with([ISTIOCTL_BINARY, "x", "uninstall", "--purge", "-y"])
 
 
-def test_istioctl_remove_error(mocked_check_output, mocked_lightkube_client, mocker):
-    mocked_check_output.return_value = Path(EXAMPLE_MANIFEST).read_text()
-
-    api_error = ApiError(response=mocker.MagicMock())
-    mocked_lightkube_client.delete.return_value = None
-    mocked_lightkube_client.delete.side_effect = api_error
-
+def test_istioctl_remove_error(mocked_check_call_failing):
     ictl = Istioctl(istioctl_path=ISTIOCTL_BINARY, namespace=NAMESPACE, profile=PROFILE)
 
-    with pytest.raises(ApiError):
+    with pytest.raises(IstioctlError):
         ictl.remove()
 
 
