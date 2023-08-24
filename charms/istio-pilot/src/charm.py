@@ -2,6 +2,8 @@
 
 import logging
 import subprocess
+import yaml
+from pathlib import Path
 from typing import List, Optional
 
 import tenacity
@@ -17,6 +19,7 @@ from charms.istio_pilot.v0.istio_gateway_info import (
 )
 from charms.istio_pilot.v0.istio_gateway_info import GatewayProvider
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
+from jinja2 import Template
 from lightkube import Client
 from lightkube.core.exceptions import ApiError
 from lightkube.generic_resource import create_namespaced_resource
@@ -32,6 +35,7 @@ from serialized_data_interface import (
     get_interfaces,
 )
 
+from image_management import parse_image_config, remove_empty_images, update_images
 from istioctl import Istioctl, IstioctlError
 
 ENVOYFILTER_LIGHTKUBE_RESOURCE = create_namespaced_resource(
@@ -52,6 +56,9 @@ GATEWAY_PORTS = {
     "https": 8443,
 }
 GATEWAY_TEMPLATE_FILES = ["src/manifests/gateway.yaml.j2"]
+CONTROL_PLANE_EXTERNAL_MANIFESTS=["src/manifests/istio_control_plane_1.17.3.yaml.j2"]
+DEFAULT_IMAGES = {}
+CUSTOM_IMAGE_CONFIG_NAME = "custom_images"
 KRH_GATEWAY_SCOPE = "gateway"
 METRICS_PORT = 15014
 INGRESS_AUTH_RELATION_NAME = "ingress-auth"
@@ -155,19 +162,35 @@ class Operator(CharmBase):
         )
         self.grafana_dashboards = GrafanaDashboardProvider(self, relation_name="grafana-dashboard")
 
+    def _path_rendered_external_manifests(self) -> str:
+        """Renders and save a manifest file to be used during installation of the control plane."""
+        path_to_rendered_external_manifest = "src/manifests/istio_control_plane_rendered_external_manifests.yaml"
+        image_configuration = yaml.safe_load(self.model.config[CUSTOM_IMAGE_CONFIG_NAME])
+        template = Template(Path(CONTROL_PLANE_EXTERNAL_MANIFESTS).read_text())
+        rendered_template = template.render(**image_configuration)
+        with open(path_to_rendered_external_manifest, "w") as f:
+            f.write(rendered_template)
+
+        return path_to_rendered_external_manifest
+
     def install(self, _):
         """Install charm."""
         self._log_and_set_status(MaintenanceStatus("Deploying Istio control plane"))
 
+        # Render and save external manifests
+        external_manifests = self._path_rendered_external_manifests()
+
+        # Call istioctl install with external manifests to allow
+        # configuring container images.
+        # The manifest sets the namespace to kubeflow and the profile
+        # to minimal by default, this configuration cannot be changed
+        # using charm configs.
         subprocess.check_call(
             [
                 "./istioctl",
                 "install",
                 "-y",
-                "-s",
-                "profile=minimal",
-                "-s",
-                f"values.global.istioNamespace={self.model.name}",
+                f"--manifests={control_plane_external_manifests_path}",
             ]
         )
 
@@ -814,7 +837,6 @@ def _remove_envoyfilter(name: str, namespace: str, logger: Optional[logging.Logg
         if e.status.code == 404:
             return
         raise e
-
 
 def _validate_upgrade_version(versions) -> bool:
     """Validates that the version of istioctl can upgrade the currently deployed Istio.
