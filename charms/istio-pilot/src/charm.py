@@ -246,33 +246,22 @@ class Operator(CharmBase):
         # Reports (status and logs) any handled errors, or sets to ActiveStatus
         self._report_handled_errors(errors=handled_errors)
 
-    def remove(self, _):
-        """Remove charm."""
+    def remove(self, event):
+        """Remove charm, the Kubernetes resources it uses, and the istio specific resources."""
+        istioctl = Istioctl(ISTIOCTL_PATH, self.model.name, ISTIOCTL_DEPOYMENT_PROFILE)
+        handled_errors = []
+        try:
+            self._reconcile_gateway()
+            ingress_data = self._get_ingress_data(event)
+            self._reconcile_ingress(ingress_data)
+            ingress_auth_data = self._get_ingress_auth_data(event)
+            self._reconcile_ingress_auth(ingress_auth_data)
+            istioctl.remove()
+        except (ApiError, ErrorWithStatus, IstioctlError) as error:
+            handled_errors.append(error)
 
-        manifests = subprocess.check_output(
-            [
-                "./istioctl",
-                "manifest",
-                "generate",
-                "-s",
-                "profile=minimal",
-                "-s",
-                f"values.global.istioNamespace={self.model.name}",
-            ]
-        )
-
-        # TODO: Update resource_handler to use the newer handler
-        custom_resource_classes = [
-            self._resource_handler.get_custom_resource_class_from_filename(resource_file)
-            for resource_file in self._resource_files
-        ]
-        for resource in custom_resource_classes:
-            self._resource_handler.delete_existing_resources(
-                resource, namespace=self.model.name, ignore_unauthorized=True
-            )
-        self._resource_handler.delete_manifest(
-            manifests, namespace=self.model.name, ignore_not_found=True, ignore_unauthorized=True
-        )
+        if handled_errors:
+            self._report_handled_errors(errors=handled_errors)
 
     def upgrade_charm(self, _):
         """Upgrade charm.
@@ -431,10 +420,18 @@ class Operator(CharmBase):
         # Get all route data from the ingress interface
         routes = get_routes_from_ingress_interface(ingress_interface, self.app)
 
-        # The app-level data is still visible on a broken relation, but we
+        # The app-level data may still be visible on a broken relation, but we
         # shouldn't be keeping the VirtualService for that related app.
         if isinstance(event, RelationBrokenEvent) and event.relation.name == INGRESS_RELATION_NAME:
-            routes.pop((event.relation, event.app))
+            if event.app is None:
+                self.log.info(
+                    f"When handling event '{event}', event.app found to be None.  We cannot pop"
+                    f" the departing application's data from 'routes' because we do not know the"
+                    f" departing application's name.  We assume that the departing application's"
+                    f" is not in routes.keys='{list(routes.keys())}'."
+                )
+            else:
+                routes.pop((event.relation, event.app))
 
         return routes
 
