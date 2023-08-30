@@ -53,7 +53,6 @@ GATEWAY_PORTS = {
     "https": 8443,
 }
 GATEWAY_TEMPLATE_FILES = ["src/manifests/gateway.yaml.j2"]
-DEFAULT_IMAGES = {}
 IMAGE_CONFIGURATION = "image-configuration"
 KRH_GATEWAY_SCOPE = "gateway"
 METRICS_PORT = 15014
