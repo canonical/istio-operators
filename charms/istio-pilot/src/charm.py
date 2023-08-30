@@ -2,11 +2,10 @@
 
 import logging
 import subprocess
-import yaml
-from pathlib import Path
 from typing import List, Optional
 
 import tenacity
+import yaml
 from charmed_kubeflow_chisme.exceptions import ErrorWithStatus, GenericCharmRuntimeError
 from charmed_kubeflow_chisme.kubernetes import (
     KubernetesResourceHandler,
@@ -19,7 +18,6 @@ from charms.istio_pilot.v0.istio_gateway_info import (
 )
 from charms.istio_pilot.v0.istio_gateway_info import GatewayProvider
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
-from jinja2 import Template
 from lightkube import Client
 from lightkube.core.exceptions import ApiError
 from lightkube.generic_resource import create_namespaced_resource
@@ -56,7 +54,7 @@ GATEWAY_PORTS = {
 }
 GATEWAY_TEMPLATE_FILES = ["src/manifests/gateway.yaml.j2"]
 DEFAULT_IMAGES = {}
-IMAGE_CONFIGURATION = "image_configuration"
+IMAGE_CONFIGURATION = "image-configuration"
 KRH_GATEWAY_SCOPE = "gateway"
 METRICS_PORT = 15014
 INGRESS_AUTH_RELATION_NAME = "ingress-auth"
@@ -160,18 +158,24 @@ class Operator(CharmBase):
         )
         self.grafana_dashboards = GrafanaDashboardProvider(self, relation_name="grafana-dashboard")
 
+    def _get_config(self):
+        """Retrieve and return configuration."""
+        config = {}
+        config[IMAGE_CONFIGURATION] = yaml.safe_load(self.model.config[IMAGE_CONFIGURATION])
+        return config
+
     def install(self, _):
         """Install charm."""
         self._log_and_set_status(MaintenanceStatus("Deploying Istio control plane"))
 
-        image_configuration = yaml.safe_load(self.model.config[IMAGE_CONFIGURATION])
-        pilot_image = image_configuration["pilot_image"]
-        global_tag = image_configuration["global_tag"]
-        global_hub= image_configuration["global_hub"]
-        global_proxy_image = image_configuration["global_proxy_image"]
-        global_proxy_init_image = image_configuration["global_proxy_init_image"]
+        config = self._get_config()
+        pilot_image = config[IMAGE_CONFIGURATION]["pilot-image"]
+        global_tag = config[IMAGE_CONFIGURATION]["global-tag"]
+        global_hub = config[IMAGE_CONFIGURATION]["global-hub"]
+        global_proxy_image = config[IMAGE_CONFIGURATION]["global-proxy-image"]
+        global_proxy_init_image = config[IMAGE_CONFIGURATION]["global-proxy-init-image"]
 
-        # Call istioctl install and set paramters based on image configuratiob
+        # Call istioctl install and set parameters based on image configuration
         subprocess.check_call(
             [
                 "./istioctl",
@@ -182,15 +186,15 @@ class Operator(CharmBase):
                 "--set",
                 "values.global.istioNamespace=kubeflow",
                 "--set",
-                f"values.pilot.image='{pilot_image}'",
+                f"values.pilot.image={pilot_image}",
                 "--set",
-                f"values.global.tag='{global_tag}'",
+                f"values.global.tag={global_tag}",
                 "--set",
-                f"values.global.hub='{global_hub}'",
+                f"values.global.hub={global_hub}",
                 "--set",
-                f"values.global.proxy.image='{global_proxy_image}'",
+                f"values.global.proxy.image={global_proxy_image}",
                 "--set",
-                f"values.global.proxy_init.image='{global_proxy_init_image}'",
+                f"values.global.proxy_init.image={global_proxy_init_image}",
             ]
         )
 
@@ -837,6 +841,7 @@ def _remove_envoyfilter(name: str, namespace: str, logger: Optional[logging.Logg
         if e.status.code == 404:
             return
         raise e
+
 
 def _validate_upgrade_version(versions) -> bool:
     """Validates that the version of istioctl can upgrade the currently deployed Istio.

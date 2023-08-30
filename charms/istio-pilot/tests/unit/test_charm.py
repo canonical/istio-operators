@@ -1039,6 +1039,15 @@ class TestCharmHelpers:
         """Test that the xor helper function works as expected."""
         assert _xor(left, right) is expected
 
+    def test_get_config(self, harness):
+        """Test configuration retrieval function."""
+        harness.begin()
+        config = harness.charm._get_config()
+        assert "image-configuration" in config.keys()
+        assert "pilot-image" in config["image-configuration"].keys()
+        assert "pilot" == config["image-configuration"]["pilot-image"]
+        assert "proxyv2" == config["image-configuration"]["global-proxy-image"]
+
 
 class TestCharmUpgrade:
     """Tests for charm upgrade handling."""
