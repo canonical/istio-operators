@@ -8,3 +8,7 @@ options:
     type: string
     description: |
       Type of service for the ingress gateway out of: 'ClusterIP', 'LoadBalancer', or 'NodePort'.
+  proxy-image:
+    default: 'docker.io/istio/proxyv2:1.17.3'
+    description: Istio Proxy image
+    type: string
