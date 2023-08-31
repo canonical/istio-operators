@@ -3,6 +3,18 @@ options:
     type: string
     default: istio-gateway
     description: Name to use as a default gateway
+  image-configuration:
+    default: |
+      pilot-image: 'pilot'  # values.pilot.image
+      global-tag: '1.17.3'  # values.global.tag
+      global-hub: 'docker.io/istio' # values.global.hub
+      global-proxy-image: 'proxyv2' # values.global.proxy.image
+      global-proxy-init-image: 'proxyv2' # values.global.proxy_init.image
+      grpc-bootstrap-init: 'busybox:1.28'
+    description: >
+      YAML or JSON formatted input defining image configuration to use when installing the Istio control plane.
+      For reference https://istio.io/v1.5/docs/reference/config/installation-options/
+    type: string
   gateway-service-name:
     type: string
     default: istio-ingressgateway-workload
