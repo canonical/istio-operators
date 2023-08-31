@@ -69,6 +69,7 @@ class Operator(CharmBase):
         rendered = template.render(
             kind=self.model.config["kind"],
             namespace=self.model.name,
+            proxy_image=self.model.config["proxy-image"],
             pilot_host=pilot["service-name"],
             pilot_port=pilot["service-port"],
             gateway_service_type=self.model.config["gateway_service_type"],
@@ -88,6 +89,7 @@ class Operator(CharmBase):
         rendered = template.render(
             kind=self.model.config["kind"],
             namespace=self.model.name,
+            proxy_image=self.model.config["proxy-image"],
             pilot_host="foo",
             pilot_port="foo",
         )
