@@ -5,6 +5,7 @@ import subprocess
 from typing import List, Optional
 
 import tenacity
+import yaml
 from charmed_kubeflow_chisme.exceptions import ErrorWithStatus, GenericCharmRuntimeError
 from charmed_kubeflow_chisme.kubernetes import (
     KubernetesResourceHandler,
@@ -52,6 +53,7 @@ GATEWAY_PORTS = {
     "https": 8443,
 }
 GATEWAY_TEMPLATE_FILES = ["src/manifests/gateway.yaml.j2"]
+IMAGE_CONFIGURATION = "image-configuration"
 KRH_GATEWAY_SCOPE = "gateway"
 METRICS_PORT = 15014
 INGRESS_AUTH_RELATION_NAME = "ingress-auth"
@@ -155,19 +157,42 @@ class Operator(CharmBase):
         )
         self.grafana_dashboards = GrafanaDashboardProvider(self, relation_name="grafana-dashboard")
 
+    def _get_image_config(self):
+        """Retrieve and return image configuration."""
+        image_config = yaml.safe_load(self.model.config[IMAGE_CONFIGURATION])
+        return image_config
+
     def install(self, _):
         """Install charm."""
         self._log_and_set_status(MaintenanceStatus("Deploying Istio control plane"))
 
+        image_config = self._get_image_config()
+        pilot_image = image_config["pilot-image"]
+        global_tag = image_config["global-tag"]
+        global_hub = image_config["global-hub"]
+        global_proxy_image = image_config["global-proxy-image"]
+        global_proxy_init_image = image_config["global-proxy-init-image"]
+
+        # Call istioctl install and set parameters based on image configuration
         subprocess.check_call(
             [
                 "./istioctl",
                 "install",
                 "-y",
-                "-s",
+                "--set",
                 "profile=minimal",
-                "-s",
-                f"values.global.istioNamespace={self.model.name}",
+                "--set",
+                "values.global.istioNamespace=kubeflow",
+                "--set",
+                f"values.pilot.image={pilot_image}",
+                "--set",
+                f"values.global.tag={global_tag}",
+                "--set",
+                f"values.global.hub={global_hub}",
+                "--set",
+                f"values.global.proxy.image={global_proxy_image}",
+                "--set",
+                f"values.global.proxy_init.image={global_proxy_init_image}",
             ]
         )
 
