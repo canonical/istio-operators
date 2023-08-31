@@ -157,22 +157,21 @@ class Operator(CharmBase):
         )
         self.grafana_dashboards = GrafanaDashboardProvider(self, relation_name="grafana-dashboard")
 
-    def _get_config(self):
-        """Retrieve and return configuration."""
-        config = {}
-        config[IMAGE_CONFIGURATION] = yaml.safe_load(self.model.config[IMAGE_CONFIGURATION])
-        return config
+    def _get_image_config(self):
+        """Retrieve and return image configuration."""
+        image_config = yaml.safe_load(self.model.config[IMAGE_CONFIGURATION])
+        return image_config
 
     def install(self, _):
         """Install charm."""
         self._log_and_set_status(MaintenanceStatus("Deploying Istio control plane"))
 
-        config = self._get_config()
-        pilot_image = config[IMAGE_CONFIGURATION]["pilot-image"]
-        global_tag = config[IMAGE_CONFIGURATION]["global-tag"]
-        global_hub = config[IMAGE_CONFIGURATION]["global-hub"]
-        global_proxy_image = config[IMAGE_CONFIGURATION]["global-proxy-image"]
-        global_proxy_init_image = config[IMAGE_CONFIGURATION]["global-proxy-init-image"]
+        image_config = self._get_image_config()
+        pilot_image = image_config["pilot-image"]
+        global_tag = image_config["global-tag"]
+        global_hub = image_config["global-hub"]
+        global_proxy_image = image_config["global-proxy-image"]
+        global_proxy_init_image = image_config["global-proxy-init-image"]
 
         # Call istioctl install and set parameters based on image configuration
         subprocess.check_call(
