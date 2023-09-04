@@ -64,10 +64,10 @@ jobs:
   
       - name: Run integration tests
         run: |
-          juju add-model kubeflow
+          juju add-model test-istio
           # Using destructive mode because of https://github.com/canonical/charmcraft/issues/1132
           # and https://github.com/canonical/charmcraft/issues/1138
-          tox -e integration -- --model kubeflow --destructive-mode
+          tox -e integration -- --model test-istio --destructive-mode
         timeout-minutes: 80
   
       - name: Setup Debug Artifact Collection
@@ -95,13 +95,13 @@ jobs:
           kubectl describe gateways -A | tee tmp/kube-gateways.txt
           kubectl describe deployments -A | tee tmp/kube-deployments.txt
           kubectl describe replicasets -A | tee tmp/kubectl-replicasets.txt
-          kubectl exec -n kubeflow istio-pilot-0 --container charm -- agents/unit-istio-pilot-0/charm/istioctl analyze -n kubeflow | tee tmp/istioctl-analyze.txt
+          kubectl exec -n test-istio istio-pilot-0 --container charm -- agents/unit-istio-pilot-0/charm/istioctl analyze -n test-istio | tee tmp/istioctl-analyze.txt
   
       - name: Collect Kube logs
         if: failure()
         run: |
-          kubectl logs -n kubeflow --tail 1000 -lapp.kubernetes.io/name=istio-pilot -c charm | tee tmp/istio-pilot.log
-          kubectl logs -n kubeflow --tail 1000 -lapp.kubernetes.io/name=istio-ingressgateway-operator -c charm | tee tmp/istio-ingressgateway-operator.log
+          kubectl logs -n test-istio --tail 1000 -lapp.kubernetes.io/name=istio-pilot -c charm | tee tmp/istio-pilot.log
+          kubectl logs -n test-istio --tail 1000 -lapp.kubernetes.io/name=istio-ingressgateway-operator -c charm | tee tmp/istio-ingressgateway-operator.log
   
       - name: Upload debug artifacts
         if: failure()
