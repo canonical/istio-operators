@@ -21,7 +21,7 @@ jobs:
         charm-path: ./charms/${{ matrix.charm }}
   lint:
     name: Lint Code
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
         charm: [pilot, gateway]
@@ -32,7 +32,7 @@ jobs:
 
   unit:
     name: Unit Test
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
         charm: [pilot, gateway]
@@ -43,7 +43,7 @@ jobs:
 
   integration:
     name: Integration Test
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
         microk8s-versions:
@@ -112,7 +112,7 @@ jobs:
 
   integration-observability:
     name: Observability Integration Test
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
         microk8s-versions:
