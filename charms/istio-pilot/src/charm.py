@@ -183,7 +183,7 @@ class Operator(CharmBase):
                 "--set",
                 "profile=minimal",
                 "--set",
-                "values.global.istioNamespace=kubeflow",
+                f"values.global.istioNamespace={self.model.name}",
                 "--set",
                 f"values.pilot.image={pilot_image}",
                 "--set",
