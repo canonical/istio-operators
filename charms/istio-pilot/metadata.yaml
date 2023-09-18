@@ -4,6 +4,7 @@ summary: |
   Istio Service Mesh.
 description: |
   https://istio.io/latest/docs/reference/commands/pilot-discovery/
+docs: https://discourse.charmhub.io/t/11837
 provides:
   metrics-endpoint:
     interface: prometheus_scrape
