@@ -428,18 +428,24 @@ class TestCharmHelpers:
         assert harness.charm.model.unit.status == WaitingStatus("Waiting for leadership")
 
     @pytest.mark.parametrize(
-        "ssl_crt, ssl_key, expected_port, expected_context",
+        "cert_handler_enabled, ssl_cert, ssl_key, expected_port, expected_context",
         [
-            ("", "", GATEWAY_PORTS["http"], does_not_raise()),
-            ("x", "x", GATEWAY_PORTS["https"], does_not_raise()),
-            ("x", "", None, pytest.raises(ErrorWithStatus)),
-            ("", "x", None, pytest.raises(ErrorWithStatus)),
+            (False, "", "", GATEWAY_PORTS["http"], does_not_raise()),
+            (True, "x", "y", GATEWAY_PORTS["https"], does_not_raise()),
+            (True, "x", "", None, pytest.raises(ErrorWithStatus)),
+            (True, "", "y", None, pytest.raises(ErrorWithStatus)),
         ],
     )
-    def test_gateway_port(self, ssl_crt, ssl_key, expected_port, expected_context, harness):
+    def test_gateway_port(
+        self, cert_handler_enabled, ssl_cert, ssl_key, expected_port, expected_context, harness
+    ):
         """Tests that the gateway_port selection works as expected."""
         harness.begin()
-        harness.update_config({"ssl-crt": ssl_crt, "ssl-key": ssl_key})
+
+        harness.charm._cert_handler = MagicMock()
+        harness.charm._cert_handler.enabled = cert_handler_enabled
+        harness.charm._cert_handler.cert = ssl_cert
+        harness.charm._cert_handler.key = ssl_key
 
         with expected_context:
             gateway_port = harness.charm._gateway_port
@@ -678,6 +684,42 @@ class TestCharmHelpers:
             harness.charm._handle_istio_pilot_relation()
         assert "versions not found" in err.value.msg
 
+    def test_reconcile_gateway_with_tls(
+        self,
+        harness,
+        kubernetes_resource_handler_with_client_and_existing_gateway,
+    ):
+        """Test that reconcile_gateway works with TLS configuration."""
+
+        # Arrange
+        (
+            mocked_krh_class,
+            mocked_lightkube_client,
+            existing_gateway_name,
+        ) = kubernetes_resource_handler_with_client_and_existing_gateway
+
+        default_gateway = "my-gateway"
+        harness.update_config(
+            {
+                "default-gateway": default_gateway,
+            }
+        )
+
+        harness.begin()
+        harness.charm._cert_handler = MagicMock()
+        harness.charm._cert_handler.enabled = True
+        harness.charm._cert_handler.cert = "some-cert"
+        harness.charm._cert_handler.key = "some-key"
+
+        # Act
+        harness.charm._reconcile_gateway()
+
+        servers_dict = mocked_lightkube_client.apply.call_args.kwargs["obj"].spec["servers"][0][
+            "port"
+        ]
+        assert servers_dict["name"] == "https"
+        assert servers_dict["protocol"] == "HTTPS"
+
     def test_reconcile_gateway(
         self, harness, kubernetes_resource_handler_with_client_and_existing_gateway
     ):
@@ -690,13 +732,9 @@ class TestCharmHelpers:
         ) = kubernetes_resource_handler_with_client_and_existing_gateway
 
         default_gateway = "my-gateway"
-        ssl_crt = ""
-        ssl_key = ""
         harness.update_config(
             {
                 "default-gateway": default_gateway,
-                "ssl-crt": ssl_crt,
-                "ssl-key": ssl_key,
             }
         )
 
@@ -1005,26 +1043,6 @@ class TestCharmHelpers:
         for this_relation_info in relation_info:
             actual_data = harness.get_relation_data(this_relation_info["rel_id"], "istio-pilot")
             assert expected_data == actual_data
-
-    @pytest.mark.parametrize(
-        "ssl_crt, ssl_key, expected_return, expected_context",
-        [
-            ("", "", False, does_not_raise()),
-            ("x", "x", True, does_not_raise()),
-            ("x", "", None, pytest.raises(ErrorWithStatus)),
-            ("", "x", None, pytest.raises(ErrorWithStatus)),
-        ],
-    )
-    def test_use_https(self, ssl_crt, ssl_key, expected_return, expected_context, harness):
-        """Tests that the gateway_port selection works as expected.
-
-        Implicitly tests _use_https() as well.
-        """
-        harness.begin()
-        harness.update_config({"ssl-crt": ssl_crt, "ssl-key": ssl_key})
-
-        with expected_context:
-            assert harness.charm._use_https() == expected_return
 
     @pytest.mark.parametrize(
         "left, right, expected",

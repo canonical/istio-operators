@@ -23,3 +23,9 @@ pytest-mock
 pyyaml
 tenacity
 -r requirements.in
+
+# cryptography and jsonschema are required by the tls-certificates library
+# but those packages are installed from binary to avoid build time issues.
+# Adding them explicitly in these requirements as the unit tests need them.
+cryptography
+jsonschema
