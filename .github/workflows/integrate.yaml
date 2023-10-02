@@ -132,8 +132,6 @@ jobs:
       - name: Run observability integration tests
         run: |
           juju add-model cos-test
-          # Using destructive mode because of https://github.com/canonical/charmcraft/issues/1132
-          # and https://github.com/canonical/charmcraft/issues/1138
           tox -vve cos-integration -- --model cos-test
 
       - run: kubectl get pod/prometheus-k8s-0 -n knative-test -o=jsonpath='{.status}'
