@@ -60,14 +60,12 @@ jobs:
           channel: ${{ matrix.microk8s-versions }}
           microk8s-addons: "dns hostpath-storage rbac metallb:10.64.140.43-10.64.140.49"
           juju-channel: 3.1/stable
-          charmcraft-channel: latest/candidate
+          charmcraft-channel: latest/edge
   
       - name: Run integration tests
         run: |
           juju add-model test-istio
-          # Using destructive mode because of https://github.com/canonical/charmcraft/issues/1132
-          # and https://github.com/canonical/charmcraft/issues/1138
-          tox -e integration -- --model test-istio --destructive-mode
+          tox -e integration -- --model test-istio
         timeout-minutes: 80
   
       - name: Setup Debug Artifact Collection
@@ -76,8 +74,8 @@ jobs:
   
       - name: Collect charmcraft logs
         if: failure()
-        run: cat /home/runner/snap/charmcraft/common/cache/charmcraft/log/charmcraft-*.log
-          | tee tmp/charmcraft.log
+        run: |
+          cat /home/runner/.local/state/charmcraft/log/charmcraft-*.log | tee tmp/charmcraft.log
   
       - name: Collect Juju status
         if: failure()
@@ -129,14 +127,14 @@ jobs:
           channel: ${{ matrix.microk8s-versions }}
           microk8s-addons: "dns hostpath-storage rbac metallb:10.64.140.43-10.64.140.49"
           juju-channel: 3.1/stable
-          charmcraft-channel: latest/candidate
+          charmcraft-channel: latest/edge
  
       - name: Run observability integration tests
         run: |
           juju add-model cos-test
           # Using destructive mode because of https://github.com/canonical/charmcraft/issues/1132
           # and https://github.com/canonical/charmcraft/issues/1138
-          tox -vve cos-integration -- --model cos-test --destructive-mode
+          tox -vve cos-integration -- --model cos-test
 
       - run: kubectl get pod/prometheus-k8s-0 -n knative-test -o=jsonpath='{.status}'
         if: failure()
