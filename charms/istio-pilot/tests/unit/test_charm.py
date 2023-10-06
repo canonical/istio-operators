@@ -139,7 +139,7 @@ class TestCharmEvents:
     their handling, etc).
     """
 
-    def test_event_observing(self, harness, mocker):
+    def test_event_observing(self, harness, mocker, mocked_cert_subject):
         harness.begin()
         mocked_install = mocker.patch("charm.Operator.install")
         mocked_remove = mocker.patch("charm.Operator.remove")
@@ -183,7 +183,7 @@ class TestCharmEvents:
         assert isinstance(mocked_reconcile.call_args_list[3][0][0], RelationBrokenEvent)
         mocked_reconcile.reset_mock()
 
-    def test_not_leader(self, harness):
+    def test_not_leader(self, harness, mocked_cert_subject):
         """Assert that the charm does not perform any actions when not the leader."""
         harness.set_leader(False)
         harness.begin()
@@ -393,7 +393,10 @@ class TestCharmHelpers:
     """Directly test charm helpers and private methods."""
 
     def test_reconcile_handling_nonfatal_errors(
-        self, harness, all_operator_reconcile_handlers_mocked
+        self,
+        harness,
+        all_operator_reconcile_handlers_mocked,
+        mocked_cert_subject,
     ):
         """Test does a charm e2e simulation of a reconcile loop which handles non-fatal errors."""
         # Arrange
@@ -420,7 +423,11 @@ class TestCharmHelpers:
         mocks["_report_handled_errors"].assert_called_once()
         assert len(mocks["_report_handled_errors"].call_args.kwargs["errors"]) == 4
 
-    def test_reconcile_not_leader(self, harness):
+    def test_reconcile_not_leader(
+        self,
+        harness,
+        mocked_cert_subject,
+    ):
         """Assert that the reconcile handler does not perform any actions when not the leader."""
         harness.set_leader(False)
         harness.begin()
@@ -437,7 +444,14 @@ class TestCharmHelpers:
         ],
     )
     def test_gateway_port(
-        self, cert_handler_enabled, ssl_cert, ssl_key, expected_port, expected_context, harness
+        self,
+        cert_handler_enabled,
+        ssl_cert,
+        ssl_key,
+        expected_port,
+        expected_context,
+        harness,
+        mocked_cert_subject,
     ):
         """Tests that the gateway_port selection works as expected."""
         harness.begin()
@@ -467,6 +481,7 @@ class TestCharmHelpers:
         context_raised,
         harness,
         mocked_lightkube_client,
+        mocked_cert_subject,
     ):
         """Tests whether _is_gateway_object_up returns as expected."""
         mocked_lightkube_client.get.side_effect = lightkube_client_get_side_effect
@@ -489,7 +504,14 @@ class TestCharmHelpers:
             ("mock_loadbalancer_ip_service_not_ready", False),
         ],
     )
-    def test_is_gateway_service_up(self, mock_service_fixture, is_gateway_up, harness, request):
+    def test_is_gateway_service_up(
+        self,
+        mock_service_fixture,
+        is_gateway_up,
+        harness,
+        request,
+        mocked_cert_subject,
+    ):
         harness.begin()
 
         mock_get_gateway_service = MagicMock(
@@ -517,13 +539,18 @@ class TestCharmHelpers:
         gateway_address,
         harness,
         request,
+        mocked_cert_subject,
     ):
         """Test that the charm._gateway_address correctly returns gateway service IP/hostname."""
         mock_service = request.getfixturevalue(mock_service_fixture)
 
         assert _get_gateway_address_from_svc(svc=mock_service) is gateway_address
 
-    def test_get_ingress_auth_data(self, harness):
+    def test_get_ingress_auth_data(
+        self,
+        harness,
+        mocked_cert_subject,
+    ):
         """Tests that the _get_ingress_auth_data helper returns the correct relation data."""
         harness.begin()
         returned_data = add_ingress_auth_to_harness(harness)
@@ -532,14 +559,22 @@ class TestCharmHelpers:
 
         assert ingress_auth_data == returned_data["data"]
 
-    def test_get_ingress_auth_data_empty(self, harness):
+    def test_get_ingress_auth_data_empty(
+        self,
+        harness,
+        mocked_cert_subject,
+    ):
         """Tests that the _get_ingress_auth_data helper returns the correct relation data."""
         harness.begin()
         ingress_auth_data = harness.charm._get_ingress_auth_data("not-relation-broken-event")
 
         assert len(ingress_auth_data) == 0
 
-    def test_get_ingress_auth_data_too_many_relations(self, harness):
+    def test_get_ingress_auth_data_too_many_relations(
+        self,
+        harness,
+        mocked_cert_subject,
+    ):
         """Tests that the _get_ingress_auth_data helper raises on too many relations data."""
         harness.begin()
         add_ingress_auth_to_harness(harness, other_app="other1")
@@ -550,7 +585,11 @@ class TestCharmHelpers:
 
         assert "Multiple ingress-auth" in err.value.msg
 
-    def test_get_ingress_auth_data_waiting_on_version(self, harness):
+    def test_get_ingress_auth_data_waiting_on_version(
+        self,
+        harness,
+        mocked_cert_subject,
+    ):
         """Tests that the _get_ingress_auth_data helper raises on incomplete data."""
         harness.begin()
         harness.add_relation("ingress-auth", "other")
@@ -560,7 +599,7 @@ class TestCharmHelpers:
 
         assert "versions not found" in err.value.msg
 
-    def test_get_ingress_data(self, harness):
+    def test_get_ingress_data(self, harness, mocked_cert_subject):
         """Tests that the _get_ingress_data helper returns the correct relation data."""
         harness.begin()
         relation_info = [
@@ -577,7 +616,7 @@ class TestCharmHelpers:
             this_relation = harness.model.get_relation("ingress", i)
             assert ingress_data[(this_relation, this_relation.app)] == this_relation_info["data"]
 
-    def test_get_ingress_data_for_broken_event(self, harness):
+    def test_get_ingress_data_for_broken_event(self, harness, mocked_cert_subject):
         """Tests that _get_ingress_data helper returns the correct for a RelationBroken event."""
         harness.begin()
         relation_info = [
@@ -597,7 +636,7 @@ class TestCharmHelpers:
         this_relation = harness.model.get_relation("ingress", 0)
         assert ingress_data[(this_relation, this_relation.app)] == relation_info[0]["data"]
 
-    def test_get_ingress_data_for_broken_event_none_event_app(self, harness):
+    def test_get_ingress_data_for_broken_event_none_event_app(self, harness, mocked_cert_subject):
         """Tests _get_ingress_data helper logs on RelationBroken event when event.app is None."""
         harness.begin()
         # Check for data while pretending this is a RelationBrokenEvent for relation[1] of the
@@ -612,7 +651,7 @@ class TestCharmHelpers:
         harness.charm._get_ingress_data(mock_relation_broken_event)
         assert harness.charm.log.info.call_count == 1
 
-    def test_get_ingress_data_empty(self, harness):
+    def test_get_ingress_data_empty(self, harness, mocked_cert_subject):
         """Tests that the _get_ingress_data helper returns the correct empty relation data."""
         harness.begin()
         event = "not-a-relation-broken-event"
@@ -621,7 +660,7 @@ class TestCharmHelpers:
 
         assert len(ingress_data) == 0
 
-    def test_get_ingress_data_waiting_on_version(self, harness):
+    def test_get_ingress_data_waiting_on_version(self, harness, mocked_cert_subject):
         """Tests that the _get_ingress_data helper raises on incomplete data."""
         harness.begin()
         harness.add_relation("ingress", "other")
@@ -641,7 +680,7 @@ class TestCharmHelpers:
             (["other1", "other2", "other3"]),  # Multiple related applications
         ],
     )
-    def test_handle_istio_pilot_relation(self, related_applications, harness):
+    def test_handle_istio_pilot_relation(self, related_applications, harness, mocked_cert_subject):
         """Tests that the handle_istio_pilot_relation helper works as expected."""
         # Assert
         # Must be leader because we write to the application part of the relation data
@@ -673,7 +712,7 @@ class TestCharmHelpers:
             )
             assert expected_data == actual_data
 
-    def test_handle_istio_pilot_relation_waiting_on_version(self, harness):
+    def test_handle_istio_pilot_relation_waiting_on_version(self, harness, mocked_cert_subject):
         """Tests that the _handle_istio_pilot_relation helper raises on incomplete data."""
         # Arrange
         harness.add_relation("istio-pilot", "other")
@@ -688,6 +727,7 @@ class TestCharmHelpers:
         self,
         harness,
         kubernetes_resource_handler_with_client_and_existing_gateway,
+        mocked_cert_subject,
     ):
         """Test that reconcile_gateway works with TLS configuration."""
 
@@ -721,7 +761,10 @@ class TestCharmHelpers:
         assert servers_dict["protocol"] == "HTTPS"
 
     def test_reconcile_gateway(
-        self, harness, kubernetes_resource_handler_with_client_and_existing_gateway
+        self,
+        harness,
+        kubernetes_resource_handler_with_client_and_existing_gateway,
+        mocked_cert_subject,
     ):
         """Tests that reconcile_gateway works when expected."""
         # Arrange
@@ -774,6 +817,7 @@ class TestCharmHelpers:
         related_applications,
         harness,
         kubernetes_resource_handler_with_client_and_existing_virtualservice,
+        mocked_cert_subject,
     ):
         """Tests that _reconcile_ingress succeeds as expected.
 
@@ -817,7 +861,10 @@ class TestCharmHelpers:
             )
 
     def test_reconcile_ingress_update_existing_virtualservice(
-        self, harness, kubernetes_resource_handler_with_client_and_existing_virtualservice
+        self,
+        harness,
+        kubernetes_resource_handler_with_client_and_existing_virtualservice,
+        mocked_cert_subject,
     ):
         """Tests that _reconcile_ingress works as expected when there are no related applications.
 
@@ -864,7 +911,12 @@ class TestCharmHelpers:
             )
 
     @patch("charm.KubernetesResourceHandler", return_value=MagicMock())
-    def test_reconcile_ingress_auth(self, mocked_kubernetes_resource_handler_class, harness):
+    def test_reconcile_ingress_auth(
+        self,
+        mocked_kubernetes_resource_handler_class,
+        harness,
+        mocked_cert_subject,
+    ):
         """Tests that the _reconcile_ingress_auth helper succeeds when expected."""
         mocked_krh = mocked_kubernetes_resource_handler_class.return_value
         ingress_auth_data = {
@@ -882,7 +934,11 @@ class TestCharmHelpers:
     @patch("charm._remove_envoyfilter")
     @patch("charm.KubernetesResourceHandler", return_value=MagicMock())
     def test_reconcile_ingress_auth_no_auth(
-        self, _mocked_kubernetes_resource_handler_class, mocked_remove_envoyfilter, harness
+        self,
+        _mocked_kubernetes_resource_handler_class,
+        mocked_remove_envoyfilter,
+        harness,
+        mocked_cert_subject,
     ):
         """Tests that the _reconcile_ingress_auth removes the EnvoyFilter when expected."""
         ingress_auth_data = {}
@@ -893,7 +949,10 @@ class TestCharmHelpers:
         mocked_remove_envoyfilter.assert_called_once()
 
     def test_remove_gateway(
-        self, harness, kubernetes_resource_handler_with_client_and_existing_gateway
+        self,
+        harness,
+        kubernetes_resource_handler_with_client_and_existing_gateway,
+        mocked_cert_subject,
     ):
         """Tests that _remove_gateway works when expected.
 
@@ -926,7 +985,11 @@ class TestCharmHelpers:
         assert mocked_lightkube_client.delete.call_args.kwargs["name"] == existing_gateway_name
 
     @patch("charm.Client", return_value=MagicMock())
-    def test_remove_envoyfilter(self, mocked_lightkube_client_class):
+    def test_remove_envoyfilter(
+        self,
+        mocked_lightkube_client_class,
+        mocked_cert_subject,
+    ):
         """Test that _renove_envoyfilter works when expected."""
         name = "test"
         namespace = "test-namespace"
@@ -972,7 +1035,13 @@ class TestCharmHelpers:
             ([ErrorWithStatus("0", WaitingStatus)], WaitingStatus),
         ],
     )
-    def test_report_handled_errors(self, errors, expected_status_type, harness):
+    def test_report_handled_errors(
+        self,
+        errors,
+        expected_status_type,
+        harness,
+        mocked_cert_subject,
+    ):
         """Tests that _report_handled_errors notifies users of errors via status and logging."""
         # Arrange
         harness.begin()
@@ -1007,7 +1076,12 @@ class TestCharmHelpers:
     )
     @patch("charm.Operator._is_gateway_up", new_callable=PropertyMock)
     def test_send_gateway_info(
-        self, mocked_is_gateway_up, related_applications, gateway_status, harness
+        self,
+        mocked_is_gateway_up,
+        related_applications,
+        gateway_status,
+        harness,
+        mocked_cert_subject,
     ):
         """Tests that send_gateway_info handler for the gateway-info relation works as expected."""
         # Assert
@@ -1045,6 +1119,38 @@ class TestCharmHelpers:
             assert expected_data == actual_data
 
     @pytest.mark.parametrize(
+        "cert_handler_enabled, ssl_cert, ssl_key, expected_return, expected_context",
+        [
+            (False, "", "", False, does_not_raise()),
+            (True, "x", "y", True, does_not_raise()),
+            (True, "x", "", None, pytest.raises(ErrorWithStatus)),
+            (True, "", "y", None, pytest.raises(ErrorWithStatus)),
+        ],
+    )
+    def test_use_https(
+        self,
+        cert_handler_enabled,
+        ssl_cert,
+        ssl_key,
+        expected_return,
+        expected_context,
+        harness,
+        mocked_cert_subject,
+    ):
+        """Tests that the gateway_port selection works as expected.
+
+        Implicitly tests _use_https() as well.
+        """
+        harness.begin()
+        harness.charm._cert_handler = MagicMock()
+        harness.charm._cert_handler.enabled = cert_handler_enabled
+        harness.charm._cert_handler.cert = ssl_cert
+        harness.charm._cert_handler.key = ssl_key
+
+        with expected_context:
+            assert harness.charm._use_https() == expected_return
+
+    @pytest.mark.parametrize(
         "left, right, expected",
         [
             (True, False, True),
@@ -1057,7 +1163,11 @@ class TestCharmHelpers:
         """Test that the xor helper function works as expected."""
         assert _xor(left, right) is expected
 
-    def test_get_config(self, harness):
+    def test_get_config(
+        self,
+        harness,
+        mocked_cert_subject,
+    ):
         """Test configuration retrieval function."""
         harness.begin()
         image_config = harness.charm._get_image_config()
@@ -1078,6 +1188,7 @@ class TestCharmUpgrade:
         _mocked_validate_upgrade_version,
         mocked_wait_for_update_rollout,
         harness,
+        mocked_cert_subject,
     ):
         """Tests that charm.upgrade_charm works successfully when expected."""
         model_name = "test-model"
@@ -1107,6 +1218,7 @@ class TestCharmUpgrade:
         _mocked_istioctl_version,
         _mocked_validate_upgrade_version,
         harness,
+        mocked_cert_subject,
     ):
         """Tests that charm.upgrade_charm fails when precheck fails."""
         harness.begin()
@@ -1115,7 +1227,12 @@ class TestCharmUpgrade:
             harness.charm.upgrade_charm("mock_event")
 
     @patch("charm.Istioctl.version", side_effect=IstioctlError())
-    def test_upgrade_failed_getting_version(self, _mocked_istioctl_version, harness):
+    def test_upgrade_failed_getting_version(
+        self,
+        _mocked_istioctl_version,
+        harness,
+        mocked_cert_subject,
+    ):
         """Tests that charm.upgrade_charm fails when precheck fails."""
         harness.begin()
 
@@ -1125,7 +1242,11 @@ class TestCharmUpgrade:
     @patch("charm._validate_upgrade_version", side_effect=ValueError())  # Fail when validating
     @patch("charm.Istioctl.version")  # Pass istioctl version check
     def test_upgrade_failed_version_check(
-        self, _mocked_istioctl_version, _mocked_validate_upgrade_version, harness
+        self,
+        _mocked_istioctl_version,
+        _mocked_validate_upgrade_version,
+        harness,
+        mocked_cert_subject,
     ):
         """Tests that charm.upgrade_charm fails when precheck fails."""
         model_name = "test-model"
@@ -1137,7 +1258,12 @@ class TestCharmUpgrade:
             harness.charm.upgrade_charm("mock_event")
 
     @patch("charm.Istioctl.upgrade", side_effect=IstioctlError())  # Fail istioctl upgrade
-    def test_upgrade_failed_during_upgrade(self, _mocked_istioctl_upgrade, harness):
+    def test_upgrade_failed_during_upgrade(
+        self,
+        _mocked_istioctl_upgrade,
+        harness,
+        mocked_cert_subject,
+    ):
         """Tests that charm.upgrade_charm fails when upgrade process fails."""
         harness.begin()
 
@@ -1319,6 +1445,13 @@ def mocked_lightkube_client(mocked_lightkube_client_class):
 def mocked_lightkube_client_class(mocker):
     mocked = mocker.patch("charm.Client")
     yield mocked
+
+
+@pytest.fixture()
+def mocked_cert_subject(mocker):
+    mocked_cert_subject = mocker.patch("charm.Operator._cert_subject")
+    mocked_cert_subject.return_value = "gateway-address"
+    return mocked_cert_subject
 
 
 # Helpers
