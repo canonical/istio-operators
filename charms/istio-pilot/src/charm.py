@@ -386,6 +386,7 @@ class Operator(CharmBase):
         try:
             svc = self._get_gateway_service()
         except ApiError:
+            self.log.info("Could not retrieve the gateway service for configuring the CSR.")
             return None
         gateway_address = _get_gateway_address_from_svc(svc)
         if gateway_address:
@@ -758,8 +759,11 @@ class Operator(CharmBase):
         # that we want to configure TLS
         if _xor(self._cert_handler.cert, self._cert_handler.key):
             # Fail if ssl is only partly configured as this is probably a mistake
+            missing = "pkey"
+            if not self._cert_handler.cert:
+                missing = "CA cert"
             raise ErrorWithStatus(
-                "Missing CA cert/key, cannot configure TLS",
+                f"Missing {missing}, cannot configure TLS",
                 BlockedStatus,
             )
         if self._cert_handler.cert and self._cert_handler.key:
