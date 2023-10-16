@@ -98,4 +98,4 @@ def test_tls_configuration(lightkube_client, ops_test: OpsTest):
     assert servers_dict_port["protocol"] == "HTTPS"
 
     assert servers_dict_tls["mode"] == "SIMPLE"
-    assert servers_dict_tls["credentialName"] == secret.metadata["name"]
+    assert servers_dict_tls["credentialName"] == secret.metadata.name
