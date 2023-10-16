@@ -69,8 +69,8 @@ async def test_build_and_deploy_istio_charms(ops_test: OpsTest):
 
 
 @tenacity.retry(
-    stop=tenacity.stop_after_delay(200),
-    wait=tenacity.wait_exponential(multiplier=1, min=1, max=10),
+    stop=tenacity.stop_after_delay(50),
+    wait=tenacity.wait_exponential(multiplier=1, min=1, max=3),
     reraise=True,
 )
 @pytest.mark.abort_on_fail
