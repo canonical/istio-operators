@@ -147,7 +147,7 @@ async def test_deploy_bookinfo_example(ops_test: OpsTest):
         "kubectl",
         "create",
         "namespace",
-        bookinfo_namespace,
+        "bookinfo-namespace-2",
     )
 
     await ops_test.run(
