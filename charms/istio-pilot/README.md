@@ -17,7 +17,7 @@ This charm provides means to integrate with TLS certificates providers that help
 
 * For development or non-production environments, the istio-pilot charm can be related to the [self-signed-certificates-operator](https://github.com/canonical/self-signed-certificates-operator/tree/main).
 * For environments where certificates are managed by the organisation, the [tls-certificates-operator](https://github.com/canonical/tls-certificates-operator) can be used.
-* For deployments where it is desired to use ACME servers for validation (like Let's encrypt), you can use any of `httpreq-acme-operator`, `namecheap-acme-operator`, or [route53-acme-operator](https://github.com/canonical/route53-acme-operator).
+* For deployments where it is desired to use ACME servers for validation (like Let's encrypt), you can use any of [httpreq-acme-operator](https://github.com/canonical/httpreq-acme-operator), [namecheap-acme-operator](https://github.com/canonical/namecheap-acme-operator), or [route53-acme-operator](https://github.com/canonical/route53-acme-operator).
 
 ```bash
 juju relate istio-pilot:certificates <TLS certificates providers>:certificates
