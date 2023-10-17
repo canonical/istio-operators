@@ -49,6 +49,9 @@ jobs:
         microk8s-versions:
           - 1.25-strict/stable
           - 1.26-strict/stable
+        integration-types:
+          - integration
+          - integration-tls
     steps:
       - name: Check out repo
         uses: actions/checkout@v3
@@ -65,7 +68,7 @@ jobs:
       - name: Run integration tests
         run: |
           juju add-model test-istio
-          tox -e integration -- --model test-istio
+          tox -e ${{ matrix.integration-types }} -- --model test-istio
         timeout-minutes: 80
   
       - name: Setup Debug Artifact Collection

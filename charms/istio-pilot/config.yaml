@@ -19,17 +19,3 @@ options:
     type: string
     default: istio-ingressgateway-workload
     description: Name of the service created by istio-gateway to use as a Gateway
-  ssl-crt:
-    type: string
-    default: ''
-    description: |
-        Base-64 certificate output. Can be set as follows:
-          $ juju config ssl-crt="$(cat CERT_FILE | base64 -w0)"
-        or on the bundle with: "include-base64://"
-  ssl-key:
-    type: string
-    default: ''
-    description: |
-        Base-64 key output. Can be set as follows:
-          $ juju config ssl-key="$(cat CERT_FILE | base64 -w0)"
-        or on the bundle with: "include-base64://"

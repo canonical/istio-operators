@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import base64
 import logging
 import subprocess
 from typing import List, Optional
@@ -17,6 +18,7 @@ from charms.istio_pilot.v0.istio_gateway_info import (
     DEFAULT_RELATION_NAME as GATEWAY_INFO_RELATION_NAME,
 )
 from charms.istio_pilot.v0.istio_gateway_info import GatewayProvider
+from charms.observability_libs.v0.cert_handler import CertHandler
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from lightkube import Client
 from lightkube.core.exceptions import ApiError
@@ -92,6 +94,18 @@ class Operator(CharmBase):
 
         self.log = logging.getLogger(__name__)
         self._field_manager = "lightkube"
+
+        # Instantiate a CertHandler
+        self._cert_handler = CertHandler(
+            self,
+            key="istio-cert",
+            peer_relation_name="peers",
+            cert_subject=self._cert_subject,
+        )
+
+        # Observe this custom event emitted by the cert_handler library on certificate
+        # available, revoked, invalidated, or if the certs relation is broken
+        self.framework.observe(self._cert_handler.on.cert_changed, self.reconcile)
 
         # Event handling for managing the Istio control plane
         self.framework.observe(self.on.install, self.install)
@@ -367,6 +381,18 @@ class Operator(CharmBase):
             raise ErrorWithStatus("Waiting for leadership", WaitingStatus)
 
     @property
+    def _cert_subject(self):
+        """Return the domain to be used in the CSR."""
+        try:
+            svc = self._get_gateway_service()
+        except ApiError:
+            self.log.info("Could not retrieve the gateway service for configuring the CSR.")
+            return None
+        gateway_address = _get_gateway_address_from_svc(svc)
+        if gateway_address:
+            return gateway_address
+
+    @property
     def _gateway_port(self):
         if self._use_https():
             return GATEWAY_PORTS["https"]
@@ -520,28 +546,26 @@ class Operator(CharmBase):
         )
 
     def _reconcile_gateway(self):
-        """Creates or updates the Gateway resources.
-
-        If secured with TLS, this also deploys a secret with the certificate and key.
-        """
-        # Secure the gateway, if enabled
-        use_https = self._use_https()
-
-        if use_https:
-            ssl_crt = self.model.config["ssl-crt"]
-            ssl_key = self.model.config["ssl-key"]
-        else:
-            ssl_crt = None
-            ssl_key = None
-
+        """Creates or updates the Gateway resources."""
         context = {
             "gateway_name": self._gateway_name,
             "namespace": self._gateway_namespace,
             "port": self._gateway_port,
-            "ssl_crt": ssl_crt,
-            "ssl_key": ssl_key,
-            "secure": use_https,
+            "ssl_crt": None,
+            "ssl_key": None,
+            "secure": False,
         }
+
+        # Secure the gateway, if certificates relation is enabled and
+        # both the CA cert and key are provided
+        if self._use_https():
+            context["ssl_crt"] = base64.b64encode(self._cert_handler.cert.encode("ascii")).decode(
+                "utf-8"
+            )
+            context["ssl_key"] = base64.b64encode(self._cert_handler.key.encode("ascii")).decode(
+                "utf-8"
+            )
+            context["secure"] = True
 
         krh = KubernetesResourceHandler(
             field_manager=self._field_manager,
@@ -727,6 +751,24 @@ class Operator(CharmBase):
         else:
             return exporter_ip
 
+    def _use_https(self):
+        if not self._cert_handler.enabled:
+            return False
+
+        # If the certificates relation is established, we can assume
+        # that we want to configure TLS
+        if _xor(self._cert_handler.cert, self._cert_handler.key):
+            # Fail if ssl is only partly configured as this is probably a mistake
+            missing = "pkey"
+            if not self._cert_handler.cert:
+                missing = "CA cert"
+            raise ErrorWithStatus(
+                f"Missing {missing}, cannot configure TLS",
+                BlockedStatus,
+            )
+        if self._cert_handler.cert and self._cert_handler.key:
+            return True
+
     def _log_and_set_status(self, status):
         """Sets the status of the charm and logs the status message.
 
@@ -745,18 +787,6 @@ class Operator(CharmBase):
         }
 
         log_destination_map[type(status)](status.message)
-
-    def _use_https(self):
-        if _xor(self.model.config["ssl-crt"], self.model.config["ssl-key"]):
-            # Fail if ssl is only partly configured as this is probably a mistake
-            raise ErrorWithStatus(
-                "Charm config for ssl-crt and ssl-key must either both be set or unset",
-                BlockedStatus,
-            )
-        if self.model.config["ssl-crt"] and self.model.config["ssl-key"]:
-            return True
-        else:
-            return False
 
 
 def _get_gateway_address_from_svc(svc):

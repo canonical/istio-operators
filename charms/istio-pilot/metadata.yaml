@@ -94,5 +94,14 @@ provides:
     interface: istio-gateway-info
     description: |
       Provides gateway name related Juju application
+requires:
+  certificates:
+    interface: tls-certificates
+    limit: 1
+    description: |
+      Obtain a signed certificate from an external CA.
+peers:
+  peers:
+    interface: istio_pilot_peers
 assumes:
 - juju >= 2.9.0
