@@ -11,6 +11,21 @@ juju deploy istio-pilot --trust
 juju deploy istio-gateway --trust --config kind=ingress istio-ingressgateway
 juju relate istio-pilot istio-ingressgateway
 ```
+## Enable TLS ingress gateway for a single host
+
+This charm provides means to integrate with TLS certificates providers that help with this configuration. The following can be used as TLS certificates providers depending on the use case or security requirements of an organisation:
+
+* For development or non-production environments, the istio-pilot charm can be related to the [self-signed-certificates-operator](https://github.com/canonical/self-signed-certificates-operator/tree/main).
+* For environments where certificates are managed by the organisation, the [tls-certificates-operator](https://github.com/canonical/tls-certificates-operator) can be used.
+* For deployments where it is desired to use ACME servers for validation (like Let's encrypt), you can use any of [httpreq-acme-operator](https://github.com/canonical/httpreq-acme-operator), [namecheap-acme-operator](https://github.com/canonical/namecheap-acme-operator), or [route53-acme-operator](https://github.com/canonical/route53-acme-operator).
+
+```bash
+juju relate istio-pilot:certificates <TLS certificates providers>:certificates
+```
+
+> Please refer to the [Secure your charm deployments with X.509 certificates](https://charmhub.io/topics/secure-your-charm-deployments-with-x-509-certificates) entry to understand the different use cases and TLS certificates providers offerings.
+
+> Please refer to the official documentation for more details about the [TLS ingress gateway for a single host](https://istio.io/latest/docs/tasks/traffic-management/ingress/secure-ingress/#configure-a-tls-ingress-gateway-for-a-single-host).
 
 ## Upgrading istio-pilot
 
