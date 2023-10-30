@@ -240,8 +240,13 @@ class TestCharmEvents:
         mocked_remove_gateway.assert_called_once
         mocked_remove_gateway.reset_mock()
 
-        assert harness.charm.model.unit.status == WaitingStatus("Execution handled 1 errors.  See logs for details.")
-        assert "Handled error 0/1: WaitingStatus('Waiting for the auth provider data.')" in harness.charm.log.info.call_args.args
+        assert harness.charm.model.unit.status == WaitingStatus(
+            "Execution handled 1 errors.  See logs for details."
+        )
+        assert (
+            "Handled error 0/1: WaitingStatus('Waiting for the auth provider data.')"
+            in harness.charm.log.info.call_args.args
+        )
 
         # Remove ingress_auth relation and check that we re-add the gateway
         harness.remove_relation(rel_id)
@@ -551,7 +556,7 @@ class TestCharmHelpers:
         rel_id = harness.add_relation("ingress-auth", "other")
         add_data_to_sdi_relation(harness, rel_id, "other", {})
         with pytest.raises(ErrorWithStatus) as err:
-            ingress_auth_data = harness.charm._get_ingress_auth_data("not-relation-broken-event")
+            harness.charm._get_ingress_auth_data("not-relation-broken-event")
 
         assert err.value.status_type.name == "waiting"
         assert "Waiting for the auth provider data." == err.value.msg
