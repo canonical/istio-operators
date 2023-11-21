@@ -581,7 +581,7 @@ class TestCharmHelpers:
 
         assert len(ingress_auth_data) == 0
 
-    def test_get_ingress_auth_data_empty_error(self, harness):
+    def test_get_ingress_auth_data_empty_error(self, harness, mocked_lightkube_client):
         """Tests that the _get_ingress_auth_data helper returns the correct relation data."""
         harness.begin()
         rel_id = harness.add_relation("ingress-auth", "other")
