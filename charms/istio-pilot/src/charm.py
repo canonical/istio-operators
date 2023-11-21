@@ -439,6 +439,10 @@ class Operator(CharmBase):
                 if app != self.app
             }
 
+            # Go into waiting status if there is no ingress-auth data
+            if not ingress_auth_data:
+                raise ErrorWithStatus("Waiting for the auth provider data.", WaitingStatus)
+
             # We only support a single ingress-auth relation, so we can unpack and return just the
             # contents
             if len(ingress_auth_data) > 1:

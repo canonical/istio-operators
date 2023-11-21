@@ -216,6 +216,8 @@ class TestCharmEvents:
 
         harness.begin()
 
+        harness.charm.log = MagicMock()
+
         # Do a reconcile
         harness.charm.on.config_changed.emit()
 
@@ -228,8 +230,17 @@ class TestCharmEvents:
 
         # Add "broken" ingress_auth (empty data) and check that we remove the gateway
         rel_id = harness.add_relation("ingress-auth", "other")
+        add_data_to_sdi_relation(harness, rel_id, "other", {})
         mocked_remove_gateway.assert_called_once
         mocked_remove_gateway.reset_mock()
+
+        assert harness.charm.model.unit.status == WaitingStatus(
+            "Execution handled 1 errors.  See logs for details."
+        )
+        assert (
+            "Handled error 0/1: WaitingStatus('Waiting for the auth provider data.')"
+            in harness.charm.log.info.call_args.args
+        )
 
         # Remove ingress_auth relation and check that we re-add the gateway
         harness.remove_relation(rel_id)
@@ -569,6 +580,17 @@ class TestCharmHelpers:
         ingress_auth_data = harness.charm._get_ingress_auth_data("not-relation-broken-event")
 
         assert len(ingress_auth_data) == 0
+
+    def test_get_ingress_auth_data_empty_error(self, harness, mocked_lightkube_client):
+        """Tests that the _get_ingress_auth_data helper returns the correct relation data."""
+        harness.begin()
+        rel_id = harness.add_relation("ingress-auth", "other")
+        add_data_to_sdi_relation(harness, rel_id, "other", {})
+        with pytest.raises(ErrorWithStatus) as err:
+            harness.charm._get_ingress_auth_data("not-relation-broken-event")
+
+        assert err.value.status_type.name == "waiting"
+        assert "Waiting for the auth provider data." == err.value.msg
 
     def test_get_ingress_auth_data_too_many_relations(
         self,
