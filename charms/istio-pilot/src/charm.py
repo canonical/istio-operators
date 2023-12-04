@@ -2,7 +2,6 @@
 
 import base64
 import logging
-import subprocess
 from typing import List, Optional
 
 import tenacity
@@ -66,6 +65,11 @@ KRH_INGRESS_SCOPE = "ingress"
 VIRTUAL_SERVICE_TEMPLATE_FILES = ["src/manifests/virtual_service.yaml.j2"]
 ISTIOCTL_PATH = "./istioctl"
 ISTIOCTL_DEPOYMENT_PROFILE = "minimal"
+INSTALL_FAILED_MSG = (
+    "Failed to install Istio Control Plane."
+    "{message} Make sure the cluster has no Istio installations already present and "
+    "that you have provided the right configuration values."
+)
 UPGRADE_FAILED_MSG = (
     "Failed to upgrade Istio.  {message}  To recover Istio, see [the upgrade docs]"
     "(https://github.com/canonical/istio-operators/blob/main/charms/istio-pilot/README.md) for "
@@ -178,6 +182,7 @@ class Operator(CharmBase):
 
     def install(self, _):
         """Install charm."""
+
         self._log_and_set_status(MaintenanceStatus("Deploying Istio control plane"))
 
         image_config = self._get_image_config()
@@ -187,28 +192,35 @@ class Operator(CharmBase):
         global_proxy_image = image_config["global-proxy-image"]
         global_proxy_init_image = image_config["global-proxy-init-image"]
 
-        # Call istioctl install and set parameters based on image configuration
-        subprocess.check_call(
-            [
-                "./istioctl",
-                "install",
-                "-y",
-                "--set",
-                "profile=minimal",
-                "--set",
-                f"values.global.istioNamespace={self.model.name}",
-                "--set",
-                f"values.pilot.image={pilot_image}",
-                "--set",
-                f"values.global.tag={global_tag}",
-                "--set",
-                f"values.global.hub={global_hub}",
-                "--set",
-                f"values.global.proxy.image={global_proxy_image}",
-                "--set",
-                f"values.global.proxy_init.image={global_proxy_init_image}",
-            ]
+        # Generate extra flags to pass to the istioctl install command
+        istioctl_extra_flags = [
+            "--set",
+            f"values.pilot.image={pilot_image}",
+            "--set",
+            f"values.global.tag={global_tag}",
+            "--set",
+            f"values.global.hub={global_hub}",
+            "--set",
+            f"values.global.proxy.image={global_proxy_image}",
+            "--set",
+            f"values.global.proxy_init.image={global_proxy_init_image}",
+        ]
+
+        # Call the istioctl wrapper to install the Istio Control Plane
+        istioctl = Istioctl(
+            ISTIOCTL_PATH,
+            self.model.name,
+            ISTIOCTL_DEPOYMENT_PROFILE,
+            istioctl_extra_flags=istioctl_extra_flags,
         )
+
+        try:
+            istioctl.install()
+        except IstioctlError as e:
+            self.log.error(INSTALL_FAILED_MSG.format(message="istioctl install failed"))
+            raise GenericCharmRuntimeError(
+                "Failed to install control plane. See juju debug-log for details."
+            ) from e
 
         self.unit.status = ActiveStatus()
 

@@ -1,5 +1,6 @@
 import logging
 import subprocess
+from typing import List, Optional
 
 import lightkube.resources.policy_v1  # noqa: F401
 import yaml
@@ -11,7 +12,11 @@ class IstioctlError(Exception):
 
 class Istioctl:
     def __init__(
-        self, istioctl_path: str, namespace: str = "istio-system", profile: str = "minimal"
+        self,
+        istioctl_path: str,
+        namespace: str = "istio-system",
+        profile: str = "minimal",
+        istioctl_extra_flags: Optional[List[str]] = [],
     ):
         """Wrapper for the istioctl binary.
 
@@ -19,6 +24,7 @@ class Istioctl:
         and other istioctl commands.
 
         Args:
+            istioctl_extra_flags (optional, list): A list containing extra flags to pass to istioctl
             istioctl_path (str): Path to the istioctl binary to be wrapped
             namespace (str): The namespace to install Istio into
             profile (str): The Istio profile to use for installation or upgrades
@@ -26,19 +32,30 @@ class Istioctl:
         self._istioctl_path = istioctl_path
         self._namespace = namespace
         self._profile = profile
+        self._istioctl_extra_flags = istioctl_extra_flags
 
     @property
     def _istioctl_flags(self):
-        return [
-            "-s",
+        istioctl_flags = [
+            "--set",
             f"profile={self._profile}",
-            "-s",
+            "--set",
             f"values.global.istioNamespace={self._namespace}",
         ]
+        istioctl_flags.extend(self._istioctl_extra_flags)
+        return istioctl_flags
 
     def install(self):
         """Wrapper for the `istioctl install` command."""
+        install_msg = (
+            "Installing the Istio Control Plane with the following settings:\n"
+            "Profile: {self._profile}\n"
+            "Namespace: {self._namespace}\n"
+            "Istioctl extra flags: {self._istioctl_extra_flags}"
+        )
+
         try:
+            logging.info(install_msg)
             subprocess.check_call([self._istioctl_path, "install", "-y", *self._istioctl_flags])
         except subprocess.CalledProcessError as cpe:
             error_msg = f"Failed to install istio using istioctl.  Exit code: {cpe.returncode}."
