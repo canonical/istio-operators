@@ -16,7 +16,7 @@ class Istioctl:
         istioctl_path: str,
         namespace: str = "istio-system",
         profile: str = "minimal",
-        istioctl_extra_flags: Optional[List[str]] = [],
+        istioctl_extra_flags: Optional[List[str]] = None,
     ):
         """Wrapper for the istioctl binary.
 
@@ -24,15 +24,17 @@ class Istioctl:
         and other istioctl commands.
 
         Args:
-            istioctl_extra_flags (optional, list): A list containing extra flags to pass to istioctl
             istioctl_path (str): Path to the istioctl binary to be wrapped
             namespace (str): The namespace to install Istio into
             profile (str): The Istio profile to use for installation or upgrades
+            istioctl_extra_flags (optional, list): A list containing extra flags to pass to istioctl
         """
         self._istioctl_path = istioctl_path
         self._namespace = namespace
         self._profile = profile
-        self._istioctl_extra_flags = istioctl_extra_flags
+        self._istioctl_extra_flags = (
+            istioctl_extra_flags if istioctl_extra_flags is not None else []
+        )
 
     @property
     def _istioctl_flags(self):
@@ -42,7 +44,8 @@ class Istioctl:
             "--set",
             f"values.global.istioNamespace={self._namespace}",
         ]
-        istioctl_flags.extend(self._istioctl_extra_flags)
+        if self._istioctl_extra_flags:
+            istioctl_flags.extend(self._istioctl_extra_flags)
         return istioctl_flags
 
     def install(self):

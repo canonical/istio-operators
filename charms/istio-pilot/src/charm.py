@@ -66,7 +66,7 @@ VIRTUAL_SERVICE_TEMPLATE_FILES = ["src/manifests/virtual_service.yaml.j2"]
 ISTIOCTL_PATH = "./istioctl"
 ISTIOCTL_DEPOYMENT_PROFILE = "minimal"
 INSTALL_FAILED_MSG = (
-    "Failed to install Istio Control Plane."
+    "Failed to install Istio Control Plane. "
     "{message} Make sure the cluster has no Istio installations already present and "
     "that you have provided the right configuration values."
 )
@@ -217,7 +217,7 @@ class Operator(CharmBase):
         try:
             istioctl.install()
         except IstioctlError as e:
-            self.log.error(INSTALL_FAILED_MSG.format(message="istioctl install failed"))
+            self.log.error(INSTALL_FAILED_MSG.format(message=str(e)))
             raise GenericCharmRuntimeError(
                 "Failed to install control plane. See juju debug-log for details."
             ) from e
