@@ -1,4 +1,12 @@
 options:
+  cni-bin-dir:
+    type: string
+    default: ''
+    description: Path to CNI binaries, e.g. /opt/cni/bin. This configuration option will only work when first deploying istio.
+  cni-conf-dir:
+    type: string
+    default: ''
+    description: Path to conflist files describing the CNI configuration, e.g. /etc/cni/net.d. This configuration option will only work when first deploying istio.
   default-gateway:
     type: string
     default: istio-gateway

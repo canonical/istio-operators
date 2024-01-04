@@ -180,11 +180,9 @@ class Operator(CharmBase):
         image_config = yaml.safe_load(self.model.config[IMAGE_CONFIGURATION])
         return image_config
 
-    def install(self, _):
-        """Install charm."""
-
-        self._log_and_set_status(MaintenanceStatus("Deploying Istio control plane"))
-
+    @property
+    def _istioctl_extra_flags(self):
+        """Return extra flags to pass to istioctl commands."""
         image_config = self._get_image_config()
         pilot_image = image_config["pilot-image"]
         global_tag = image_config["global-tag"]
@@ -192,8 +190,10 @@ class Operator(CharmBase):
         global_proxy_image = image_config["global-proxy-image"]
         global_proxy_init_image = image_config["global-proxy-init-image"]
 
-        # Generate extra flags to pass to the istioctl install command
-        istioctl_extra_flags = [
+        # Extra flags to pass to the istioctl install command
+        # These flags will configure the container images used by the control plane
+        # and also configure the CNI plugin behaviour
+        extra_flags = [
             "--set",
             f"values.pilot.image={pilot_image}",
             "--set",
@@ -206,12 +206,48 @@ class Operator(CharmBase):
             f"values.global.proxy_init.image={global_proxy_init_image}",
         ]
 
+        if self._check_cni_configurations():
+            extra_flags.extend(
+                [
+                    "--set",
+                    "components.cni.enabled=true",
+                    "--set",
+                    f"values.cni.cniBinDir={self.model.config['cni-bin-dir']}",
+                    "--set",
+                    f"values.cni.cniConfDir={self.model.config['cni-conf-dir']}",
+                    "--set",
+                    "values.sidecarInjectorWebhook.injectedAnnotations.traffic\.sidecar\.istio\.io/excludeOutboundIPRanges=0.0.0.0/0",  # noqa
+                ]
+            )
+        return extra_flags
+
+    def install(self, _):
+        """Install charm."""
+        install_message = "Deploying Istio control plane with Istio CNI plugin."
+
+        # Verify the CNI configurations are set, otherwise we cannot continue with the
+        # Control Plane installation. Deferring the event is the only way we can prevent
+        # an attempt to install the Control Plane w/o these required values.
+        if not self._check_cni_configurations():
+            self.log.warning(
+                "This version of istio-pilot requires the cni-bin-dir and cni-conf-dir "
+                "configurations to be set in order to enable the Istio CNI plugin. "
+                "The installation with the Istio CNI plugin will be skipped. "
+                "If you want to enable this feature, please provide the required configuration."
+            )
+            install_message = (
+                "Deploying Istio control plane without Istio CNI plugin. "
+                "See juju-debug logs for more details."
+            )
+
+        self._log_and_set_status(MaintenanceStatus(install_message))
+
         # Call the istioctl wrapper to install the Istio Control Plane
         istioctl = Istioctl(
             ISTIOCTL_PATH,
             self.model.name,
             ISTIOCTL_DEPOYMENT_PROFILE,
-            istioctl_extra_flags=istioctl_extra_flags,
+            istioctl_extra_flags=self._istioctl_extra_flags,
         )
 
         try:
@@ -250,6 +286,13 @@ class Operator(CharmBase):
         # This charm may hit multiple, non-fatal errors during the reconciliation.  Collect them
         # so that we can report them at the end.
         handled_errors = []
+
+        # Call upgrade_charm in case there are new configurations that affect the control plane
+        # This is useful when there is a missing configuration during the install process
+        try:
+            self.upgrade_charm(event)
+        except GenericCharmRuntimeError as err:
+            handled_errors.append(err)
 
         # Send istiod information to the istio-pilot relation
         try:
@@ -319,8 +362,29 @@ class Operator(CharmBase):
 
         Supports upgrade of exactly one minor version at a time.
         """
-        istioctl = Istioctl(ISTIOCTL_PATH, self.model.name, ISTIOCTL_DEPOYMENT_PROFILE)
-        self._log_and_set_status(MaintenanceStatus("Upgrading Istio"))
+        upgrade_message = "Upgrading Istio control plane."
+        # Verify the CNI configurations are set, otherwise we cannot continue with the
+        # Control Plane installation. Deferring the event is the only way we can prevent
+        # an attempt to install the Control Plane w/o these required values.
+        if not self._check_cni_configurations():
+            self.log.warning(
+                "This version of istio-pilot requires the cni-bin-dir and cni-conf-dir "
+                "configurations to be set in order to enable the Istio CNI plugin. "
+                "The installation with the Istio CNI plugin will be skipped. "
+                "If you want to enable this feature, please provide the required configuration."
+            )
+            upgrade_message = (
+                "Upgrading Istio control plan without Istio CNI plugin. "
+                "See `juju debug-log` for details."
+            )
+
+        istioctl = Istioctl(
+            ISTIOCTL_PATH,
+            self.model.name,
+            ISTIOCTL_DEPOYMENT_PROFILE,
+            istioctl_extra_flags=self._istioctl_extra_flags,
+        )
+        self._log_and_set_status(MaintenanceStatus(upgrade_message))
 
         # Check for version compatibility for the upgrade
         try:
@@ -803,6 +867,12 @@ class Operator(CharmBase):
         }
 
         log_destination_map[type(status)](status.message)
+
+    def _check_cni_configurations(self) -> bool:
+        """Return True if the necessary CNI configuration options are set, False otherwise."""
+        if self.model.config["cni-conf-dir"] and self.model.config["cni-bin-dir"]:
+            return True
+        return False
 
 
 def _get_gateway_address_from_svc(svc):
