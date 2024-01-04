@@ -44,8 +44,7 @@ class Istioctl:
             "--set",
             f"values.global.istioNamespace={self._namespace}",
         ]
-        if self._istioctl_extra_flags:
-            istioctl_flags.extend(self._istioctl_extra_flags)
+        istioctl_flags.extend(self._istioctl_extra_flags)
         return istioctl_flags
 
     def install(self):
