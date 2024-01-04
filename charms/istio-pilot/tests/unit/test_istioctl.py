@@ -13,13 +13,19 @@ NAMESPACE = "dummy-namespace"
 PROFILE = "my-profile"
 TEST_DATA_PATH = Path("./tests/unit/istioctl_data/")
 EXAMPLE_MANIFEST = TEST_DATA_PATH / "example_manifest.yaml"
+EXPECTED_ISTIOCTL_FLAGS = [
+    "--set",
+    f"profile={PROFILE}",
+    "--set",
+    f"values.global.istioNamespace={NAMESPACE}",
+]
 
 
 # autouse to ensure we don't accidentally call out, but
 # can also be used explicitly to get access to the mock.
 @pytest.fixture(autouse=True)
 def mocked_check_call(mocker):
-    mocked_check_call = mocker.patch("charm.subprocess.check_call")
+    mocked_check_call = mocker.patch("subprocess.check_call")
     mocked_check_call.return_value = 0
 
     yield mocked_check_call
@@ -29,7 +35,7 @@ def mocked_check_call(mocker):
 # can also be used explicitly to get access to the mock.
 @pytest.fixture(autouse=True)
 def mocked_check_output(mocker):
-    mocked_check_output = mocker.patch("charm.subprocess.check_output")
+    mocked_check_output = mocker.patch("subprocess.check_output")
     mocked_check_output.return_value = "stdout"
 
     yield mocked_check_output
@@ -53,7 +59,7 @@ def mocked_check_output_failing(mocked_check_output):
     yield mocked_check_output
 
 
-def test_istioctl_install(mocked_check_call):
+def test_istioctl_install_no_extra_flags(mocked_check_call):
     """Tests that istioctl.install() calls the binary successfully with the expected arguments."""
     ictl = Istioctl(istioctl_path=ISTIOCTL_BINARY, namespace=NAMESPACE, profile=PROFILE)
 
@@ -64,11 +70,32 @@ def test_istioctl_install(mocked_check_call):
         ISTIOCTL_BINARY,
         "install",
         "-y",
-        "-s",
-        f"profile={PROFILE}",
-        "-s",
-        f"values.global.istioNamespace={NAMESPACE}",
     ]
+    expected_call_args.extend(EXPECTED_ISTIOCTL_FLAGS)
+
+    mocked_check_call.assert_called_once_with(expected_call_args)
+
+
+def test_istioctl_install_extra_flags(mocked_check_call):
+    """Tests that istioctl.install() calls the binary successfully with the expected arguments."""
+    extra_flags = ["--set", "some-flag"]
+    ictl = Istioctl(
+        istioctl_path=ISTIOCTL_BINARY,
+        namespace=NAMESPACE,
+        profile=PROFILE,
+        istioctl_extra_flags=extra_flags,
+    )
+
+    ictl.install()
+
+    # Assert that we call istioctl with the expected arguments
+    expected_call_args = [
+        ISTIOCTL_BINARY,
+        "install",
+        "-y",
+    ]
+    expected_call_args.extend(EXPECTED_ISTIOCTL_FLAGS)
+    expected_call_args.extend(extra_flags)
 
     mocked_check_call.assert_called_once_with(expected_call_args)
 
@@ -92,11 +119,8 @@ def test_istioctl_manifest(mocked_check_output):
         ISTIOCTL_BINARY,
         "manifest",
         "generate",
-        "-s",
-        f"profile={PROFILE}",
-        "-s",
-        f"values.global.istioNamespace={NAMESPACE}",
     ]
+    expected_call_args.extend(EXPECTED_ISTIOCTL_FLAGS)
 
     mocked_check_output.assert_called_once_with(expected_call_args)
 
@@ -158,17 +182,14 @@ def test_istioctl_upgrade(mocked_check_output):
 
     ictl.upgrade()
 
-    mocked_check_output.assert_called_once_with(
-        [
-            ISTIOCTL_BINARY,
-            "upgrade",
-            "-y",
-            "-s",
-            f"profile={PROFILE}",
-            "-s",
-            f"values.global.istioNamespace={NAMESPACE}",
-        ]
-    )
+    expected_call_args = [
+        ISTIOCTL_BINARY,
+        "upgrade",
+        "-y",
+    ]
+    expected_call_args.extend(EXPECTED_ISTIOCTL_FLAGS)
+
+    mocked_check_output.assert_called_once_with(expected_call_args)
 
 
 def test_istioctl_upgrade_error(mocked_check_output_failing):

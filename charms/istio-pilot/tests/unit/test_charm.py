@@ -1306,7 +1306,7 @@ class TestCharmUpgrade:
         harness,
         mocked_cert_subject,
     ):
-        """Tests that charm.upgrade_charm fails when precheck fails."""
+        """Tests that charm.upgrade_charm fails when getting version fails."""
         harness.begin()
 
         with pytest.raises(GenericCharmRuntimeError):
@@ -1321,7 +1321,7 @@ class TestCharmUpgrade:
         harness,
         mocked_cert_subject,
     ):
-        """Tests that charm.upgrade_charm fails when precheck fails."""
+        """Tests that charm.upgrade_charm fails when version check fails."""
         model_name = "test-model"
         harness.set_model_name(model_name)
 
@@ -1330,14 +1330,20 @@ class TestCharmUpgrade:
         with pytest.raises(GenericCharmRuntimeError):
             harness.charm.upgrade_charm("mock_event")
 
+    @patch("charm._validate_upgrade_version")  # Do not validate versions
+    @patch("charm.Istioctl.version")  # Pass istioctl version check
+    @patch("charm.Istioctl.precheck")  # Fail istioctl precheck
     @patch("charm.Istioctl.upgrade", side_effect=IstioctlError())  # Fail istioctl upgrade
     def test_upgrade_failed_during_upgrade(
         self,
         _mocked_istioctl_upgrade,
+        _mocked_istioctl_precheck,
+        _mocked_istioctl_version,
+        _mocked_validate_upgrade_version,
         harness,
         mocked_cert_subject,
     ):
-        """Tests that charm.upgrade_charm fails when upgrade process fails."""
+        """Tests that charm.upgrade_charm fails during upgrade."""
         harness.begin()
 
         with pytest.raises(GenericCharmRuntimeError):
@@ -1636,26 +1642,6 @@ def mock_loadbalancer_hostname_service_not_ready():
         }
     )
     return mock_nodeport_service
-
-
-# autouse to ensure we don't accidentally call out, but
-# can also be used explicitly to get access to the mock.
-@pytest.fixture(autouse=True)
-def mocked_check_call(mocker):
-    mocked_check_call = mocker.patch("charm.subprocess.check_call")
-    mocked_check_call.return_value = 0
-
-    yield mocked_check_call
-
-
-# autouse to ensure we don't accidentally call out, but
-# can also be used explicitly to get access to the mock.
-@pytest.fixture(autouse=True)
-def mocked_check_output(mocker):
-    mocked_check_output = mocker.patch("charm.subprocess.check_output")
-    mocked_check_output.return_value = "stdout"
-
-    yield mocked_check_output
 
 
 @pytest.fixture()
