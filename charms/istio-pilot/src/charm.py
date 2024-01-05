@@ -90,6 +90,16 @@ RETRY_FOR_15_MINUTES = tenacity.Retrying(
     wait=tenacity.wait_fixed(2),
     reraise=True,
 )
+CNI_MISSING_WARNING = (
+    "This version of istio-pilot requires the cni-bin-dir and cni-conf-dir "
+    "configurations to be set in order to enable the Istio CNI plugin. "
+    "The installation/upgrade with the Istio CNI plugin will be skipped. "
+    "If you want to enable this feature, please provide the required configuration."
+)
+CNI_MISSING_MSG = (
+    "Installing/Upgrading Istio control plane without Istio CNI plugin. "
+    "See juju-debug logs for more details."
+)
 
 
 class Operator(CharmBase):
@@ -192,7 +202,6 @@ class Operator(CharmBase):
 
         # Extra flags to pass to the istioctl install command
         # These flags will configure the container images used by the control plane
-        # and also configure the CNI plugin behaviour
         extra_flags = [
             "--set",
             f"values.pilot.image={pilot_image}",
@@ -206,6 +215,13 @@ class Operator(CharmBase):
             f"values.global.proxy_init.image={global_proxy_init_image}",
         ]
 
+        # The following are a set of flags that configure the CNI behaviour
+        # * components.cni.enabled enables the CNI plugin
+        # * values.cni.cniBinDir and values.cni.cniConfDir tell the plugin where to find
+        #   the CNI binaries and config files
+        # * values.sidecarInjectorWebhook.injectedAnnotations allows users to inject any
+        #   annotations to the sidecar injected Pods. This particular annotation helps
+        #   provide a solution for canonical/istio-operators#356
         if self._check_cni_configurations():
             extra_flags.extend(
                 [
@@ -229,16 +245,8 @@ class Operator(CharmBase):
         # Control Plane installation. Deferring the event is the only way we can prevent
         # an attempt to install the Control Plane w/o these required values.
         if not self._check_cni_configurations():
-            self.log.warning(
-                "This version of istio-pilot requires the cni-bin-dir and cni-conf-dir "
-                "configurations to be set in order to enable the Istio CNI plugin. "
-                "The installation with the Istio CNI plugin will be skipped. "
-                "If you want to enable this feature, please provide the required configuration."
-            )
-            install_message = (
-                "Deploying Istio control plane without Istio CNI plugin. "
-                "See juju-debug logs for more details."
-            )
+            self.log.warning(CNI_MISSING_WARNING)
+            install_message = CNI_MISSING_MSG
 
         self._log_and_set_status(MaintenanceStatus(install_message))
 
@@ -367,16 +375,8 @@ class Operator(CharmBase):
         # Control Plane installation. Deferring the event is the only way we can prevent
         # an attempt to install the Control Plane w/o these required values.
         if not self._check_cni_configurations():
-            self.log.warning(
-                "This version of istio-pilot requires the cni-bin-dir and cni-conf-dir "
-                "configurations to be set in order to enable the Istio CNI plugin. "
-                "The installation with the Istio CNI plugin will be skipped. "
-                "If you want to enable this feature, please provide the required configuration."
-            )
-            upgrade_message = (
-                "Upgrading Istio control plan without Istio CNI plugin. "
-                "See `juju debug-log` for details."
-            )
+            self.log.warning(CNI_MISSING_WARNING)
+            upgrade_message = CNI_MISSING_MSG
 
         istioctl = Istioctl(
             ISTIOCTL_PATH,

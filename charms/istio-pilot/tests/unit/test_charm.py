@@ -195,6 +195,7 @@ class TestCharmEvents:
         self,
         mocked_remove_gateway,
         harness,
+        mocker,
         mocked_lightkube_client,
         kubernetes_resource_handler_with_client,
     ):
@@ -215,6 +216,7 @@ class TestCharmEvents:
         harness.update_config({"default-gateway": gateway_name})
 
         harness.begin()
+        mocker.patch("charm.Operator.upgrade_charm")
 
         harness.charm.log = MagicMock()
 
@@ -269,6 +271,7 @@ class TestCharmEvents:
         self,
         mocked_handle_istio_pilot_relation,
         harness,
+        mocker,
         mocked_lightkube_client,
         kubernetes_resource_handler_with_client,
     ):
@@ -290,6 +293,7 @@ class TestCharmEvents:
         harness.update_config({"default-gateway": gateway_name})
 
         harness.begin()
+        mocker.patch("charm.Operator.upgrade_charm")
 
         # Do a reconcile
         harness.charm.on.config_changed.emit()
@@ -339,7 +343,7 @@ class TestCharmEvents:
         assert "handled 1 error" in harness.charm.model.unit.status.message
 
     def test_istio_pilot_relation(
-        self, harness, mocked_lightkube_client, kubernetes_resource_handler_with_client
+        self, harness, mocker, mocked_lightkube_client, kubernetes_resource_handler_with_client
     ):
         """Charm e2e test that asserts we correctly broadcast data on the istio-pilot relation."""
         krh_class, krh_lightkube_client = kubernetes_resource_handler_with_client
@@ -351,6 +355,7 @@ class TestCharmEvents:
         harness.update_config({"default-gateway": gateway_name})
 
         harness.begin()
+        mocker.patch("charm.Operator.upgrade_charm")
 
         # Do a reconcile
         harness.charm.on.config_changed.emit()
@@ -371,6 +376,7 @@ class TestCharmEvents:
         self,
         mocked_is_gateway_service_up,
         harness,
+        mocker,
         mocked_lightkube_client,
         kubernetes_resource_handler_with_client,
     ):
@@ -385,6 +391,7 @@ class TestCharmEvents:
         mocked_is_gateway_service_up.return_value = True
 
         harness.begin()
+        mocker.patch("charm.Operator.upgrade_charm")
 
         # Act and assert
         # Add gateway-info relation and check it posts data correctly
@@ -406,6 +413,7 @@ class TestCharmHelpers:
     def test_reconcile_handling_nonfatal_errors(
         self,
         harness,
+        mocker,
         all_operator_reconcile_handlers_mocked,
         mocked_cert_subject,
     ):
@@ -426,6 +434,7 @@ class TestCharmHelpers:
         )
 
         harness.begin()
+        mocker.patch("charm.Operator.upgrade_charm")
 
         # Act
         harness.charm.reconcile("event")
@@ -1226,7 +1235,23 @@ class TestCharmUpgrade:
         harness.charm.upgrade_charm("mock_event")
 
         # Assert that the upgrade was successful
-        mocked_istioctl_class.assert_called_with("./istioctl", model_name, "minimal")
+        mocked_istioctl_class.assert_called_with(
+            "./istioctl",
+            model_name,
+            "minimal",
+            istioctl_extra_flags=[
+                "--set",
+                "values.pilot.image=pilot",
+                "--set",
+                "values.global.tag=1.17.3",
+                "--set",
+                "values.global.hub=docker.io/istio",
+                "--set",
+                "values.global.proxy.image=proxyv2",
+                "--set",
+                "values.global.proxy_init.image=proxyv2",
+            ],
+        )
         mocked_istioctl.upgrade.assert_called_with()
 
         mocked_wait_for_update_rollout.assert_called_once()
