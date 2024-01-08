@@ -406,6 +406,58 @@ class TestCharmEvents:
         assert actual_gateway_up == "true"
         assert harness.charm.model.unit.status == ActiveStatus()
 
+    @pytest.mark.parametrize(
+        "current_cni_bin_dir, current_cni_conf_dir, new_cni_bin_dir, new_cni_conf_dir, expected_output",  # noqa
+        [
+            ("current-bin", "current-conf", "current-bin", "current-conf", False),
+            ("current-bin", "current-conf", "new-bin", "new-conf", True),
+            ("current-bin", "current-conf", "current-bin", "new-conf", True),
+            ("current-bin", "", "new-bin", "", True),
+            ("", "current-conf", "", "new-conf", True),
+            ("", "", "", "", False),
+        ],
+    )
+    def test_cni_config_changed(
+        self,
+        current_cni_bin_dir,
+        current_cni_conf_dir,
+        new_cni_bin_dir,
+        new_cni_conf_dir,
+        expected_output,
+        harness,
+        mocked_lightkube_client,
+    ):
+        model_name = "my-model"
+        harness.set_leader(True)
+        harness.set_model_name(model_name)
+
+        # Set peer relation
+        rel_id = harness.add_relation("peers", "istio-pilot")
+        harness.add_relation_unit(rel_id, "istio-pilot/0")
+
+        # Set up relation data with current config values
+        harness.update_relation_data(rel_id, "istio-pilot/0", {"cni-bin-dir": current_cni_bin_dir})
+        harness.update_relation_data(
+            rel_id, "istio-pilot/0", {"cni-conf-dir": current_cni_conf_dir}
+        )
+
+        # Update config values
+        harness.update_config({"cni-bin-dir": new_cni_bin_dir})
+        harness.update_config({"cni-conf-dir": new_cni_conf_dir})
+        harness.begin()
+        actual_output = harness.charm._cni_config_changed()
+        assert actual_output is expected_output
+
+    def test_cni_config_changed_no_peer_relation(self, harness, mocked_lightkube_client):
+        model_name = "my-model"
+        harness.set_leader(True)
+        harness.set_model_name(model_name)
+
+        harness.begin()
+
+        with pytest.raises(GenericCharmRuntimeError):
+            harness.charm._cni_config_changed()
+
 
 class TestCharmHelpers:
     """Directly test charm helpers and private methods."""
@@ -978,6 +1030,27 @@ class TestCharmHelpers:
         harness.charm._reconcile_ingress_auth(ingress_auth_data)
 
         mocked_remove_envoyfilter.assert_called_once()
+
+    @patch("charm._remove_envoyfilter")
+    @patch("charm.KubernetesResourceHandler", return_value=MagicMock())
+    @patch("charm.Operator._cni_config_changed", return_value=True)
+    @patch("charm.Istioctl", return_value=MagicMock())
+    def test_reconcile_cni_config_changed(
+        self,
+        mocked_istioctl_class,
+        mocked_cni_config_changed,
+        mocked_remove_envoyfilter,
+        mocked_kubernetes_resource_handler_class,
+        harness,
+        mocked_lightkube_client,
+        mocker,
+    ):
+        """Tests the upgrade method is called when the CNI config is changed."""
+        harness.set_leader(True)
+        harness.begin()
+        mocked_upgrade_charm = mocker.patch("charm.Operator.upgrade_charm")
+        harness.charm.reconcile("event")
+        mocked_upgrade_charm.assert_called_once()
 
     def test_remove_gateway(
         self,

@@ -110,10 +110,11 @@ class Operator(CharmBase):
         self._field_manager = "lightkube"
 
         # Instantiate a CertHandler
+        self.peer_relation_name = "peers"
         self._cert_handler = CertHandler(
             self,
             key="istio-cert",
-            peer_relation_name="peers",
+            peer_relation_name=self.peer_relation_name,
             cert_subject=self._cert_subject,
         )
 
@@ -296,9 +297,11 @@ class Operator(CharmBase):
         handled_errors = []
 
         # Call upgrade_charm in case there are new configurations that affect the control plane
+        # only if the CNI configurations have been provided and have changed from a previous state
         # This is useful when there is a missing configuration during the install process
         try:
-            self.upgrade_charm(event)
+            if self._cni_config_changed:
+                self.upgrade_charm(event)
         except GenericCharmRuntimeError as err:
             handled_errors.append(err)
 
@@ -871,6 +874,44 @@ class Operator(CharmBase):
     def _check_cni_configurations(self) -> bool:
         """Return True if the necessary CNI configuration options are set, False otherwise."""
         if self.model.config["cni-conf-dir"] and self.model.config["cni-bin-dir"]:
+            return True
+        return False
+
+    def _cni_config_changed(self):
+        """
+        Returns True if any of the CNI configuration options has changed from a previous state,
+        False otherwise.
+        """
+        # The peer relation is required to store values, if it does not exist because it was
+        # removed by accident, the charm should fail
+        rel = self.model.get_relation(self.peer_relation_name, None)
+        if not rel:
+            raise GenericCharmRuntimeError(
+                "The istio-pilot charm requires a peer relation, make sure it exists."
+            )
+
+        # Get current values of the configuration options
+        current_cni_bin_dir = rel.data[self.unit].get("cni-bin-dir", None)
+        current_cni_conf_dir = rel.data[self.unit].get("cni-conf-dir", None)
+
+        # Update the values based on the configuration options
+        rel.data[self.unit].update({"cni-bin-dir": self.model.config["cni-bin-dir"]})
+        rel.data[self.unit].update({"cni-conf-dir": self.model.config["cni-conf-dir"]})
+
+        new_cni_bin_dir = rel.data[self.unit].get("cni-bin-dir", None)
+        new_cni_conf_dir = rel.data[self.unit].get("cni-conf-dir", None)
+
+        # Compare current vs new values and decide whether they have changed from a previous state
+        cni_bin_dir_changed = False
+        cni_conf_dir_changed = False
+        if current_cni_bin_dir != new_cni_bin_dir:
+            cni_bin_dir_changed = True
+
+        if current_cni_conf_dir != new_cni_conf_dir:
+            cni_conf_dir_changed = True
+
+        # If any of the configuration options changed, return True
+        if cni_bin_dir_changed or cni_conf_dir_changed:
             return True
         return False
 
