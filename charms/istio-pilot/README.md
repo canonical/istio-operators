@@ -29,7 +29,7 @@ juju relate istio-pilot:certificates <TLS certificates providers>:certificates
 
 ## Enable the Istio CNI plugin
 
-This charm provides means to enable the Istio CNI plugin in the Istio control plane by setting up the following configuration options:
+This charm provides means to enable the [Istio CNI plugin](https://istio.io/latest/docs/setup/additional-setup/cni/) in the Istio control plane by setting up the following configuration options:
 
 * `juju config istio-pilot cni-bin-dir=<path to cni bin dir in host>`
 
