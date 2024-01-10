@@ -90,16 +90,6 @@ RETRY_FOR_15_MINUTES = tenacity.Retrying(
     wait=tenacity.wait_fixed(2),
     reraise=True,
 )
-CNI_MISSING_WARNING = (
-    "This version of istio-pilot requires the cni-bin-dir and cni-conf-dir "
-    "configurations to be set in order to enable the Istio CNI plugin. "
-    "The installation/upgrade with the Istio CNI plugin will be skipped. "
-    "If you want to enable this feature, please provide the required configuration."
-)
-CNI_MISSING_MSG = (
-    "Installing/Upgrading Istio control plane without Istio CNI plugin. "
-    "See juju-debug logs for more details."
-)
 
 
 class Operator(CharmBase):
@@ -240,16 +230,10 @@ class Operator(CharmBase):
 
     def install(self, _):
         """Install charm."""
-        install_message = "Deploying Istio control plane with Istio CNI plugin."
 
-        # Verify the CNI configurations are set, otherwise we cannot continue with the
-        # Control Plane installation. Deferring the event is the only way we can prevent
-        # an attempt to install the Control Plane w/o these required values.
-        if not self._check_cni_configurations():
-            self.log.warning(CNI_MISSING_WARNING)
-            install_message = CNI_MISSING_MSG
-
-        self._log_and_set_status(MaintenanceStatus(install_message))
+        self._log_and_set_status(
+            MaintenanceStatus("Deploying Istio control plane with Istio CNI plugin.")
+        )
 
         # Call the istioctl wrapper to install the Istio Control Plane
         istioctl = Istioctl(
@@ -272,8 +256,9 @@ class Operator(CharmBase):
     def reconcile(self, event):
         """Reconcile the state of the charm.
 
-        This is the main entrypoint for the charm.  It:
+        This is the main entrypoint for the method.  It:
         * Checks if we are the leader, exiting early with WaitingStatus if we are not
+        * Upgrades the Istio control plane if changes were made to the CNI plugin configurations
         * Sends data to the istio-pilot relation
         * Reconciles the ingress-auth relation, establishing whether we need authentication on our
           ingress gateway
@@ -373,13 +358,7 @@ class Operator(CharmBase):
 
         Supports upgrade of exactly one minor version at a time.
         """
-        upgrade_message = "Upgrading Istio control plane."
-        # Verify the CNI configurations are set, otherwise we cannot continue with the
-        # Control Plane installation. Deferring the event is the only way we can prevent
-        # an attempt to install the Control Plane w/o these required values.
-        if not self._check_cni_configurations():
-            self.log.warning(CNI_MISSING_WARNING)
-            upgrade_message = CNI_MISSING_MSG
+        self._log_and_set_status(MaintenanceStatus("Upgrading Istio control plane."))
 
         istioctl = Istioctl(
             ISTIOCTL_PATH,
@@ -387,7 +366,6 @@ class Operator(CharmBase):
             ISTIOCTL_DEPOYMENT_PROFILE,
             istioctl_extra_flags=self._istioctl_extra_flags,
         )
-        self._log_and_set_status(MaintenanceStatus(upgrade_message))
 
         # Check for version compatibility for the upgrade
         try:
@@ -873,9 +851,7 @@ class Operator(CharmBase):
 
     def _check_cni_configurations(self) -> bool:
         """Return True if the necessary CNI configuration options are set, False otherwise."""
-        if self.model.config["cni-conf-dir"] and self.model.config["cni-bin-dir"]:
-            return True
-        return False
+        return self.model.config["cni-conf-dir"] and self.model.config["cni-bin-dir"]
 
     def _cni_config_changed(self):
         """
@@ -911,9 +887,7 @@ class Operator(CharmBase):
             cni_conf_dir_changed = True
 
         # If any of the configuration options changed, return True
-        if cni_bin_dir_changed or cni_conf_dir_changed:
-            return True
-        return False
+        return cni_bin_dir_changed or cni_conf_dir_changed
 
 
 def _get_gateway_address_from_svc(svc):
