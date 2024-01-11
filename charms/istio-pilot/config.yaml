@@ -4,6 +4,20 @@ options:
     type: string
     description: |
       The domain name to be used by the charm to send a Certificate Signing Request (CSR) to a TLS certificate provider. In the absence of this configuration option, the charm will try to use the ingress gateway service hostname (if configured by a LB) or its IP address.
+  cni-bin-dir:
+    type: string
+    default: ''
+    description: >
+      Path to CNI binaries, e.g. /opt/cni/bin. If not provided, the Istio control plane will be installed/upgraded with the Istio CNI plugin disabled.
+      This path depends on the Kubernetes installation, please refer to https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/network-plugins/
+      for information to find out the correct path.
+  cni-conf-dir:
+    type: string
+    default: ''
+    description: Path to conflist files describing the CNI configuration, e.g. /etc/cni/net.d. If not provided, the Istio control plane will be installed/upgraded
+      with the Istio CNI plugin disabled.
+      This path depends on the Kubernetes installation, please refer to https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/network-plugins/
+      for information to find out the correct path.
   default-gateway:
     type: string
     default: istio-gateway
