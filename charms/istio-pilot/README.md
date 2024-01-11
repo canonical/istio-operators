@@ -27,6 +27,28 @@ juju relate istio-pilot:certificates <TLS certificates providers>:certificates
 
 > Please refer to the official documentation for more details about the [TLS ingress gateway for a single host](https://istio.io/latest/docs/tasks/traffic-management/ingress/secure-ingress/#configure-a-tls-ingress-gateway-for-a-single-host).
 
+## Enable the Istio CNI plugin
+
+This charm provides means to enable the [Istio CNI plugin](https://istio.io/latest/docs/setup/additional-setup/cni/) in the Istio control plane by setting up the following configuration options:
+
+* `juju config istio-pilot cni-bin-dir=<path to cni bin dir in host>`
+
+This value corresponds to the path where the CNI binaries, which implement the CNI specification, are located in the host system where the Kubernetes control plane is deployed.
+
+* `juju config istio-pilot cni-conf-dir=<path to cni conf dir in host>`
+
+This value corresponds to the path where the CNI's `conflist` files (in JSON format) are located in the host system where the Kubernetes control plane is deployed.
+
+These values vary on each Kubernetes installation and depends on the CNI's configuration. For some installations the defaults are `/opt/cni/bin` and `/etc/cni/net.d` respectively, but in `microk8s` these values are `/var/snap/microk8s/current/opt/cni/bin` and `/var/snap/microk8s/current/args/cni-network` (see [Microk8s CNI Configuration](https://microk8s.io/docs/change-cidr) for more information).
+
+Please note that if any of these configurations are missing, or not provided at all, the Istio CNI plugin will not be enabled on initial installations/upgrades,  or it will be disabled on existing installations with the plugin.
+
+> NOTE: This capability is only available in `istio-pilot` > 1.17/x; if you haven't already, please ugrade to the latest version of this charm before proceeding with the following instructions.
+
+#### More information
+* [Network Plugins](https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/network-plugins/)
+* [CNI](https://github.com/containernetworking/cni/tree/main#cni---the-container-network-interface)
+
 ## Upgrading istio-pilot
 
 ### Summary and Limitations
