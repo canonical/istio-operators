@@ -211,6 +211,7 @@ class Operator(CharmBase):
 
         # Extra flags to pass to the istioctl install command
         # These flags will configure the container images used by the control plane
+        # As well as set the access log files for help during debugging
         extra_flags = [
             "--set",
             f"values.pilot.image={pilot_image}",
@@ -222,6 +223,8 @@ class Operator(CharmBase):
             f"values.global.proxy.image={global_proxy_image}",
             "--set",
             f"values.global.proxy_init.image={global_proxy_init_image}",
+            "--set",
+            "meshConfig.accessLogFile=/dev/stdout",
         ]
 
         # The following are a set of flags that configure the CNI behaviour
