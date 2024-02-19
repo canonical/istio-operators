@@ -17,6 +17,11 @@ options:
     type: string
     default: istio-gateway
     description: Name to use as a default gateway
+  domain-name:
+    default: ''
+    type: string
+    description: |
+      The domain name to be used by the charm to send a Certificate Signing Request (CSR) to a TLS certificate provider. In the absence of this configuration option, the charm will try to use the ingress gateway service hostname (if configured by a LB) or its IP address.
   image-configuration:
     default: |
       pilot-image: 'pilot'  # values.pilot.image

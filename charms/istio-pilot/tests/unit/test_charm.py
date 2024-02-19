@@ -27,6 +27,7 @@ from charm import (
     GATEWAY_PORTS,
     Operator,
     _get_gateway_address_from_svc,
+    _is_hostname,
     _remove_envoyfilter,
     _validate_upgrade_version,
     _wait_for_update_rollout,
@@ -505,6 +506,35 @@ class TestCharmHelpers:
         harness.begin()
         harness.charm.reconcile("mock event")
         assert harness.charm.model.unit.status == WaitingStatus("Waiting for leadership")
+
+    def test_ingress_gateway_host_domain_name(self, harness, mocked_lightkube_client):
+        """Assert the property returns the domain name config value when set."""
+        harness.begin()
+
+        expected_domain_name = "test.com"
+        harness.update_config(
+            {
+                "domain-name": expected_domain_name,
+            }
+        )
+        assert harness.charm._ingress_gateway_host == expected_domain_name
+
+    def test_ingress_gateway_host_gateway_svc_ip(
+        self, harness, mocked_lightkube_client, mock_loadbalancer_ip_service
+    ):
+        """Assert the property returns the ingress gateway address."""
+        harness.begin()
+
+        mock_get_gateway_service = MagicMock(return_value=mock_loadbalancer_ip_service)
+
+        harness.charm._get_gateway_service = mock_get_gateway_service
+
+        assert harness.charm._ingress_gateway_host == "127.0.0.1"
+
+    def test_ingress_gateway_host_none(self, harness, mocked_lightkube_client):
+        """Assert returns None when no domain name or ingress gateway service is set in place."""
+        harness.begin()
+        assert harness.charm._ingress_gateway_host is None
 
     @pytest.mark.parametrize(
         "cert_handler_enabled, ssl_cert, ssl_key, expected_port, expected_context",
@@ -1266,6 +1296,14 @@ class TestCharmHelpers:
     def test_xor(self, left, right, expected):
         """Test that the xor helper function works as expected."""
         assert _xor(left, right) is expected
+
+    @pytest.mark.parametrize(
+        "value, expected",
+        [(None, False), ("10.10.10.10", False), ("test.com", True), ("test-1.com", True)],
+    )
+    def test_is_hostname(self, value, expected):
+        """Assert hostames are correctly evaluated."""
+        assert _is_hostname(value) is expected
 
     def test_get_config(
         self,

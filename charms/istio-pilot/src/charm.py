@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 
 import base64
+import contextlib
+import ipaddress
 import logging
+import socket
 from typing import List, Optional
 
 import tenacity
@@ -441,16 +444,38 @@ class Operator(CharmBase):
             raise ErrorWithStatus("Waiting for leadership", WaitingStatus)
 
     @property
-    def _cert_subject(self):
-        """Return the domain to be used in the CSR."""
+    def _ingress_gateway_host(self) -> Optional[str]:
+        """Return a domain name if it's configured, the ingress gateway svc address otherwise."""
+        # If the configuration option is set, we use it
+        if domain_name := self.model.config["domain-name"]:
+            return domain_name
+
+        # We try getting the ingress gateway IP address in the absence of domain name
         try:
             svc = self._get_gateway_service()
         except ApiError:
-            self.log.info("Could not retrieve the gateway service for configuring the CSR.")
+            self.log.info("Could not retrieve the gateway service for using in the CSR.")
             return None
-        gateway_address = _get_gateway_address_from_svc(svc)
-        if gateway_address:
-            return gateway_address
+        return _get_gateway_address_from_svc(svc)
+
+    @property
+    def _cert_subject(self) -> Optional[str]:
+        """Return the certificate subject to be used in the CSR."""
+        target = self._ingress_gateway_host
+
+        # Check if the target is a hostname and return if it is
+        if _is_hostname(target):
+            assert isinstance(target, str), target
+            return target
+
+        # If target is an IP address, try to get the hostname and return it
+        with contextlib.suppress(OSError, TypeError):
+            name, _, _ = socket.gethostbyaddr(target)
+            if _is_hostname(name) and not name.endswith(".svc.cluster.local"):
+                return name
+
+        # If none of the above return, the cert subject will be the IP address
+        return target if target else None
 
     @property
     def _gateway_port(self):
@@ -1055,6 +1080,17 @@ def _xor(a, b):
         return True
     else:
         return False
+
+
+def _is_hostname(value: Optional[str]) -> bool:
+    """Return True if the given value is a valid hostname, False otherwise or if it's None."""
+    if value is None:
+        return False
+    try:
+        ipaddress.ip_address(value)
+        return False
+    except ValueError:
+        return bool(value)
 
 
 if __name__ == "__main__":
