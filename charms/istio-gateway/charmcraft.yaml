@@ -8,4 +8,4 @@ bases:
         channel: '20.04'
 parts:
   charm:
-    charm-python-packages: [setuptools, pip]
+    charm-python-packages: [setuptools, pip>=23.2.1]
