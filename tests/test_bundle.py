@@ -100,7 +100,7 @@ async def test_ingress_relation(ops_test: OpsTest):
     TODO (https://github.com/canonical/istio-operators/issues/259): Change this from using a
      specific charm that implements ingress's requirer interface to a generic charm
     """
-    await ops_test.model.deploy(KUBEFLOW_VOLUMES, channel="latest/edge")
+    await ops_test.model.deploy(KUBEFLOW_VOLUMES, channel="1.8/stable")
 
     await ops_test.model.add_relation(f"{ISTIO_PILOT}:ingress", f"{KUBEFLOW_VOLUMES}:ingress")
 
