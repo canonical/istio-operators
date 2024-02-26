@@ -27,7 +27,7 @@ from charm import (
     GATEWAY_PORTS,
     Operator,
     _get_gateway_address_from_svc,
-    _is_hostname,
+    _is_not_ipaddress,
     _remove_envoyfilter,
     _validate_upgrade_version,
     _wait_for_update_rollout,
@@ -507,34 +507,42 @@ class TestCharmHelpers:
         harness.charm.reconcile("mock event")
         assert harness.charm.model.unit.status == WaitingStatus("Waiting for leadership")
 
-    def test_ingress_gateway_host_domain_name(self, harness, mocked_lightkube_client):
-        """Assert the property returns the domain name config value when set."""
-        harness.begin()
-
-        expected_domain_name = "test.com"
-        harness.update_config(
-            {
-                "domain-name": expected_domain_name,
-            }
-        )
-        assert harness.charm._ingress_gateway_host == expected_domain_name
-
-    def test_ingress_gateway_host_gateway_svc_ip(
-        self, harness, mocked_lightkube_client, mock_loadbalancer_ip_service
+    # NOTE: mock_loadbalancer_ip_service has its IP address as 127.0.0.1
+    # which _cert_subject() handles and returns as localhost. This assumption,
+    # while almost always safe, could not always be true.
+    @pytest.mark.parametrize(
+        "mock_service_fixture, gateway_address",
+        [
+            # Pass fixtures by their names
+            ("mock_nodeport_service", "10.10.10.10"),
+            ("mock_clusterip_service", "10.10.10.11"),
+            ("mock_loadbalancer_hostname_service", "test.com"),
+            ("mock_loadbalancer_ip_service", "localhost"),
+        ],
+    )
+    def test_cert_subject_returns(
+        self,
+        mock_service_fixture,
+        gateway_address,
+        harness,
+        mocked_lightkube_client,
+        request,
     ):
         """Assert the property returns the ingress gateway address."""
         harness.begin()
 
-        mock_get_gateway_service = MagicMock(return_value=mock_loadbalancer_ip_service)
+        mock_get_gateway_service = MagicMock(
+            return_value=request.getfixturevalue(mock_service_fixture)
+        )
 
         harness.charm._get_gateway_service = mock_get_gateway_service
 
-        assert harness.charm._ingress_gateway_host == "127.0.0.1"
+        assert harness.charm._cert_subject == gateway_address
 
-    def test_ingress_gateway_host_none(self, harness, mocked_lightkube_client):
+    def test_cert_subject_none(self, harness, mocked_lightkube_client):
         """Assert returns None when no domain name or ingress gateway service is set in place."""
         harness.begin()
-        assert harness.charm._ingress_gateway_host is None
+        assert harness.charm._cert_subject is None
 
     @pytest.mark.parametrize(
         "cert_handler_enabled, ssl_cert, ssl_key, expected_port, expected_context",
@@ -627,8 +635,8 @@ class TestCharmHelpers:
         "mock_service_fixture, gateway_address",
         [
             # Pass fixtures by their names
-            ("mock_nodeport_service", None),
-            ("mock_clusterip_service", "10.10.10.10"),
+            ("mock_nodeport_service", "10.10.10.10"),
+            ("mock_clusterip_service", "10.10.10.11"),
             ("mock_loadbalancer_hostname_service", "test.com"),
             ("mock_loadbalancer_ip_service", "127.0.0.1"),
             ("mock_loadbalancer_hostname_service_not_ready", None),
@@ -1301,9 +1309,9 @@ class TestCharmHelpers:
         "value, expected",
         [(None, False), ("10.10.10.10", False), ("test.com", True), ("test-1.com", True)],
     )
-    def test_is_hostname(self, value, expected):
+    def test_is_not_ipaddress(self, value, expected):
         """Assert hostames are correctly evaluated."""
-        assert _is_hostname(value) is expected
+        assert _is_not_ipaddress(value) is expected
 
     def test_get_config(
         self,
@@ -1522,7 +1530,7 @@ def mock_clusterip_service():
             "apiVersion": "v1",
             "kind": "Service",
             "status": {"loadBalancer": {"ingress": [{}]}},
-            "spec": {"type": "ClusterIP", "clusterIP": "10.10.10.10"},
+            "spec": {"type": "ClusterIP", "clusterIP": "10.10.10.11"},
         }
     )
     return mock_nodeport_service
@@ -1535,7 +1543,7 @@ def mock_loadbalancer_ip_service():
             "apiVersion": "v1",
             "kind": "Service",
             "status": {"loadBalancer": {"ingress": [{"ip": "127.0.0.1"}]}},
-            "spec": {"type": "LoadBalancer", "clusterIP": "10.10.10.10"},
+            "spec": {"type": "LoadBalancer", "clusterIP": "10.10.10.12"},
         }
     )
     return mock_nodeport_service
@@ -1548,7 +1556,7 @@ def mock_loadbalancer_hostname_service():
             "apiVersion": "v1",
             "kind": "Service",
             "status": {"loadBalancer": {"ingress": [{"hostname": "test.com"}]}},
-            "spec": {"type": "LoadBalancer", "clusterIP": "10.10.10.10"},
+            "spec": {"type": "LoadBalancer", "clusterIP": "10.10.10.12"},
         }
     )
     return mock_nodeport_service
