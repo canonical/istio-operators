@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
 
 import base64
-import contextlib
-import ipaddress
 import logging
-import socket
 from typing import List, Optional
 
 import tenacity
@@ -447,38 +444,26 @@ class Operator(CharmBase):
     def _cert_subject(self) -> Optional[str]:
         """Return the certificate subject to be used in the CSR.
 
-        This property takes advantage of the automatic address discovery of the
-        ingress gateway address and uses it to return a name that can be used as
-        a certificate subject when integrated with a TLS certificate provider.
-        The logic is as follows:
-        * Return None if the ingress gateway service address cannot be retrieved
-        * Return a hostname if the address is not an IP (e.g. user-example.com)
-        * Return a hostname if the address is an IP, but there is a hostname that resolves to it
-        * Return the IP address if none of the above happens and the address exists
-        * Return None in any other case
+        If the csr-domain-name configuration option is set, this value is used;
+        otherwise, use the IP address or hostname of the actual ingress gateway service.
+        Lastly, if for any reason the service address cannot be retrieved, None will be returned.
         """
+        # Prioritise the csr-domain-name config option
+        if csr_domain_name := self.model.config["csr-domain-name"]:
+            return csr_domain_name
+
         # Get the ingress gateway service address
         try:
             svc = self._get_gateway_service()
         except ApiError:
-            self.log.info("Could not retrieve the gateway service for using in the CSR.")
+            self.log.info("Could not retrieve the gateway service address for using in the CSR.")
             return None
 
-        target = _get_gateway_address_from_svc(svc)
+        svc_address = _get_gateway_address_from_svc(svc)
 
-        # Check if the address is an IP, return if it is a hostname
-        if _is_not_ipaddress(target):
-            assert isinstance(target, str), target
-            return target
-
-        # If the address is an IP, try to get the hostname and return it
-        with contextlib.suppress(OSError, TypeError):
-            name, _, _ = socket.gethostbyaddr(target)
-            if _is_not_ipaddress(name) and not name.endswith(".svc.cluster.local"):
-                return name
-
-        # If none of the above return, the cert subject will be the IP address
-        return target if target else None
+        # NOTE: returning None here means that the CSR will have the unit name as cert subject
+        # this is an implementation detail of the cert_hanlder library.
+        return svc_address if svc_address else None
 
     @property
     def _gateway_port(self):
@@ -1085,17 +1070,6 @@ def _xor(a, b):
         return True
     else:
         return False
-
-
-def _is_not_ipaddress(value: Optional[str]) -> bool:
-    """Return True if the given value is not an IP address, False otherwise or if it's None."""
-    if value is None:
-        return False
-    try:
-        ipaddress.ip_address(value)
-        return False
-    except ValueError:
-        return True
 
 
 if __name__ == "__main__":

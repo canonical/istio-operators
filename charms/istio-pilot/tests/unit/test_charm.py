@@ -27,7 +27,6 @@ from charm import (
     GATEWAY_PORTS,
     Operator,
     _get_gateway_address_from_svc,
-    _is_not_ipaddress,
     _remove_envoyfilter,
     _validate_upgrade_version,
     _wait_for_update_rollout,
@@ -507,9 +506,6 @@ class TestCharmHelpers:
         harness.charm.reconcile("mock event")
         assert harness.charm.model.unit.status == WaitingStatus("Waiting for leadership")
 
-    # NOTE: mock_loadbalancer_ip_service has its IP address as 127.0.0.1
-    # which _cert_subject() handles and returns as localhost. This assumption,
-    # while almost always safe, could not always be true.
     @pytest.mark.parametrize(
         "mock_service_fixture, gateway_address",
         [
@@ -517,10 +513,10 @@ class TestCharmHelpers:
             ("mock_nodeport_service", "10.10.10.10"),
             ("mock_clusterip_service", "10.10.10.11"),
             ("mock_loadbalancer_hostname_service", "test.com"),
-            ("mock_loadbalancer_ip_service", "localhost"),
+            ("mock_loadbalancer_ip_service", "127.0.0.1"),
         ],
     )
-    def test_cert_subject_returns(
+    def test_cert_subject_returns_no_config(
         self,
         mock_service_fixture,
         gateway_address,
@@ -539,8 +535,20 @@ class TestCharmHelpers:
 
         assert harness.charm._cert_subject == gateway_address
 
+    def test_cert_subject_returns_with_config(self, harness, mocked_lightkube_client):
+        """Assert the property returns the domain name config value when set."""
+        harness.begin()
+
+        expected_domain_name = "test.com"
+        harness.update_config(
+            {
+                "csr-domain-name": expected_domain_name,
+            }
+        )
+        assert harness.charm._cert_subject == expected_domain_name
+
     def test_cert_subject_none(self, harness, mocked_lightkube_client):
-        """Assert returns None when no domain name or ingress gateway service is set in place."""
+        """Assert returns None when no csr-domain-name/gateway service address is set in place."""
         harness.begin()
         assert harness.charm._cert_subject is None
 
@@ -1304,14 +1312,6 @@ class TestCharmHelpers:
     def test_xor(self, left, right, expected):
         """Test that the xor helper function works as expected."""
         assert _xor(left, right) is expected
-
-    @pytest.mark.parametrize(
-        "value, expected",
-        [(None, False), ("10.10.10.10", False), ("test.com", True), ("test-1.com", True)],
-    )
-    def test_is_not_ipaddress(self, value, expected):
-        """Assert hostames are correctly evaluated."""
-        assert _is_not_ipaddress(value) is expected
 
     def test_get_config(
         self,
