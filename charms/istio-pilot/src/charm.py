@@ -381,16 +381,29 @@ class Operator(CharmBase):
             raise ErrorWithStatus("Waiting for leadership", WaitingStatus)
 
     @property
-    def _cert_subject(self):
-        """Return the domain to be used in the CSR."""
+    def _cert_subject(self) -> Optional[str]:
+        """Return the certificate subject to be used in the CSR.
+
+        If the csr-domain-name configuration option is set, this value is used;
+        otherwise, use the IP address or hostname of the actual ingress gateway service.
+        Lastly, if for any reason the service address cannot be retrieved, None will be returned.
+        """
+        # Prioritise the csr-domain-name config option
+        if csr_domain_name := self.model.config["csr-domain-name"]:
+            return csr_domain_name
+
+        # Get the ingress gateway service address
         try:
             svc = self._get_gateway_service()
         except ApiError:
-            self.log.info("Could not retrieve the gateway service for configuring the CSR.")
+            self.log.info("Could not retrieve the gateway service address for using in the CSR.")
             return None
-        gateway_address = _get_gateway_address_from_svc(svc)
-        if gateway_address:
-            return gateway_address
+
+        svc_address = _get_gateway_address_from_svc(svc)
+
+        # NOTE: returning None here means that the CSR will have the unit name as cert subject
+        # this is an implementation detail of the cert_hanlder library.
+        return svc_address if svc_address else None
 
     @property
     def _gateway_port(self):
@@ -810,6 +823,8 @@ def _get_gateway_address_from_svc(svc):
     gateway_address = None
 
     if svc.spec.type == "ClusterIP":
+        gateway_address = svc.spec.clusterIP
+    elif svc.spec.type == "NodePort":
         gateway_address = svc.spec.clusterIP
     elif svc.spec.type == "LoadBalancer":
         gateway_address = _get_address_from_loadbalancer(svc)
