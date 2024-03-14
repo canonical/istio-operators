@@ -51,7 +51,8 @@ jobs:
           - 1.26-strict/stable
         integration-types:
           - integration
-          - integration-tls
+          - integration-tls-provider
+          - integration-tls-secret
     steps:
       - name: Check out repo
         uses: actions/checkout@v4
