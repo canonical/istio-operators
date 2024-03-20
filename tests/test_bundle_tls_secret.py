@@ -52,7 +52,7 @@ async def test_build_and_deploy_istio_charms(ops_test: OpsTest):
         timeout=90 * 10,
     )
 
-    await run_save_tls_secret_action()
+    await run_save_tls_secret_action(ops_test)
 
 
 @tenacity.retry(
