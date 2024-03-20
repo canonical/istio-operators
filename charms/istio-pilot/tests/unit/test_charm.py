@@ -1530,20 +1530,20 @@ class TestCharmUpgrade:
         """Test the method returns a correct bool when comparing two TLS options.
 
 
-           Parameters:
-            https_with_tls_provider(bool): the return of the method that checks
-                the TLS certificates provider is related and configured to this charm
-            https_with_tls_secret(bool): the return of the method that checks the TLS
-                configuration is done from secret data
-            expected_return(bool, None): the expected return of the methods above
-            expected_context: the exception(if any) that is expected when calling
-                the above methods.
+        Parameters:
+         https_with_tls_provider(bool): the return of the method that checks
+             the TLS certificates provider is related and configured to this charm
+         https_with_tls_secret(bool): the return of the method that checks the TLS
+             configuration is done from secret data
+         expected_return(bool, None): the expected return of the methods above
+         expected_context: the exception(if any) that is expected when calling
+             the above methods.
 
-            Example:
-             If https_with_tls_provider returns False and https_with_tls_secret returns True,
-             the expected return of _use_https() is True.
-             If both https_with_tls_provider and https_with_tls_secret return True, _use_https()
-             must raise ErrorWithStatus.
+         Example:
+          If https_with_tls_provider returns False and https_with_tls_secret returns True,
+          the expected return of _use_https() is True.
+          If both https_with_tls_provider and https_with_tls_secret return True, _use_https()
+          must raise ErrorWithStatus.
         """
         harness.begin()
 
@@ -1575,15 +1575,15 @@ class TestCharmUpgrade:
     ):
         """Test the method returns a correct bool when the secret is added.
 
-            Parameters:
-              ssl_cert(str): SSL cert value (comes from a secret)
-              ssl_key(str): SSL key value (comes from a secret)
-              expected_return(bool): the expected return of the use_https_with_tls_secret method
-              expected_context: if the method should raise or not
-            Example:
-              If ssl_cert and ssl_key both have values, the use_https_with_tls_secret() method
-              must return True; if both are empty the return must be False; and if just one
-              value is set, the method should raise ErrorWithStatus.
+        Parameters:
+          ssl_cert(str): SSL cert value (comes from a secret)
+          ssl_key(str): SSL key value (comes from a secret)
+          expected_return(bool): the expected return of the use_https_with_tls_secret method
+          expected_context: if the method should raise or not
+        Example:
+          If ssl_cert and ssl_key both have values, the use_https_with_tls_secret() method
+          must return True; if both are empty the return must be False; and if just one
+          value is set, the method should raise ErrorWithStatus.
         """
         harness.begin()
         harness.charm.app.add_secret(
