@@ -124,11 +124,11 @@ class Operator(CharmBase):
         # ---- For details please refer to canonical/istio-operators#380.
         # ---- FIXME: Remove this block after releasing 1.18.
         # Save SSL information and reconcile
-        self.framework.observe(self.on.save_tls_secret_action, self.save_tls_secret)
+        self.framework.observe(self.on.set_tls_manually_action, self.save_tls_secret)
         self.framework.observe(self.on.secret_changed, self.reconcile_tls_secret)
 
         # Remove SSL information and reconcile
-        self.framework.observe(self.on.remove_tls_secret_action, self.remove_tls_secret)
+        self.framework.observe(self.on.unset_tls_manually_action, self.remove_tls_secret)
         self.framework.observe(self.on.secret_remove, self.reconcile_tls_secret)
         # ---- End of the block
 
@@ -936,7 +936,7 @@ class Operator(CharmBase):
             ErrorWithStatus: if both configurations are enabled.
         """
         if self._use_https_with_tls_provider() and self._use_https_with_tls_secret():
-            self.log.info(
+            self.log.error(
                 "Only one TLS configuration is supported at a time."
                 "Either remove the TLS certificate provider relation,"
                 "or the TLS manual configuration with the remove-tls-secret action."
@@ -961,9 +961,13 @@ class Operator(CharmBase):
         except SecretNotFoundError:
             return False
 
-        # Fail if ssl is only partly configured as this is probably a mistake
         ssl_key = secret.get_content()["ssl-key"]
         ssl_crt = secret.get_content()["ssl-crt"]
+
+        # Fail if ssl is only partly configured as this is probably a mistake
+        # In reality this part of the code should never be executed as the action
+        # sets these values as required, but leaving the check in case somewhere in
+        # the code these values are messed up.
         if _xor(ssl_key, ssl_crt):
             missing = "ssl-key"
             if not secret.get_content()["ssl-crt"]:

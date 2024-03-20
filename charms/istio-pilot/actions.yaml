@@ -1,22 +1,22 @@
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-save-tls-secret:
+set-tls-manually:
   description: |
-    Save SSL cert and key values in a juju secret.
-    The charm will use this information to configure the Ingress Gateway with TLS.
+    Manually pass SSL cert and key values to configure the Ingress Gateway with TLS.
+    Configuring TLS with this action is mutually exclusive to using TLS certificate providers.
   params:
     ssl-key:
       type: string
       description: |
         The SSL key output as a string. Can be set with
-        $ juju run set-tls-secret istio-pilot/<unit-number> ssl-key="$(cat KEY_FILE)"
+        $ juju run set-tls-manually istio-pilot/<unit-number> ssl-key="$(cat KEY_FILE)"
     ssl-crt:
       type: string
       description: |
         The SSL cert output as a string. Can be set with
-        $ juju run set-tls-secret istio-pilot/<unit-number> ssl-crt="$(cat CERT_FILE)"
+        $ juju run set-tls-manually istio-pilot/<unit-number> ssl-crt="$(cat CERT_FILE)"
     required: [ssl-key, ssl-crt]
-remove-tls-secret:
-  description: Remove SSL cert and key value from the juju secret.
+unset-tls-manually:
+  description: Remove SSL cert and key values from the Ingress Gateway TLS configuration.
   additionalProperties: false
