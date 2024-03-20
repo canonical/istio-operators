@@ -936,13 +936,23 @@ class Operator(CharmBase):
             ErrorWithStatus: if both configurations are enabled.
         """
         if self._use_https_with_tls_provider() and self._use_https_with_tls_secret():
+            self.log.info(
+                "Only one TLS configuration is supported at a time."
+                "Either remove the TLS certificate provider relation,"
+                "or the TLS manual configuration with the remove-tls-secret action."
+            )
             raise ErrorWithStatus(
-                "Only one TLS configuration is supported at a time.", BlockedStatus
+                "Only one TLS configuration is supported at a time. See logs for details.",
+                BlockedStatus,
             )
         return self._use_https_with_tls_provider() or self._use_https_with_tls_secret()
 
     def _use_https_with_tls_secret(self) -> bool:
-        """Return True if both SSL key and crt values exist after running the set-tls action."""
+        """Return True if both SSL key and crt are set with save-tls-secret, False otherwise.
+
+        Raises:
+            ErrorWithStatus: if one of the values is missing.
+        """
 
         # Ensure the secret that holds the values exist otherwise we can assume
         # that users don't want to configure TLS or they want to do it via a TLS provider.
@@ -968,7 +978,11 @@ class Operator(CharmBase):
     # FIXME: Replace the below line with the one commented out after releasing 1.18
     # def _use_https(self) -> bool:
     def _use_https_with_tls_provider(self) -> bool:
-        """Return True if both SSL key and cert are provided by a TLS certificates provider."""
+        """Return True if SSL key and cert are provided by a TLS cert provider, False otherwise.
+
+        Raises:
+            ErrorWithStatus: if one of the values is missing.
+        """
 
         # Immediately return False if the CertHandler is not enabled
         if not self._cert_handler.enabled:

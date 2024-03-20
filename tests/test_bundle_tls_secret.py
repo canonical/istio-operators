@@ -94,4 +94,4 @@ async def run_save_tls_secret_action(ops_test: OpsTest):
     istio_pilot_unit_action = await istio_pilot_unit.run_action(
         action_name="save-tls-secret", **{"ssl-key": "key", "ssl-crt": "crt"}
     )
-    await ops_test.model.get_action_output(action_uuid=istio_pilot_unit_action.entity.id, wait=120)
+    await ops_test.model.get_action_output(action_uuid=istio_pilot_unit_action.entity_id, wait=120)

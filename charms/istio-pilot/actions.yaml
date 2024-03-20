@@ -16,6 +16,7 @@ save-tls-secret:
       description: |
         The SSL cert output as a string. Can be set with
         $ juju run set-tls-secret istio-pilot/<unit-number> ssl-crt="$(cat CERT_FILE)"
+    required: [ssl-key, ssl-crt]
 remove-tls-secret:
   description: Remove SSL cert and key value from the juju secret.
   additionalProperties: false
