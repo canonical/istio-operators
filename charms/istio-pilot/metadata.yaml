@@ -1,7 +1,5 @@
 name: istio-pilot
-summary: |
-  Istio Pilot provides fleet-wide traffic management capabilities in the
-  Istio Service Mesh.
+summary: Provides traffic management capabilities in the Istio Service Mesh.
 description: |
   https://istio.io/latest/docs/reference/commands/pilot-discovery/
 docs: https://discourse.charmhub.io/t/11837
