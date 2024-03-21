@@ -216,6 +216,7 @@ class TestCharmEvents:
         harness.update_config({"default-gateway": gateway_name})
 
         harness.begin()
+        harness.add_relation("peers", harness.charm.app.name)
         mocker.patch("charm.Operator.upgrade_charm")
 
         harness.charm.log = MagicMock()
@@ -293,6 +294,7 @@ class TestCharmEvents:
         harness.update_config({"default-gateway": gateway_name})
 
         harness.begin()
+        harness.add_relation("peers", harness.charm.app.name)
         mocker.patch("charm.Operator.upgrade_charm")
 
         # Do a reconcile
@@ -355,6 +357,7 @@ class TestCharmEvents:
         harness.update_config({"default-gateway": gateway_name})
 
         harness.begin()
+        harness.add_relation("peers", harness.charm.app.name)
         mocker.patch("charm.Operator.upgrade_charm")
 
         # Do a reconcile
@@ -391,6 +394,7 @@ class TestCharmEvents:
         mocked_is_gateway_service_up.return_value = True
 
         harness.begin()
+        harness.add_relation("peers", harness.charm.app.name)
         mocker.patch("charm.Operator.upgrade_charm")
 
         # Act and assert
@@ -486,6 +490,7 @@ class TestCharmHelpers:
         )
 
         harness.begin()
+        harness.add_relation("peers", harness.charm.app.name)
         mocker.patch("charm.Operator.upgrade_charm")
 
         # Act
