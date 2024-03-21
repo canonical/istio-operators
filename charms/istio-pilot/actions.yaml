@@ -16,7 +16,7 @@ set-tls-manually:
       description: |
         The SSL cert output as a string. Can be set with
         $ juju run set-tls-manually istio-pilot/<unit-number> ssl-crt="$(cat CERT_FILE)"
-    required: [ssl-key, ssl-crt]
+  required: [ssl-key, ssl-crt]
 unset-tls-manually:
   description: Remove SSL cert and key values from the Ingress Gateway TLS configuration.
   additionalProperties: false
