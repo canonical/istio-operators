@@ -288,10 +288,11 @@ class Operator(CharmBase):
         # only if the CNI configurations have been provided and have changed from a previous state
         # This is useful when there is a missing configuration during the install process
         try:
-            if self._cni_config_changed:
+            if self._cni_config_changed():
                 self.upgrade_charm(event)
         except GenericCharmRuntimeError as err:
-            handled_errors.append(err)
+            # Re-raise as there is no recovery from this error
+            raise err
 
         # Send istiod information to the istio-pilot relation
         try:
