@@ -341,11 +341,8 @@ class Operator(CharmBase):
         # Call upgrade_charm in case there are new configurations that affect the control plane
         # only if the CNI configurations have been provided and have changed from a previous state
         # This is useful when there is a missing configuration during the install process
-        try:
-            if self._cni_config_changed:
-                self.upgrade_charm(event)
-        except GenericCharmRuntimeError as err:
-            handled_errors.append(err)
+        if self._cni_config_changed():
+            self.upgrade_charm(event)
 
         # Send istiod information to the istio-pilot relation
         try:
