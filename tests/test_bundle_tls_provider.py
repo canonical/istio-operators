@@ -18,7 +18,7 @@ GATEWAY_RESOURCE = create_namespaced_resource(
 
 @pytest.fixture(scope="session")
 def lightkube_client() -> lightkube.Client:
-    client = lightkube.Client(field_manager="kserve")
+    client = lightkube.Client()
     return client
 
 

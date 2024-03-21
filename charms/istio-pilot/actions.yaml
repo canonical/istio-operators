@@ -8,11 +8,15 @@ set-tls-manually:
   params:
     ssl-key:
       type: string
+      pattern: "^.*[a-zA-Z0-9]+.*$"
+      minLength: 1
       description: |
         The SSL key output as a string. Can be set with
         $ juju run set-tls-manually istio-pilot/<unit-number> ssl-key="$(cat KEY_FILE)"
     ssl-crt:
       type: string
+      minLength: 1
+      pattern: "^.*[a-zA-Z0-9]+.*$"
       description: |
         The SSL cert output as a string. Can be set with
         $ juju run set-tls-manually istio-pilot/<unit-number> ssl-crt="$(cat CERT_FILE)"

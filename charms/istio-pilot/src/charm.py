@@ -77,6 +77,7 @@ INSTALL_FAILED_MSG = (
     "{message} Make sure the cluster has no Istio installations already present and "
     "that you have provided the right configuration values."
 )
+TLS_SECRET_LABEL = "istio-tls-secret"
 UPGRADE_FAILED_MSG = (
     "Failed to upgrade Istio.  {message}  To recover Istio, see [the upgrade docs]"
     "(https://github.com/canonical/istio-operators/blob/main/charms/istio-pilot/README.md) for "
@@ -120,16 +121,16 @@ class Operator(CharmBase):
         self.framework.observe(self._cert_handler.on.cert_changed, self.reconcile)
 
         # ---- Start of the block
-        # ---- WARNING: this feature is not recommended, but is supported in 1.17 and 1.18.
+        # ---- WARNING: this feature is not recommended, but is supported in 1.17-1.21.
         # ---- For details please refer to canonical/istio-operators#380.
-        # ---- FIXME: Remove this block after releasing 1.18.
+        # ---- FIXME: Remove this block after releasing 1.21.
         # Save SSL information and reconcile
-        self.framework.observe(self.on.set_tls_manually_action, self.save_tls_secret)
-        self.framework.observe(self.on.secret_changed, self.reconcile_tls_secret)
+        self.framework.observe(self.on.set_tls_manually_action, self.set_tls_manually)
+        self.framework.observe(self.on.secret_changed, self.reconcile)
 
         # Remove SSL information and reconcile
-        self.framework.observe(self.on.unset_tls_manually_action, self.remove_tls_secret)
-        self.framework.observe(self.on.secret_remove, self.reconcile_tls_secret)
+        self.framework.observe(self.on.unset_tls_manually_action, self.unset_tls_manually)
+        self.framework.observe(self.on.secret_remove, self.reconcile)
         # ---- End of the block
 
         # Event handling for managing the Istio control plane
@@ -202,47 +203,34 @@ class Operator(CharmBase):
         return image_config
 
     # ---- Start of the block
-    # ---- WARNING: this feature is not recommended, but is supported in 1.17 and 1.18.
+    # ---- WARNING: this feature is not recommended, but is supported in 1.17-1.21.
     # ---- For details please refer to canonical/istio-operators#380.
-    # ---- FIXME: Remove this block after releasing 1.18.
-    def remove_tls_secret(self, event) -> None:
+    # ---- FIXME: Remove this block after releasing 1.21.
+    def unset_tls_manually(self, event) -> None:
         """Remove the secret that saves TLS information and reconcile the ingress gateway."""
         try:
-            secret = self.model.get_secret(label="istio-tls-secret")
+            secret = self.model.get_secret(label=TLS_SECRET_LABEL)
             secret.remove_all_revisions()
             self._reconcile_gateway()
         except SecretNotFoundError:
             self.log.info("No secret was removed.")
 
-    def save_tls_secret(self, event) -> None:
+    def set_tls_manually(self, event) -> None:
         """Save TLS information in a juju secret and reconcile the ingress gateway."""
 
+        # Because the action itself has some validation, we are guaranteed that
+        # BOTH of these values are passed as a string with minimum length 1
         ssl_key = event.params.get("ssl-key", None)
         ssl_crt = event.params.get("ssl-crt", None)
 
-        # Return if none of the parameters were set in the action
-        if ssl_key is None and ssl_crt is None:
-            self.log.info(
-                "An attempt to configure TLS via secrets was made, but no secrets were provided."
-                "This action will have no effect."
-            )
-            return
-
-        # Block the unit if there is a missing parameter, we need both to continue
-        if _xor(ssl_key, ssl_crt):
-            missing = "ssl-key"
-            if not ssl_crt:
-                missing = "ssl-crt"
-            self._log_and_set_status(BlockedStatus(f"Missing {missing}, cannot configure TLS."))
-            return
         content = {"ssl-key": ssl_key, "ssl-crt": ssl_crt}
 
         # Save the secret with the content that was passed through the action
         try:
-            secret = self.model.get_secret(label="istio-tls-secret")
+            secret = self.model.get_secret(label=TLS_SECRET_LABEL)
             secret.set_content(content)
         except SecretNotFoundError:
-            self.app.add_secret({"ssl-key": ssl_key, "ssl-crt": ssl_crt}, label="istio-tls-secret")
+            self.app.add_secret({"ssl-key": ssl_key, "ssl-crt": ssl_crt}, label=TLS_SECRET_LABEL)
         self._reconcile_gateway()
 
     def reconcile_tls_secret(self, event: Secret) -> None:
@@ -904,9 +892,9 @@ class Operator(CharmBase):
         """
 
         # FIXME: remove the try/catch block and just return the dictionary that contains
-        # data from the CertHandler after 1.18
+        # data from the CertHandler after 1.21
         try:
-            ssl_secret = self.model.get_secret(label="istio-tls-secret")
+            ssl_secret = self.model.get_secret(label=TLS_SECRET_LABEL)
             return {
                 "ssl-crt": base64.b64encode(
                     ssl_secret.get_content()["ssl-crt"].encode("ascii")
@@ -926,9 +914,9 @@ class Operator(CharmBase):
             }
 
     # ---- Start of the block
-    # ---- WARNING: this feature is not recommended, but is supported in 1.17 and 1.18.
+    # ---- WARNING: this feature is not recommended, but is supported in 1.17-1.21.
     # ---- For details please refer to canonical/istio-operators#380.
-    # ---- FIXME: Remove this block after releasing 1.18.
+    # ---- FIXME: Remove this block after releasing 1.21.
     def _use_https(self) -> bool:
         """Return True if only one of the TLS configurations are enabled, False if none are.
 
@@ -954,32 +942,38 @@ class Operator(CharmBase):
             ErrorWithStatus: if one of the values is missing.
         """
 
-        # Ensure the secret that holds the values exist otherwise we can assume
-        # that users don't want to configure TLS or they want to do it via a TLS provider.
+        # Ensure the secret that holds the values exist otherwise fail as this
+        # is an error in our code
         try:
-            secret = self.model.get_secret(label="istio-tls-secret")
+            secret = self.model.get_secret(label=TLS_SECRET_LABEL)
         except SecretNotFoundError:
             return False
 
         ssl_key = secret.get_content()["ssl-key"]
         ssl_crt = secret.get_content()["ssl-crt"]
 
-        # Fail if ssl is only partly configured as this is probably a mistake
-        # In reality this part of the code should never be executed as the action
-        # sets these values as required, but leaving the check in case somewhere in
-        # the code these values are messed up.
+        # This block of code is more a validation than a behaviour of the charm
+        # Ideally this will never be executed, but we need a mechanism to know that
+        # these values were correctly saved in the secret
         if _xor(ssl_key, ssl_crt):
             missing = "ssl-key"
             if not secret.get_content()["ssl-crt"]:
                 missing = "ssl-crt"
-            raise ErrorWithStatus(f"Missing {missing}, cannot configure TLS.", BlockedStatus)
+            self.log.error(f"Missing {missing}, this is most likely an error with the charm.")
+            raise GenericCharmRuntimeError(f"Missing {missing}, cannot configure TLS.")
+        elif not ssl_key and not ssl_crt:
+            self.log.error(
+                "Missing both SSL key and cert values, this is most likely an error with the charm."
+            )
+            raise GenericCharmRuntimeError("Missing SSL values, cannot configure TLS.")
 
         # If both the SSL key and cert are provided, we configure TLS
-        return True if ssl_key and ssl_crt else False
+        if ssl_key and ssl_crt:
+            return True
 
     # ---- End of the block
 
-    # FIXME: Replace the below line with the one commented out after releasing 1.18
+    # FIXME: Replace the below line with the one commented out after releasing 1.21
     # def _use_https(self) -> bool:
     def _use_https_with_tls_provider(self) -> bool:
         """Return True if SSL key and cert are provided by a TLS cert provider, False otherwise.
@@ -1003,7 +997,8 @@ class Operator(CharmBase):
                 f"Missing {missing}, cannot configure TLS",
                 BlockedStatus,
             )
-        return True if self._cert_handler.cert and self._cert_handler.key else False
+        if self._cert_handler.cert and self._cert_handler.key:
+            return True
 
     def _log_and_set_status(self, status):
         """Sets the status of the charm and logs the status message.

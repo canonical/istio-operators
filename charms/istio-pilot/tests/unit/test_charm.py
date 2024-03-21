@@ -32,6 +32,7 @@ from ops.testing import Harness
 
 from charm import (
     GATEWAY_PORTS,
+    TLS_SECRET_LABEL,
     Operator,
     _get_gateway_address_from_svc,
     _remove_envoyfilter,
@@ -1508,7 +1509,7 @@ class TestCharmUpgrade:
         assert mocked_istioctl.version.call_count == 5
 
     # ---- Start of block
-    # ---- Test cases added for testing the TLS secret feature, remove after 1.18
+    # ---- Test cases added for testing the TLS secret feature, remove after 1.21
     @pytest.mark.parametrize(
         "https_with_tls_provider, https_with_tls_secret, expected_return, expected_context",
         [
@@ -1528,7 +1529,6 @@ class TestCharmUpgrade:
         mocked_cert_subject,
     ):
         """Test the method returns a correct bool when comparing two TLS options.
-
 
         Parameters:
          https_with_tls_provider(bool): the return of the method that checks
@@ -1558,10 +1558,10 @@ class TestCharmUpgrade:
     @pytest.mark.parametrize(
         "ssl_cert, ssl_key, expected_return, expected_context",
         [
-            ("", "", False, does_not_raise()),
+            ("", "", None, pytest.raises(GenericCharmRuntimeError)),
             ("x", "y", True, does_not_raise()),
-            ("x", "", None, pytest.raises(ErrorWithStatus)),
-            ("", "y", None, pytest.raises(ErrorWithStatus)),
+            ("x", "", None, pytest.raises(GenericCharmRuntimeError)),
+            ("", "y", None, pytest.raises(GenericCharmRuntimeError)),
         ],
     )
     def test_use_https_with_tls_secret_found(
@@ -1587,7 +1587,7 @@ class TestCharmUpgrade:
         """
         harness.begin()
         harness.charm.app.add_secret(
-            content={"ssl-key": ssl_key, "ssl-crt": ssl_cert}, label="istio-tls-secret"
+            content={"ssl-key": ssl_key, "ssl-crt": ssl_cert}, label=TLS_SECRET_LABEL
         )
 
         with expected_context:
@@ -1598,46 +1598,7 @@ class TestCharmUpgrade:
         harness.begin()
         assert harness.charm._use_https_with_tls_secret() is False
 
-    def test_save_tls_secret_log_and_return(self, harness, mocked_cert_subject):
-        """Test the method logs and returns if no params are passed to the action."""
-        harness.begin()
-        harness.set_leader(True)
-
-        harness.charm.log = MagicMock()
-        mocked_action_event = MagicMock(spec=ActionEvent)
-        mocked_action_event.params = {}
-
-        harness.charm.save_tls_secret(mocked_action_event)
-        assert harness.charm.log.info.call_count == 1
-        assert harness.charm.log.info.call_args.args[0] == (
-            "An attempt to configure TLS via secrets was made, but no secrets were provided."
-            "This action will have no effect."
-        )
-
-    @pytest.mark.parametrize(
-        "param, missing_param",
-        [
-            ("ssl-crt", "ssl-key"),
-            ("ssl-key", "ssl-crt"),
-        ],
-    )
-    def test_save_tls_secret_block_unit_if_only_one_param(
-        self, param, missing_param, harness, mocked_cert_subject
-    ):
-        """Test the method logs and returns if only one param is passed to the action."""
-        harness.begin()
-        harness.set_leader(True)
-
-        harness.charm.log = MagicMock()
-        mocked_action_event = MagicMock(spec=ActionEvent)
-        mocked_action_event.params = {param: "some-value"}
-
-        harness.charm.save_tls_secret(mocked_action_event)
-        assert harness.charm.model.unit.status == BlockedStatus(
-            f"Missing {missing_param}, cannot configure TLS."
-        )
-
-    def test_save_tls_secret_set_secret_content(
+    def test_set_tls_manually_set_secret_content(
         self, harness, mocked_cert_subject, all_operator_reconcile_handlers_mocked
     ):
         """Test the method sets secret content when secret exists."""
@@ -1649,15 +1610,15 @@ class TestCharmUpgrade:
 
         # Add secret first so the charm code detects it and just updates the value
         harness.charm.app.add_secret(
-            content={"ssl-key": "current-key", "ssl-crt": "current-crt"}, label="istio-tls-secret"
+            content={"ssl-key": "current-key", "ssl-crt": "current-crt"}, label=TLS_SECRET_LABEL
         )
-        harness.charm.save_tls_secret(mocked_action_event)
+        harness.charm.set_tls_manually(mocked_action_event)
         assert (
-            harness.model.get_secret(label="istio-tls-secret").get_content()
+            harness.model.get_secret(label=TLS_SECRET_LABEL).get_content()
             == mocked_action_event.params
         )
 
-    def test_save_tls_secret_add_secret(
+    def test_set_tls_manually_add_secret(
         self, harness, mocked_cert_subject, all_operator_reconcile_handlers_mocked
     ):
         """Test the method adds a secret when it does not exist."""
@@ -1667,13 +1628,13 @@ class TestCharmUpgrade:
         mocked_action_event = MagicMock(spec=ActionEvent)
         mocked_action_event.params = {"ssl-key": "new-key", "ssl-crt": "new-crt"}
 
-        harness.charm.save_tls_secret(mocked_action_event)
+        harness.charm.set_tls_manually(mocked_action_event)
         assert (
-            harness.model.get_secret(label="istio-tls-secret").get_content()
+            harness.model.get_secret(label=TLS_SECRET_LABEL).get_content()
             == mocked_action_event.params
         )
 
-    def test_remove_tls_secret(
+    def test_unset_tls_manually(
         self, harness, all_operator_reconcile_handlers_mocked, mocked_cert_subject
     ):
         """Test the secret gets removed."""
@@ -1684,12 +1645,12 @@ class TestCharmUpgrade:
 
         # Add secret first so the charm code detects it and is able to delete it
         harness.charm.app.add_secret(
-            content={"ssl-key": "key", "ssl-crt": "crt"}, label="istio-tls-secret"
+            content={"ssl-key": "key", "ssl-crt": "crt"}, label=TLS_SECRET_LABEL
         )
-        harness.charm.remove_tls_secret(mocked_action_event)
+        harness.charm.unset_tls_manually(mocked_action_event)
 
         with pytest.raises(SecretNotFoundError):
-            harness.model.get_secret(label="istio-tls-secret")
+            harness.model.get_secret(label=TLS_SECRET_LABEL)
 
     # ---- End of block
 
