@@ -1607,6 +1607,7 @@ class TestCharmUpgrade:
     ):
         """Test the method sets secret content when secret exists."""
         harness.begin()
+        harness.add_relation("peers", harness.charm.app.name)
         harness.set_leader(True)
 
         mocked_action_event = MagicMock(spec=ActionEvent)
@@ -1627,6 +1628,7 @@ class TestCharmUpgrade:
     ):
         """Test the method adds a secret when it does not exist."""
         harness.begin()
+        harness.add_relation("peers", harness.charm.app.name)
         harness.set_leader(True)
 
         mocked_action_event = MagicMock(spec=ActionEvent)
@@ -1643,6 +1645,7 @@ class TestCharmUpgrade:
     ):
         """Test the secret gets removed."""
         harness.begin()
+        harness.add_relation("peers", harness.charm.app.name)
         harness.set_leader(True)
 
         mocked_action_event = MagicMock(spec=ActionEvent)
