@@ -1600,7 +1600,10 @@ class TestCharmUpgrade:
         assert harness.charm._use_https_with_tls_secret() is False
 
     def test_set_tls_manually_set_secret_content(
-        self, harness, mocked_cert_subject, all_operator_reconcile_handlers_mocked,
+        self,
+        harness,
+        mocked_cert_subject,
+        all_operator_reconcile_handlers_mocked,
     ):
         """Test the method sets secret content when secret exists."""
         harness.begin()
