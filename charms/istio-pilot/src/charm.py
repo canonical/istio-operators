@@ -207,16 +207,16 @@ class Operator(CharmBase):
     # ---- For details please refer to canonical/istio-operators#380.
     # ---- FIXME: Remove this block after releasing 1.21.
     def unset_tls_manually(self, event) -> None:
-        """Remove the secret that saves TLS information and reconcile the ingress gateway."""
+        """Remove the secret that saves TLS information and reconcile in case of changes."""
         try:
             secret = self.model.get_secret(label=TLS_SECRET_LABEL)
             secret.remove_all_revisions()
-            self._reconcile_gateway()
         except SecretNotFoundError:
             self.log.info("No secret was removed.")
+        self.reconcile(event)
 
     def set_tls_manually(self, event) -> None:
-        """Save TLS information in a juju secret and reconcile the ingress gateway."""
+        """Save TLS information in a juju secret and reconcile in case of changes."""
 
         # Because the action itself has some validation, we are guaranteed that
         # BOTH of these values are passed as a string with minimum length 1
@@ -231,11 +231,7 @@ class Operator(CharmBase):
             secret.set_content(content)
         except SecretNotFoundError:
             self.app.add_secret({"ssl-key": ssl_key, "ssl-crt": ssl_crt}, label=TLS_SECRET_LABEL)
-        self._reconcile_gateway()
-
-    def reconcile_tls_secret(self, event: Secret) -> None:
-        """Reconcile the ingress gateway on a Secret event."""
-        self._reconcile_gateway()
+        self.reconcile(event)
 
     # ---- End of the block
 
@@ -694,6 +690,7 @@ class Operator(CharmBase):
         # Secure the gateway, if certificates relation is enabled and
         # both the CA cert and key are provided
         if self._use_https():
+            self._log_and_set_status(MaintenanceStatus("Setting TLS Ingress"))
             context["ssl_crt"] = self._ssl_info["ssl-crt"]
             context["ssl_key"] = self._ssl_info["ssl-key"]
             context["secure"] = True
@@ -897,10 +894,10 @@ class Operator(CharmBase):
             ssl_secret = self.model.get_secret(label=TLS_SECRET_LABEL)
             return {
                 "ssl-crt": base64.b64encode(
-                    ssl_secret.get_content()["ssl-crt"].encode("ascii")
+                    ssl_secret.get_content(refresh=True)["ssl-crt"].encode("ascii")
                 ).decode("utf-8"),
                 "ssl-key": base64.b64encode(
-                    ssl_secret.get_content()["ssl-key"].encode("ascii")
+                    ssl_secret.get_content(refresh=True)["ssl-key"].encode("ascii")
                 ).decode("utf-8"),
             }
         except SecretNotFoundError:
@@ -949,15 +946,15 @@ class Operator(CharmBase):
         except SecretNotFoundError:
             return False
 
-        ssl_key = secret.get_content()["ssl-key"]
-        ssl_crt = secret.get_content()["ssl-crt"]
+        ssl_key = secret.get_content(refresh=True)["ssl-key"]
+        ssl_crt = secret.get_content(refresh=True)["ssl-crt"]
 
         # This block of code is more a validation than a behaviour of the charm
         # Ideally this will never be executed, but we need a mechanism to know that
         # these values were correctly saved in the secret
         if _xor(ssl_key, ssl_crt):
             missing = "ssl-key"
-            if not secret.get_content()["ssl-crt"]:
+            if not secret.get_content(refresh=True)["ssl-crt"]:
                 missing = "ssl-crt"
             self.log.error(f"Missing {missing}, this is most likely an error with the charm.")
             raise GenericCharmRuntimeError(f"Missing {missing}, cannot configure TLS.")
