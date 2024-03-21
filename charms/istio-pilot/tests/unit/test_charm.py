@@ -1604,7 +1604,7 @@ class TestCharmUpgrade:
         harness.begin()
         assert harness.charm._use_https_with_tls_secret() is False
 
-    def test_set_tls_manually_set_secret_content(
+    def test_set_tls_set_secret_content(
         self,
         harness,
         mocked_cert_subject,
@@ -1622,13 +1622,13 @@ class TestCharmUpgrade:
         harness.charm.app.add_secret(
             content={"ssl-key": "current-key", "ssl-crt": "current-crt"}, label=TLS_SECRET_LABEL
         )
-        harness.charm.set_tls_manually(mocked_action_event)
+        harness.charm.set_tls(mocked_action_event)
         assert (
             harness.model.get_secret(label=TLS_SECRET_LABEL).get_content()
             == mocked_action_event.params
         )
 
-    def test_set_tls_manually_add_secret(
+    def test_set_tls_add_secret(
         self, harness, mocked_cert_subject, all_operator_reconcile_handlers_mocked
     ):
         """Test the method adds a secret when it does not exist."""
@@ -1639,15 +1639,13 @@ class TestCharmUpgrade:
         mocked_action_event = MagicMock(spec=ActionEvent)
         mocked_action_event.params = {"ssl-key": "new-key", "ssl-crt": "new-crt"}
 
-        harness.charm.set_tls_manually(mocked_action_event)
+        harness.charm.set_tls(mocked_action_event)
         assert (
             harness.model.get_secret(label=TLS_SECRET_LABEL).get_content()
             == mocked_action_event.params
         )
 
-    def test_unset_tls_manually(
-        self, harness, all_operator_reconcile_handlers_mocked, mocked_cert_subject
-    ):
+    def test_unset_tls(self, harness, all_operator_reconcile_handlers_mocked, mocked_cert_subject):
         """Test the secret gets removed."""
         harness.begin()
         harness.add_relation("peers", harness.charm.app.name)
@@ -1659,7 +1657,7 @@ class TestCharmUpgrade:
         harness.charm.app.add_secret(
             content={"ssl-key": "key", "ssl-crt": "crt"}, label=TLS_SECRET_LABEL
         )
-        harness.charm.unset_tls_manually(mocked_action_event)
+        harness.charm.unset_tls(mocked_action_event)
 
         with pytest.raises(SecretNotFoundError):
             harness.model.get_secret(label=TLS_SECRET_LABEL)

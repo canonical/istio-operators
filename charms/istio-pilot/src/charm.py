@@ -125,11 +125,11 @@ class Operator(CharmBase):
         # ---- For details please refer to canonical/istio-operators#380.
         # ---- FIXME: Remove this block after releasing 1.21.
         # Save SSL information and reconcile
-        self.framework.observe(self.on.set_tls_manually_action, self.set_tls_manually)
+        self.framework.observe(self.on.set_tls_action, self.set_tls)
         self.framework.observe(self.on.secret_changed, self.reconcile)
 
         # Remove SSL information and reconcile
-        self.framework.observe(self.on.unset_tls_manually_action, self.unset_tls_manually)
+        self.framework.observe(self.on.unset_tls_action, self.unset_tls)
         self.framework.observe(self.on.secret_remove, self.reconcile)
         # ---- End of the block
 
@@ -206,7 +206,7 @@ class Operator(CharmBase):
     # ---- WARNING: this feature is not recommended, but is supported in 1.17-1.21.
     # ---- For details please refer to canonical/istio-operators#380.
     # ---- FIXME: Remove this block after releasing 1.21.
-    def unset_tls_manually(self, event) -> None:
+    def unset_tls(self, event) -> None:
         """Remove the secret that saves TLS information and reconcile in case of changes."""
         try:
             secret = self.model.get_secret(label=TLS_SECRET_LABEL)
@@ -215,7 +215,7 @@ class Operator(CharmBase):
             self.log.info("No secret was removed.")
         self.reconcile(event)
 
-    def set_tls_manually(self, event) -> None:
+    def set_tls(self, event) -> None:
         """Save TLS information in a juju secret and reconcile in case of changes."""
 
         # Because the action itself has some validation, we are guaranteed that
