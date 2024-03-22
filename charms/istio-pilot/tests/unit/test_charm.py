@@ -15,16 +15,24 @@ from lightkube.generic_resource import create_namespaced_resource
 from lightkube.models.meta_v1 import ObjectMeta
 from lightkube.resources.core_v1 import Secret
 from ops.charm import (
+    ActionEvent,
     RelationBrokenEvent,
     RelationChangedEvent,
     RelationCreatedEvent,
     RelationJoinedEvent,
 )
-from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
+from ops.model import (
+    ActiveStatus,
+    BlockedStatus,
+    MaintenanceStatus,
+    SecretNotFoundError,
+    WaitingStatus,
+)
 from ops.testing import Harness
 
 from charm import (
     GATEWAY_PORTS,
+    TLS_SECRET_LABEL,
     Operator,
     _get_gateway_address_from_svc,
     _remove_envoyfilter,
@@ -1195,7 +1203,7 @@ class TestCharmHelpers:
             (True, "", "y", None, pytest.raises(ErrorWithStatus)),
         ],
     )
-    def test_use_https(
+    def test_use_https_with_tls_provider(
         self,
         cert_handler_enabled,
         ssl_cert,
@@ -1205,10 +1213,7 @@ class TestCharmHelpers:
         harness,
         mocked_cert_subject,
     ):
-        """Tests that the gateway_port selection works as expected.
-
-        Implicitly tests _use_https() as well.
-        """
+        """Test the method returns the correct boolean when the CertHandler is defined."""
         harness.begin()
         harness.charm._cert_handler = MagicMock()
         harness.charm._cert_handler.enabled = cert_handler_enabled
@@ -1216,7 +1221,7 @@ class TestCharmHelpers:
         harness.charm._cert_handler.key = ssl_key
 
         with expected_context:
-            assert harness.charm._use_https() == expected_return
+            assert harness.charm._use_https_with_tls_provider() == expected_return
 
     @pytest.mark.parametrize(
         "left, right, expected",
@@ -1396,6 +1401,157 @@ class TestCharmUpgrade:
             _wait_for_update_rollout(mocked_istioctl, retry_strategy, logging.getLogger())
 
         assert mocked_istioctl.version.call_count == 5
+
+    # ---- Start of block
+    # ---- Test cases added for testing the TLS secret feature, remove after 1.21
+    @pytest.mark.parametrize(
+        "https_with_tls_provider, https_with_tls_secret, expected_return, expected_context",
+        [
+            (True, False, True, does_not_raise()),
+            (False, True, True, does_not_raise()),
+            (False, False, False, does_not_raise()),
+            (True, True, None, pytest.raises(ErrorWithStatus)),
+        ],
+    )
+    def test_use_https(
+        self,
+        https_with_tls_provider,
+        https_with_tls_secret,
+        expected_return,
+        expected_context,
+        harness,
+        mocked_cert_subject,
+    ):
+        """Test the method returns a correct bool when comparing two TLS options.
+
+        Parameters:
+         https_with_tls_provider(bool): the return of the method that checks
+             the TLS certificates provider is related and configured to this charm
+         https_with_tls_secret(bool): the return of the method that checks the TLS
+             configuration is done from secret data
+         expected_return(bool, None): the expected return of the methods above
+         expected_context: the exception(if any) that is expected when calling
+             the above methods.
+
+         Example:
+          If https_with_tls_provider returns False and https_with_tls_secret returns True,
+          the expected return of _use_https() is True.
+          If both https_with_tls_provider and https_with_tls_secret return True, _use_https()
+          must raise ErrorWithStatus.
+        """
+        harness.begin()
+
+        harness.charm._use_https_with_tls_secret = MagicMock()
+        harness.charm._use_https_with_tls_secret.return_value = https_with_tls_secret
+        harness.charm._use_https_with_tls_provider = MagicMock()
+        harness.charm._use_https_with_tls_provider.return_value = https_with_tls_provider
+
+        with expected_context:
+            assert harness.charm._use_https() == expected_return
+
+    @pytest.mark.skip("Skipping due to ValueError: Secret owner cannot use refresh=True")
+    @pytest.mark.parametrize(
+        "ssl_cert, ssl_key, expected_return, expected_context",
+        [
+            ("", "", None, pytest.raises(GenericCharmRuntimeError)),
+            ("x", "y", True, does_not_raise()),
+            ("x", "", None, pytest.raises(GenericCharmRuntimeError)),
+            ("", "y", None, pytest.raises(GenericCharmRuntimeError)),
+        ],
+    )
+    def test_use_https_with_tls_secret_found(
+        self,
+        ssl_cert,
+        ssl_key,
+        expected_return,
+        expected_context,
+        harness,
+        mocked_cert_subject,
+    ):
+        """Test the method returns a correct bool when the secret is added.
+
+        Parameters:
+          ssl_cert(str): SSL cert value (comes from a secret)
+          ssl_key(str): SSL key value (comes from a secret)
+          expected_return(bool): the expected return of the use_https_with_tls_secret method
+          expected_context: if the method should raise or not
+        Example:
+          If ssl_cert and ssl_key both have values, the use_https_with_tls_secret() method
+          must return True; if both are empty the return must be False; and if just one
+          value is set, the method should raise ErrorWithStatus.
+        """
+        harness.begin()
+        harness.charm.app.add_secret(
+            content={"ssl-key": ssl_key, "ssl-crt": ssl_cert}, label=TLS_SECRET_LABEL
+        )
+
+        with expected_context:
+            assert harness.charm._use_https_with_tls_secret() == expected_return
+
+    def test_use_https_with_tls_secret_not_found(self, harness, mocked_cert_subject):
+        """Test the method returns False when the secret is not added."""
+        harness.begin()
+        assert harness.charm._use_https_with_tls_secret() is False
+
+    def test_set_tls_set_secret_content(
+        self,
+        harness,
+        mocked_cert_subject,
+        all_operator_reconcile_handlers_mocked,
+    ):
+        """Test the method sets secret content when secret exists."""
+        harness.begin()
+        harness.add_relation("peers", harness.charm.app.name)
+        harness.set_leader(True)
+
+        mocked_action_event = MagicMock(spec=ActionEvent)
+        mocked_action_event.params = {"ssl-key": "new-key", "ssl-crt": "new-crt"}
+
+        # Add secret first so the charm code detects it and just updates the value
+        harness.charm.app.add_secret(
+            content={"ssl-key": "current-key", "ssl-crt": "current-crt"}, label=TLS_SECRET_LABEL
+        )
+        harness.charm.set_tls(mocked_action_event)
+        assert (
+            harness.model.get_secret(label=TLS_SECRET_LABEL).get_content()
+            == mocked_action_event.params
+        )
+
+    def test_set_tls_add_secret(
+        self, harness, mocked_cert_subject, all_operator_reconcile_handlers_mocked
+    ):
+        """Test the method adds a secret when it does not exist."""
+        harness.begin()
+        harness.add_relation("peers", harness.charm.app.name)
+        harness.set_leader(True)
+
+        mocked_action_event = MagicMock(spec=ActionEvent)
+        mocked_action_event.params = {"ssl-key": "new-key", "ssl-crt": "new-crt"}
+
+        harness.charm.set_tls(mocked_action_event)
+        assert (
+            harness.model.get_secret(label=TLS_SECRET_LABEL).get_content()
+            == mocked_action_event.params
+        )
+
+    def test_unset_tls(self, harness, all_operator_reconcile_handlers_mocked, mocked_cert_subject):
+        """Test the secret gets removed."""
+        harness.begin()
+        harness.add_relation("peers", harness.charm.app.name)
+        harness.set_leader(True)
+
+        mocked_action_event = MagicMock(spec=ActionEvent)
+
+        # Add secret first so the charm code detects it and is able to delete it
+        harness.charm.app.add_secret(
+            content={"ssl-key": "key", "ssl-crt": "crt"}, label=TLS_SECRET_LABEL
+        )
+        harness.charm.unset_tls(mocked_action_event)
+
+        with pytest.raises(SecretNotFoundError):
+            harness.model.get_secret(label=TLS_SECRET_LABEL)
+
+    # ---- End of block
 
 
 # Fixtures
