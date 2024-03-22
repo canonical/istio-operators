@@ -4,7 +4,7 @@ lightkube
 # Pinning lightkube-models to keep compatibility with istio 1.17
 # which supports versions 1.23, 1.24, 1.25, 1.26 of k8s
 # Update the pin when this charm is upgraded to <=1.18
-lightkube-models<1.27
+lightkube-models<1.30
 ops
 packaging
 requests
