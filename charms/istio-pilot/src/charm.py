@@ -3,7 +3,7 @@
 import base64
 import logging
 import subprocess
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 import tenacity
 import yaml
@@ -26,7 +26,14 @@ from lightkube.generic_resource import create_namespaced_resource
 from lightkube.resources.core_v1 import Secret, Service
 from ops.charm import CharmBase, RelationBrokenEvent
 from ops.main import main
-from ops.model import ActiveStatus, Application, BlockedStatus, MaintenanceStatus, WaitingStatus
+from ops.model import (
+    ActiveStatus,
+    Application,
+    BlockedStatus,
+    MaintenanceStatus,
+    SecretNotFoundError,
+    WaitingStatus,
+)
 from packaging.version import Version
 from serialized_data_interface import (
     NoCompatibleVersions,
@@ -66,6 +73,12 @@ KRH_INGRESS_SCOPE = "ingress"
 VIRTUAL_SERVICE_TEMPLATE_FILES = ["src/manifests/virtual_service.yaml.j2"]
 ISTIOCTL_PATH = "./istioctl"
 ISTIOCTL_DEPOYMENT_PROFILE = "minimal"
+INSTALL_FAILED_MSG = (
+    "Failed to install Istio Control Plane. "
+    "{message} Make sure the cluster has no Istio installations already present and "
+    "that you have provided the right configuration values."
+)
+TLS_SECRET_LABEL = "istio-tls-secret"
 UPGRADE_FAILED_MSG = (
     "Failed to upgrade Istio.  {message}  To recover Istio, see [the upgrade docs]"
     "(https://github.com/canonical/istio-operators/blob/main/charms/istio-pilot/README.md) for "
@@ -106,6 +119,19 @@ class Operator(CharmBase):
         # Observe this custom event emitted by the cert_handler library on certificate
         # available, revoked, invalidated, or if the certs relation is broken
         self.framework.observe(self._cert_handler.on.cert_changed, self.reconcile)
+
+        # ---- Start of the block
+        # ---- WARNING: this feature is not recommended, but is supported in 1.17-1.21.
+        # ---- For details please refer to canonical/istio-operators#380.
+        # ---- FIXME: Remove this block after releasing 1.21.
+        # Save SSL information and reconcile
+        self.framework.observe(self.on.set_tls_action, self.set_tls)
+        self.framework.observe(self.on.secret_changed, self.reconcile)
+
+        # Remove SSL information and reconcile
+        self.framework.observe(self.on.unset_tls_action, self.unset_tls)
+        self.framework.observe(self.on.secret_remove, self.reconcile)
+        # ---- End of the block
 
         # Event handling for managing the Istio control plane
         self.framework.observe(self.on.install, self.install)
@@ -211,6 +237,39 @@ class Operator(CharmBase):
         )
 
         self.unit.status = ActiveStatus()
+
+    # ---- Start of the block
+    # ---- WARNING: this feature is not recommended, but is supported in 1.17-1.21.
+    # ---- For details please refer to canonical/istio-operators#380.
+    # ---- FIXME: Remove this block after releasing 1.21.
+    def unset_tls(self, event) -> None:
+        """Remove the secret that saves TLS information and reconcile in case of changes."""
+        try:
+            secret = self.model.get_secret(label=TLS_SECRET_LABEL)
+            secret.remove_all_revisions()
+        except SecretNotFoundError:
+            self.log.info("No secret was removed.")
+        self.reconcile(event)
+
+    def set_tls(self, event) -> None:
+        """Save TLS information in a juju secret and reconcile in case of changes."""
+
+        # Because the action itself has some validation, we are guaranteed that
+        # BOTH of these values are passed as a string with minimum length 1
+        ssl_key = event.params.get("ssl-key", None)
+        ssl_crt = event.params.get("ssl-crt", None)
+
+        content = {"ssl-key": ssl_key, "ssl-crt": ssl_crt}
+
+        # Save the secret with the content that was passed through the action
+        try:
+            secret = self.model.get_secret(label=TLS_SECRET_LABEL)
+            secret.set_content(content)
+        except SecretNotFoundError:
+            self.app.add_secret({"ssl-key": ssl_key, "ssl-crt": ssl_crt}, label=TLS_SECRET_LABEL)
+        self.reconcile(event)
+
+    # ---- End of the block
 
     def reconcile(self, event):
         """Reconcile the state of the charm.
@@ -576,12 +635,9 @@ class Operator(CharmBase):
         # Secure the gateway, if certificates relation is enabled and
         # both the CA cert and key are provided
         if self._use_https():
-            context["ssl_crt"] = base64.b64encode(self._cert_handler.cert.encode("ascii")).decode(
-                "utf-8"
-            )
-            context["ssl_key"] = base64.b64encode(self._cert_handler.key.encode("ascii")).decode(
-                "utf-8"
-            )
+            self._log_and_set_status(MaintenanceStatus("Setting TLS Ingress"))
+            context["ssl_crt"] = self._ssl_info["ssl-crt"]
+            context["ssl_key"] = self._ssl_info["ssl-key"]
             context["secure"] = True
 
         krh = KubernetesResourceHandler(
@@ -768,7 +824,107 @@ class Operator(CharmBase):
         else:
             return exporter_ip
 
-    def _use_https(self):
+    @property
+    def _ssl_info(self) -> Dict[str, str]:
+        """Return a dictionary with SSL cert and key values.
+
+        The dictionary is built based on available information, if
+        the istio-tls-secret is found, it is prioritised and returned;
+        otherwise, the information shared by a TLS certificate provider.
+        """
+
+        # FIXME: remove the try/catch block and just return the dictionary that contains
+        # data from the CertHandler after 1.21
+        try:
+            ssl_secret = self.model.get_secret(label=TLS_SECRET_LABEL)
+            return {
+                "ssl-crt": base64.b64encode(
+                    ssl_secret.get_content(refresh=True)["ssl-crt"].encode("ascii")
+                ).decode("utf-8"),
+                "ssl-key": base64.b64encode(
+                    ssl_secret.get_content(refresh=True)["ssl-key"].encode("ascii")
+                ).decode("utf-8"),
+            }
+        except SecretNotFoundError:
+            return {
+                "ssl-crt": base64.b64encode(self._cert_handler.cert.encode("ascii")).decode(
+                    "utf-8"
+                ),
+                "ssl-key": base64.b64encode(self._cert_handler.key.encode("ascii")).decode(
+                    "utf-8"
+                ),
+            }
+
+    # ---- Start of the block
+    # ---- WARNING: this feature is not recommended, but is supported in 1.17-1.21.
+    # ---- For details please refer to canonical/istio-operators#380.
+    # ---- FIXME: Remove this block after releasing 1.21.
+    def _use_https(self) -> bool:
+        """Return True if only one of the TLS configurations are enabled, False if none are.
+
+        Raises:
+            ErrorWithStatus: if both configurations are enabled.
+        """
+        if self._use_https_with_tls_provider() and self._use_https_with_tls_secret():
+            self.log.error(
+                "Only one TLS configuration is supported at a time."
+                "Either remove the TLS certificate provider relation,"
+                "or the TLS manual configuration with the remove-tls-secret action."
+            )
+            raise ErrorWithStatus(
+                "Only one TLS configuration is supported at a time. See logs for details.",
+                BlockedStatus,
+            )
+        return self._use_https_with_tls_provider() or self._use_https_with_tls_secret()
+
+    def _use_https_with_tls_secret(self) -> bool:
+        """Return True if both SSL key and crt are set with save-tls-secret, False otherwise.
+
+        Raises:
+            ErrorWithStatus: if one of the values is missing.
+        """
+
+        # Ensure the secret that holds the values exist otherwise fail as this
+        # is an error in our code
+        try:
+            secret = self.model.get_secret(label=TLS_SECRET_LABEL)
+        except SecretNotFoundError:
+            return False
+
+        ssl_key = secret.get_content(refresh=True)["ssl-key"]
+        ssl_crt = secret.get_content(refresh=True)["ssl-crt"]
+
+        # This block of code is more a validation than a behaviour of the charm
+        # Ideally this will never be executed, but we need a mechanism to know that
+        # these values were correctly saved in the secret
+        if _xor(ssl_key, ssl_crt):
+            missing = "ssl-key"
+            if not secret.get_content(refresh=True)["ssl-crt"]:
+                missing = "ssl-crt"
+            self.log.error(f"Missing {missing}, this is most likely an error with the charm.")
+            raise GenericCharmRuntimeError(f"Missing {missing}, cannot configure TLS.")
+        elif not ssl_key and not ssl_crt:
+            self.log.error(
+                "Missing both SSL key and cert values, this is most likely an error with the charm."
+            )
+            raise GenericCharmRuntimeError("Missing SSL values, cannot configure TLS.")
+
+        # If both the SSL key and cert are provided, we configure TLS
+        if ssl_key and ssl_crt:
+            return True
+
+    # ---- End of the block
+
+    # FIXME: Replace the below line with the one commented out after releasing 1.21
+    # def _use_https(self) -> bool:
+    def _use_https_with_tls_provider(self) -> bool:
+        """Return True if SSL key and cert are provided by a TLS cert provider, False otherwise.
+
+        Raises:
+            ErrorWithStatus: if one of the values is missing.
+        """
+
+        # Immediately return False if the CertHandler is not enabled
         if not self._cert_handler.enabled:
             return False
 

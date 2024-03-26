@@ -1,0 +1,26 @@
+# Copyright 2024 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+set-tls:
+  description: |
+    Manually pass SSL cert and key values to configure the Ingress Gateway with TLS.
+    Configuring TLS with this action is mutually exclusive to using TLS certificate providers.
+  params:
+    ssl-key:
+      type: string
+      pattern: "^.*[a-zA-Z0-9]+.*$"
+      minLength: 1
+      description: |
+        The SSL key output as a string. Can be set with
+        $ juju run set-tls istio-pilot/<unit-number> ssl-key="$(cat KEY_FILE)"
+    ssl-crt:
+      type: string
+      minLength: 1
+      pattern: "^.*[a-zA-Z0-9]+.*$"
+      description: |
+        The SSL cert output as a string. Can be set with
+        $ juju run set-tls istio-pilot/<unit-number> ssl-crt="$(cat CERT_FILE)"
+  required: [ssl-key, ssl-crt]
+unset-tls:
+  description: Remove SSL cert and key values from the Ingress Gateway TLS configuration.
+  additionalProperties: false
