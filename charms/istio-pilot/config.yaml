@@ -24,3 +24,6 @@ options:
     type: string
     default: istio-ingressgateway-workload
     description: Name of the service created by istio-gateway to use as a Gateway
+  tls-secret-id:
+    type: secret
+    description: A configuration option to store the user secret ID that stores the TLS certificate and key values.
