@@ -1493,6 +1493,7 @@ class TestCharmUpgrade:
         harness.begin()
         assert harness.charm._use_https_with_tls_secret() is False
 
+    @pytest.mark.skip("This test case will be removed by #401, no need to execute it.")
     def test_set_tls_set_secret_content(
         self,
         harness,
@@ -1517,6 +1518,7 @@ class TestCharmUpgrade:
             == mocked_action_event.params
         )
 
+    @pytest.mark.skip("This test case will be removed by #401, no need to execute it.")
     def test_set_tls_add_secret(
         self, harness, mocked_cert_subject, all_operator_reconcile_handlers_mocked
     ):
@@ -1534,6 +1536,7 @@ class TestCharmUpgrade:
             == mocked_action_event.params
         )
 
+    @pytest.mark.skip("This test case will be removed by #401, no need to execute it.")
     def test_unset_tls(self, harness, all_operator_reconcile_handlers_mocked, mocked_cert_subject):
         """Test the secret gets removed."""
         harness.begin()
