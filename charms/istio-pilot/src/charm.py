@@ -2,7 +2,7 @@
 
 import base64
 import logging
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 import tenacity
 import yaml
