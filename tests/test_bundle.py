@@ -24,7 +24,9 @@ OIDC_GATEKEEPER = "oidc-gatekeeper"
 ISTIO_PILOT = "istio-pilot"
 ISTIO_GATEWAY_APP_NAME = "istio-ingressgateway"
 TENSORBOARD_CONTROLLER = "tensorboard-controller"
-INGRESS_REQUIRER = "tensorboards-web-app"
+INGRESS_REQUIRER = "kubeflow-volumes"
+INGRESS_REQUIRER_CHANNEL = "1.8/stable"
+TRUST_INGRESS_REQUIRER = True
 
 USERNAME = "user123"
 PASSWORD = "user123"
@@ -100,7 +102,7 @@ async def test_ingress_relation(ops_test: OpsTest):
     TODO (https://github.com/canonical/istio-operators/issues/259): Change this from using a
      specific charm that implements ingress's requirer interface to a generic charm
     """
-    await ops_test.model.deploy(INGRESS_REQUIRER, channel="1.8/stable", trust=True)
+    await ops_test.model.deploy(INGRESS_REQUIRER, channel=INGRESS_REQUIRER_CHANNEL, trust=TRUST_INGRESS_REQUIRER)
 
     await ops_test.model.add_relation(f"{ISTIO_PILOT}:ingress", f"{INGRESS_REQUIRER}:ingress")
 
@@ -114,7 +116,7 @@ async def test_ingress_relation(ops_test: OpsTest):
 
     # Confirm that the UI is reachable through the ingress
     gateway_ip = await get_gateway_ip(ops_test)
-    await assert_page_reachable(url=f"http://{gateway_ip}/tensorboards/", title="Frontend")
+    await assert_page_reachable(url=f"http://{gateway_ip}/volumes/", title="Frontend")
 
 
 async def test_gateway_info_relation(ops_test: OpsTest):
