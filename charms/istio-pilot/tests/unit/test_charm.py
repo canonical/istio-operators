@@ -203,6 +203,7 @@ class TestCharmEvents:
         self,
         mocked_remove_gateway,
         harness,
+        mocker,
         mocked_lightkube_client,
         kubernetes_resource_handler_with_client,
     ):
@@ -223,6 +224,8 @@ class TestCharmEvents:
         harness.update_config({"default-gateway": gateway_name})
 
         harness.begin()
+        harness.add_relation("peers", harness.charm.app.name)
+        mocker.patch("charm.Operator.upgrade_charm")
 
         harness.charm.log = MagicMock()
 
@@ -277,6 +280,7 @@ class TestCharmEvents:
         self,
         mocked_handle_istio_pilot_relation,
         harness,
+        mocker,
         mocked_lightkube_client,
         kubernetes_resource_handler_with_client,
     ):
@@ -298,6 +302,8 @@ class TestCharmEvents:
         harness.update_config({"default-gateway": gateway_name})
 
         harness.begin()
+        harness.add_relation("peers", harness.charm.app.name)
+        mocker.patch("charm.Operator.upgrade_charm")
 
         # Do a reconcile
         harness.charm.on.config_changed.emit()
@@ -347,7 +353,7 @@ class TestCharmEvents:
         assert "handled 1 error" in harness.charm.model.unit.status.message
 
     def test_istio_pilot_relation(
-        self, harness, mocked_lightkube_client, kubernetes_resource_handler_with_client
+        self, harness, mocker, mocked_lightkube_client, kubernetes_resource_handler_with_client
     ):
         """Charm e2e test that asserts we correctly broadcast data on the istio-pilot relation."""
         krh_class, krh_lightkube_client = kubernetes_resource_handler_with_client
@@ -359,6 +365,8 @@ class TestCharmEvents:
         harness.update_config({"default-gateway": gateway_name})
 
         harness.begin()
+        harness.add_relation("peers", harness.charm.app.name)
+        mocker.patch("charm.Operator.upgrade_charm")
 
         # Do a reconcile
         harness.charm.on.config_changed.emit()
@@ -379,6 +387,7 @@ class TestCharmEvents:
         self,
         mocked_is_gateway_service_up,
         harness,
+        mocker,
         mocked_lightkube_client,
         kubernetes_resource_handler_with_client,
     ):
@@ -393,6 +402,8 @@ class TestCharmEvents:
         mocked_is_gateway_service_up.return_value = True
 
         harness.begin()
+        harness.add_relation("peers", harness.charm.app.name)
+        mocker.patch("charm.Operator.upgrade_charm")
 
         # Act and assert
         # Add gateway-info relation and check it posts data correctly
@@ -407,6 +418,58 @@ class TestCharmEvents:
         assert actual_gateway_up == "true"
         assert harness.charm.model.unit.status == ActiveStatus()
 
+    @pytest.mark.parametrize(
+        "current_cni_bin_dir, current_cni_conf_dir, new_cni_bin_dir, new_cni_conf_dir, expected_output",  # noqa
+        [
+            ("current-bin", "current-conf", "current-bin", "current-conf", False),
+            ("current-bin", "current-conf", "new-bin", "new-conf", True),
+            ("current-bin", "current-conf", "current-bin", "new-conf", True),
+            ("current-bin", "", "new-bin", "", True),
+            ("", "current-conf", "", "new-conf", True),
+            ("", "", "", "", False),
+        ],
+    )
+    def test_cni_config_changed(
+        self,
+        current_cni_bin_dir,
+        current_cni_conf_dir,
+        new_cni_bin_dir,
+        new_cni_conf_dir,
+        expected_output,
+        harness,
+        mocked_lightkube_client,
+    ):
+        model_name = "my-model"
+        harness.set_leader(True)
+        harness.set_model_name(model_name)
+
+        # Set peer relation
+        rel_id = harness.add_relation("peers", "istio-pilot")
+        harness.add_relation_unit(rel_id, "istio-pilot/0")
+
+        # Set up relation data with current config values
+        harness.update_relation_data(rel_id, "istio-pilot/0", {"cni-bin-dir": current_cni_bin_dir})
+        harness.update_relation_data(
+            rel_id, "istio-pilot/0", {"cni-conf-dir": current_cni_conf_dir}
+        )
+
+        # Update config values
+        harness.update_config({"cni-bin-dir": new_cni_bin_dir})
+        harness.update_config({"cni-conf-dir": new_cni_conf_dir})
+        harness.begin()
+        actual_output = harness.charm._cni_config_changed()
+        assert actual_output is expected_output
+
+    def test_cni_config_changed_no_peer_relation(self, harness, mocked_lightkube_client):
+        model_name = "my-model"
+        harness.set_leader(True)
+        harness.set_model_name(model_name)
+
+        harness.begin()
+
+        with pytest.raises(GenericCharmRuntimeError):
+            harness.charm._cni_config_changed()
+
 
 class TestCharmHelpers:
     """Directly test charm helpers and private methods."""
@@ -414,6 +477,7 @@ class TestCharmHelpers:
     def test_reconcile_handling_nonfatal_errors(
         self,
         harness,
+        mocker,
         all_operator_reconcile_handlers_mocked,
         mocked_cert_subject,
     ):
@@ -434,6 +498,8 @@ class TestCharmHelpers:
         )
 
         harness.begin()
+        harness.add_relation("peers", harness.charm.app.name)
+        mocker.patch("charm.Operator.upgrade_charm")
 
         # Act
         harness.charm.reconcile("event")
@@ -1024,6 +1090,27 @@ class TestCharmHelpers:
 
         mocked_remove_envoyfilter.assert_called_once()
 
+    @patch("charm._remove_envoyfilter")
+    @patch("charm.KubernetesResourceHandler", return_value=MagicMock())
+    @patch("charm.Operator._cni_config_changed", return_value=True)
+    @patch("charm.Istioctl", return_value=MagicMock())
+    def test_reconcile_cni_config_changed(
+        self,
+        mocked_istioctl_class,
+        mocked_cni_config_changed,
+        mocked_remove_envoyfilter,
+        mocked_kubernetes_resource_handler_class,
+        harness,
+        mocked_lightkube_client,
+        mocker,
+    ):
+        """Tests the upgrade method is called when the CNI config is changed."""
+        harness.set_leader(True)
+        harness.begin()
+        mocked_upgrade_charm = mocker.patch("charm.Operator.upgrade_charm")
+        harness.charm.reconcile("event")
+        mocked_upgrade_charm.assert_called_once()
+
     def test_remove_gateway(
         self,
         harness,
@@ -1277,7 +1364,23 @@ class TestCharmUpgrade:
         harness.charm.upgrade_charm("mock_event")
 
         # Assert that the upgrade was successful
-        mocked_istioctl_class.assert_called_with("./istioctl", model_name, "minimal")
+        mocked_istioctl_class.assert_called_with(
+            "./istioctl",
+            model_name,
+            "minimal",
+            istioctl_extra_flags=[
+                "--set",
+                "values.pilot.image=pilot",
+                "--set",
+                "values.global.tag=1.17.3",
+                "--set",
+                "values.global.hub=docker.io/istio",
+                "--set",
+                "values.global.proxy.image=proxyv2",
+                "--set",
+                "values.global.proxy_init.image=proxyv2",
+            ],
+        )
         mocked_istioctl.upgrade.assert_called_with()
 
         mocked_wait_for_update_rollout.assert_called_once()
@@ -1306,7 +1409,7 @@ class TestCharmUpgrade:
         harness,
         mocked_cert_subject,
     ):
-        """Tests that charm.upgrade_charm fails when precheck fails."""
+        """Tests that charm.upgrade_charm fails when getting version fails."""
         harness.begin()
 
         with pytest.raises(GenericCharmRuntimeError):
@@ -1321,7 +1424,7 @@ class TestCharmUpgrade:
         harness,
         mocked_cert_subject,
     ):
-        """Tests that charm.upgrade_charm fails when precheck fails."""
+        """Tests that charm.upgrade_charm fails when version check fails."""
         model_name = "test-model"
         harness.set_model_name(model_name)
 
@@ -1330,14 +1433,20 @@ class TestCharmUpgrade:
         with pytest.raises(GenericCharmRuntimeError):
             harness.charm.upgrade_charm("mock_event")
 
+    @patch("charm._validate_upgrade_version")  # Do not validate versions
+    @patch("charm.Istioctl.version")  # Pass istioctl version check
+    @patch("charm.Istioctl.precheck")  # Fail istioctl precheck
     @patch("charm.Istioctl.upgrade", side_effect=IstioctlError())  # Fail istioctl upgrade
     def test_upgrade_failed_during_upgrade(
         self,
         _mocked_istioctl_upgrade,
+        _mocked_istioctl_precheck,
+        _mocked_istioctl_version,
+        _mocked_validate_upgrade_version,
         harness,
         mocked_cert_subject,
     ):
-        """Tests that charm.upgrade_charm fails when upgrade process fails."""
+        """Tests that charm.upgrade_charm fails during upgrade."""
         harness.begin()
 
         with pytest.raises(GenericCharmRuntimeError):
@@ -1639,26 +1748,6 @@ def mock_loadbalancer_hostname_service_not_ready():
         }
     )
     return mock_nodeport_service
-
-
-# autouse to ensure we don't accidentally call out, but
-# can also be used explicitly to get access to the mock.
-@pytest.fixture(autouse=True)
-def mocked_check_call(mocker):
-    mocked_check_call = mocker.patch("charm.subprocess.check_call")
-    mocked_check_call.return_value = 0
-
-    yield mocked_check_call
-
-
-# autouse to ensure we don't accidentally call out, but
-# can also be used explicitly to get access to the mock.
-@pytest.fixture(autouse=True)
-def mocked_check_output(mocker):
-    mocked_check_output = mocker.patch("charm.subprocess.check_output")
-    mocked_check_output.return_value = "stdout"
-
-    yield mocked_check_output
 
 
 @pytest.fixture()

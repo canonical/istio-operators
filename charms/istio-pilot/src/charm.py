@@ -2,7 +2,6 @@
 
 import base64
 import logging
-import subprocess
 from typing import Dict, List, Optional
 
 import tenacity
@@ -109,10 +108,11 @@ class Operator(CharmBase):
         self._field_manager = "lightkube"
 
         # Instantiate a CertHandler
+        self.peer_relation_name = "peers"
         self._cert_handler = CertHandler(
             self,
             key="istio-cert",
-            peer_relation_name="peers",
+            peer_relation_name=self.peer_relation_name,
             cert_subject=self._cert_subject,
         )
 
@@ -202,10 +202,9 @@ class Operator(CharmBase):
         image_config = yaml.safe_load(self.model.config[IMAGE_CONFIGURATION])
         return image_config
 
-    def install(self, _):
-        """Install charm."""
-        self._log_and_set_status(MaintenanceStatus("Deploying Istio control plane"))
-
+    @property
+    def _istioctl_extra_flags(self):
+        """Return extra flags to pass to istioctl commands."""
         image_config = self._get_image_config()
         pilot_image = image_config["pilot-image"]
         global_tag = image_config["global-tag"]
@@ -213,28 +212,65 @@ class Operator(CharmBase):
         global_proxy_image = image_config["global-proxy-image"]
         global_proxy_init_image = image_config["global-proxy-init-image"]
 
-        # Call istioctl install and set parameters based on image configuration
-        subprocess.check_call(
-            [
-                "./istioctl",
-                "install",
-                "-y",
-                "--set",
-                "profile=minimal",
-                "--set",
-                f"values.global.istioNamespace={self.model.name}",
-                "--set",
-                f"values.pilot.image={pilot_image}",
-                "--set",
-                f"values.global.tag={global_tag}",
-                "--set",
-                f"values.global.hub={global_hub}",
-                "--set",
-                f"values.global.proxy.image={global_proxy_image}",
-                "--set",
-                f"values.global.proxy_init.image={global_proxy_init_image}",
-            ]
+        # Extra flags to pass to the istioctl install command
+        # These flags will configure the container images used by the control plane
+        extra_flags = [
+            "--set",
+            f"values.pilot.image={pilot_image}",
+            "--set",
+            f"values.global.tag={global_tag}",
+            "--set",
+            f"values.global.hub={global_hub}",
+            "--set",
+            f"values.global.proxy.image={global_proxy_image}",
+            "--set",
+            f"values.global.proxy_init.image={global_proxy_init_image}",
+        ]
+
+        # The following are a set of flags that configure the CNI behaviour
+        # * components.cni.enabled enables the CNI plugin
+        # * values.cni.cniBinDir and values.cni.cniConfDir tell the plugin where to find
+        #   the CNI binaries and config files
+        # * values.sidecarInjectorWebhook.injectedAnnotations allows users to inject any
+        #   annotations to the sidecar injected Pods. This particular annotation helps
+        #   provide a solution for canonical/istio-operators#356
+        if self._check_cni_configurations():
+            extra_flags.extend(
+                [
+                    "--set",
+                    "components.cni.enabled=true",
+                    "--set",
+                    f"values.cni.cniBinDir={self.model.config['cni-bin-dir']}",
+                    "--set",
+                    f"values.cni.cniConfDir={self.model.config['cni-conf-dir']}",
+                    "--set",
+                    "values.sidecarInjectorWebhook.injectedAnnotations.traffic\.sidecar\.istio\.io/excludeOutboundIPRanges=0.0.0.0/0",  # noqa
+                ]
+            )
+        return extra_flags
+
+    def install(self, _):
+        """Install charm."""
+
+        self._log_and_set_status(
+            MaintenanceStatus("Deploying Istio control plane with Istio CNI plugin.")
         )
+
+        # Call the istioctl wrapper to install the Istio Control Plane
+        istioctl = Istioctl(
+            ISTIOCTL_PATH,
+            self.model.name,
+            ISTIOCTL_DEPOYMENT_PROFILE,
+            istioctl_extra_flags=self._istioctl_extra_flags,
+        )
+
+        try:
+            istioctl.install()
+        except IstioctlError as e:
+            self.log.error(INSTALL_FAILED_MSG.format(message=str(e)))
+            raise GenericCharmRuntimeError(
+                "Failed to install control plane. See juju debug-log for details."
+            ) from e
 
         self.unit.status = ActiveStatus()
 
@@ -274,8 +310,9 @@ class Operator(CharmBase):
     def reconcile(self, event):
         """Reconcile the state of the charm.
 
-        This is the main entrypoint for the charm.  It:
+        This is the main entrypoint for the method.  It:
         * Checks if we are the leader, exiting early with WaitingStatus if we are not
+        * Upgrades the Istio control plane if changes were made to the CNI plugin configurations
         * Sends data to the istio-pilot relation
         * Reconciles the ingress-auth relation, establishing whether we need authentication on our
           ingress gateway
@@ -297,6 +334,12 @@ class Operator(CharmBase):
         # This charm may hit multiple, non-fatal errors during the reconciliation.  Collect them
         # so that we can report them at the end.
         handled_errors = []
+
+        # Call upgrade_charm in case there are new configurations that affect the control plane
+        # only if the CNI configurations have been provided and have changed from a previous state
+        # This is useful when there is a missing configuration during the install process
+        if self._cni_config_changed():
+            self.upgrade_charm(event)
 
         # Send istiod information to the istio-pilot relation
         try:
@@ -366,8 +409,14 @@ class Operator(CharmBase):
 
         Supports upgrade of exactly one minor version at a time.
         """
-        istioctl = Istioctl(ISTIOCTL_PATH, self.model.name, ISTIOCTL_DEPOYMENT_PROFILE)
-        self._log_and_set_status(MaintenanceStatus("Upgrading Istio"))
+        self._log_and_set_status(MaintenanceStatus("Upgrading Istio control plane."))
+
+        istioctl = Istioctl(
+            ISTIOCTL_PATH,
+            self.model.name,
+            ISTIOCTL_DEPOYMENT_PROFILE,
+            istioctl_extra_flags=self._istioctl_extra_flags,
+        )
 
         # Check for version compatibility for the upgrade
         try:
@@ -960,6 +1009,46 @@ class Operator(CharmBase):
         }
 
         log_destination_map[type(status)](status.message)
+
+    def _check_cni_configurations(self) -> bool:
+        """Return True if the necessary CNI configuration options are set, False otherwise."""
+        return self.model.config["cni-conf-dir"] and self.model.config["cni-bin-dir"]
+
+    def _cni_config_changed(self):
+        """
+        Returns True if any of the CNI configuration options has changed from a previous state,
+        False otherwise.
+        """
+        # The peer relation is required to store values, if it does not exist because it was
+        # removed by accident, the charm should fail
+        rel = self.model.get_relation(self.peer_relation_name, None)
+        if not rel:
+            raise GenericCharmRuntimeError(
+                "The istio-pilot charm requires a peer relation, make sure it exists."
+            )
+
+        # Get current values of the configuration options
+        current_cni_bin_dir = rel.data[self.unit].get("cni-bin-dir", None)
+        current_cni_conf_dir = rel.data[self.unit].get("cni-conf-dir", None)
+
+        # Update the values based on the configuration options
+        rel.data[self.unit].update({"cni-bin-dir": self.model.config["cni-bin-dir"]})
+        rel.data[self.unit].update({"cni-conf-dir": self.model.config["cni-conf-dir"]})
+
+        new_cni_bin_dir = rel.data[self.unit].get("cni-bin-dir", None)
+        new_cni_conf_dir = rel.data[self.unit].get("cni-conf-dir", None)
+
+        # Compare current vs new values and decide whether they have changed from a previous state
+        cni_bin_dir_changed = False
+        cni_conf_dir_changed = False
+        if current_cni_bin_dir != new_cni_bin_dir:
+            cni_bin_dir_changed = True
+
+        if current_cni_conf_dir != new_cni_conf_dir:
+            cni_conf_dir_changed = True
+
+        # If any of the configuration options changed, return True
+        return cni_bin_dir_changed or cni_conf_dir_changed
 
 
 def _get_gateway_address_from_svc(svc):
