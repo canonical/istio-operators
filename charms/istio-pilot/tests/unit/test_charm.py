@@ -1570,7 +1570,7 @@ class TestCharmUpgrade:
     # https://github.com/canonical/operator/issues/1166 for more context.
     @pytest.mark.skip(
         "Right now there is no support for creating"
-        "user secrets with harness, see canonical/operator#1175"
+        "user secrets with harness, see canonical/operator#1166"
     )
     @pytest.mark.parametrize(
         "tls_cert, tls_key, expected_return, expected_context",
@@ -1613,7 +1613,7 @@ class TestCharmUpgrade:
 
     @pytest.mark.skip(
         "Right now there is no support for creating"
-        "user secrets with harness, see canonical/operator#1175"
+        "user secrets with harness, see canonical/operator#1166"
     )
     def test_use_https_with_tls_secret_secret_not_found(self, harness):
         """Test the method raises ErrorWithStatus when the secret is not found."""
@@ -1629,7 +1629,7 @@ class TestCharmUpgrade:
 
     @pytest.mark.skip(
         "Right now there is no support for creating"
-        "user secrets with harness, see canonical/operator#1175"
+        "user secrets with harness, see canonical/operator#1166"
     )
     def test_tls_info_from_secret(self, harness, mocked_lightkube_client):
         """Test the method returns a populated dictionary with TLS information from a secret."""
