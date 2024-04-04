@@ -24,7 +24,7 @@ OIDC_GATEKEEPER = "oidc-gatekeeper"
 ISTIO_PILOT = "istio-pilot"
 ISTIO_GATEWAY_APP_NAME = "istio-ingressgateway"
 TENSORBOARD_CONTROLLER = "tensorboard-controller"
-KUBEFLOW_VOLUMES = "kubeflow-volumes"
+INGRESS_REQUIRER = "tensorboards-web-app"
 
 USERNAME = "user123"
 PASSWORD = "user123"
@@ -100,8 +100,7 @@ async def test_ingress_relation(ops_test: OpsTest):
     TODO (https://github.com/canonical/istio-operators/issues/259): Change this from using a
      specific charm that implements ingress's requirer interface to a generic charm
     """
-    # Use kubeflow-volumes from 1.8/stable to keep consistency between releases and the CI
-    await ops_test.model.deploy(KUBEFLOW_VOLUMES, channel="1.8/stable")
+    await ops_test.model.deploy(INGRESS_REQUIRER, channel="1.8/stable", trust=True)
 
     await ops_test.model.add_relation(f"{ISTIO_PILOT}:ingress", f"{KUBEFLOW_VOLUMES}:ingress")
 
