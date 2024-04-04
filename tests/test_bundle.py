@@ -19,22 +19,12 @@ from pytest_operator.plugin import OpsTest
 
 log = logging.getLogger(__name__)
 
-# Test dependencies
 DEX_AUTH = "dex-auth"
-DEX_AUTH_CHANNEL = "2.36/stable"
-TRUST_DEX_AUTH = True
 OIDC_GATEKEEPER = "oidc-gatekeeper"
-OIDC_GATEKEEPER_CHANNEL = "ckf-1.8/stable"
-TRUST_OIDC_GATEKEEPER = False
-TENSORBOARD_CONTROLLER = "tensorboard-controller"
-TENSORBOARD_CONTROLLER_CHANNEL = "1.8/stable"
-TRUST_TENSORBOARD_CONTROLLER = True
-INGRESS_REQUIRER = "kubeflow-volumes"
-INGRESS_REQUIRER_CHANNEL = "1.8/stable"
-TRUST_INGRESS_REQUIRER = True
-
 ISTIO_PILOT = "istio-pilot"
 ISTIO_GATEWAY_APP_NAME = "istio-ingressgateway"
+TENSORBOARD_CONTROLLER = "tensorboard-controller"
+KUBEFLOW_VOLUMES = "kubeflow-volumes"
 
 USERNAME = "user123"
 PASSWORD = "user123"
@@ -110,11 +100,10 @@ async def test_ingress_relation(ops_test: OpsTest):
     TODO (https://github.com/canonical/istio-operators/issues/259): Change this from using a
      specific charm that implements ingress's requirer interface to a generic charm
     """
-    await ops_test.model.deploy(
-        INGRESS_REQUIRER, channel=INGRESS_REQUIRER_CHANNEL, trust=TRUST_INGRESS_REQUIRER
-    )
+    # Use kubeflow-volumes from 1.8/stable to keep consistency between releases and the CI
+    await ops_test.model.deploy(KUBEFLOW_VOLUMES, channel="1.8/stable")
 
-    await ops_test.model.add_relation(f"{ISTIO_PILOT}:ingress", f"{INGRESS_REQUIRER}:ingress")
+    await ops_test.model.add_relation(f"{ISTIO_PILOT}:ingress", f"{KUBEFLOW_VOLUMES}:ingress")
 
     await ops_test.model.wait_for_idle(
         status="active",
@@ -122,7 +111,7 @@ async def test_ingress_relation(ops_test: OpsTest):
         timeout=90 * 10,
     )
 
-    assert_virtualservice_exists(name=INGRESS_REQUIRER, namespace=ops_test.model_name)
+    assert_virtualservice_exists(name=KUBEFLOW_VOLUMES, namespace=ops_test.model_name)
 
     # Confirm that the UI is reachable through the ingress
     gateway_ip = await get_gateway_ip(ops_test)
@@ -135,7 +124,7 @@ async def test_gateway_info_relation(ops_test: OpsTest):
     TODO (https://github.com/canonical/istio-operators/issues/259): Change this from using a
      specific charm that implements ingress's requirer interface to a generic charm
     """
-    await ops_test.model.deploy(TENSORBOARD_CONTROLLER, channel=TENSORBOARD_CONTROLLER_CHANNEL, trust=TRUST_TENSORBOARD_CONTROLLER)
+    await ops_test.model.deploy(TENSORBOARD_CONTROLLER, channel="latest/edge", trust=True)
 
     await ops_test.model.add_relation(
         f"{ISTIO_PILOT}:gateway-info", f"{TENSORBOARD_CONTROLLER}:gateway-info"
@@ -246,8 +235,8 @@ async def test_enable_ingress_auth(ops_test: OpsTest):
     regular_ingress_gateway_ip = await get_gateway_ip(ops_test)
     await ops_test.model.deploy(
         DEX_AUTH,
-        channel=DEX_AUTH_CHANNEL,
-        trust=TRUST_DEX_AUTH,
+        channel="2.31/stable",
+        trust=True,
         config={
             "static-username": USERNAME,
             "static-password": PASSWORD,
@@ -257,8 +246,7 @@ async def test_enable_ingress_auth(ops_test: OpsTest):
 
     await ops_test.model.deploy(
         OIDC_GATEKEEPER,
-        channel=OIDC_GATEKEEPER_CHANNEL,
-        trust=TRUST_OIDC_GATEKEEPER,
+        channel="ckf-1.6/stable",
         config={"public-url": regular_ingress_gateway_ip},
     )
 
