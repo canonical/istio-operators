@@ -249,7 +249,7 @@ async def test_enable_ingress_auth(ops_test: OpsTest):
 
     await ops_test.model.deploy(
         OIDC_GATEKEEPER,
-        channel="ckf-1.6/stable",
+        channel="ckf-1.8/stable",
         config={"public-url": regular_ingress_gateway_ip},
     )
 
