@@ -114,7 +114,7 @@ async def test_ingress_relation(ops_test: OpsTest):
 
     # Confirm that the UI is reachable through the ingress
     gateway_ip = await get_gateway_ip(ops_test)
-    await assert_page_reachable(url=f"http://{gateway_ip}/volumes/", title="Frontend")
+    await assert_page_reachable(url=f"http://{gateway_ip}/tensorboards/", title="Frontend")
 
 
 async def test_gateway_info_relation(ops_test: OpsTest):
