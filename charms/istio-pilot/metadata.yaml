@@ -102,4 +102,4 @@ peers:
   peers:
     interface: istio_pilot_peers
 assumes:
-- juju >= 2.9.0
+- juju >= 3.4

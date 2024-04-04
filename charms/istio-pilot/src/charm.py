@@ -930,7 +930,11 @@ class Operator(CharmBase):
             if "ERROR permission denied" in e.args:
                 # Block the unit when there is an ERROR permission denied
                 raise ErrorWithStatus(
-                    "Access to the istio-tls-secret must be granted.",
+                    (
+                        f"Permission denied trying to access {TLS_SECRET_LABEL}.\n"
+                        f"Access to the istio-tls-secret id: {self._tls_secret_id} must be granted."
+                        " See juju grant-secret --help for details on granting permission."
+                    ),
                     BlockedStatus,
                 )
             raise e
