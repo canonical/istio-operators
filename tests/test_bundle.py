@@ -102,7 +102,7 @@ async def test_ingress_relation(ops_test: OpsTest):
     """
     await ops_test.model.deploy(INGRESS_REQUIRER, channel="1.8/stable", trust=True)
 
-    await ops_test.model.add_relation(f"{ISTIO_PILOT}:ingress", f"{KUBEFLOW_VOLUMES}:ingress")
+    await ops_test.model.add_relation(f"{ISTIO_PILOT}:ingress", f"{INGRESS_REQUIRER}:ingress")
 
     await ops_test.model.wait_for_idle(
         status="active",
@@ -110,7 +110,7 @@ async def test_ingress_relation(ops_test: OpsTest):
         timeout=90 * 10,
     )
 
-    assert_virtualservice_exists(name=KUBEFLOW_VOLUMES, namespace=ops_test.model_name)
+    assert_virtualservice_exists(name=INGRESS_REQUIRER, namespace=ops_test.model_name)
 
     # Confirm that the UI is reachable through the ingress
     gateway_ip = await get_gateway_ip(ops_test)
