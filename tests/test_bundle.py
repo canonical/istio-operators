@@ -21,6 +21,7 @@ log = logging.getLogger(__name__)
 
 DEX_AUTH = "dex-auth"
 OIDC_GATEKEEPER = "oidc-gatekeeper"
+OIDC_GATEKEEPER_CHANNEL = "ckf-1.8/stable"
 ISTIO_PILOT = "istio-pilot"
 ISTIO_GATEWAY_APP_NAME = "istio-ingressgateway"
 TENSORBOARD_CONTROLLER = "tensorboard-controller"
@@ -249,7 +250,7 @@ async def test_enable_ingress_auth(ops_test: OpsTest):
 
     await ops_test.model.deploy(
         OIDC_GATEKEEPER,
-        channel="ckf-1.8/stable",
+        channel=OIDC_GATEKEEPER_CHANNEL,
         config={"public-url": regular_ingress_gateway_ip},
     )
 
