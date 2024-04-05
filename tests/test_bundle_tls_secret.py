@@ -52,7 +52,7 @@ async def test_build_and_deploy_istio_charms(ops_test: OpsTest):
         timeout=90 * 10,
     )
 
-    await add_and_grant_tls_secret_action(ops_test, istio_pilot)
+    await add_and_grant_tls_secret_action(ops_test)
 
 
 @tenacity.retry(
@@ -88,8 +88,8 @@ def test_tls_configuration(lightkube_client, ops_test: OpsTest):
     assert servers_dict_tls["credentialName"] == secret.metadata.name
 
 
-async def add_and_grant_tls_secret_action(ops_test: OpsTest, istio_pilot):
+async def add_and_grant_tls_secret_action(ops_test: OpsTest):
     """Add istio-tls-secret and grant istio-pilot access to it."""
-    secret_id = await ops_test.model.add_secret(name=TLS_SECRET_LABEL, data_args=["tls-cert=test-cert", "tls-key=test-key"])
+    secret_id = await ops_test.model.add_secret(name=TLS_SECRET_LABEL, data_args=["tls-crt=test-cert", "tls-key=test-key"])
     await ops_test.model.grant_secret(secret_name=TLS_SECRET_LABEL, application="istio-pilot")
-    istio_pilot.set_config({"tls-secret-id":secret_id})
+    await ops_test.model.applications[istio_charms["istio-pilot"]].set_config({'tls-secret-id':secret_id})
