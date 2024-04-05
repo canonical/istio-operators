@@ -92,4 +92,4 @@ async def add_and_grant_tls_secret_action(ops_test: OpsTest):
     """Add istio-tls-secret and grant istio-pilot access to it."""
     secret_id = await ops_test.model.add_secret(name=TLS_SECRET_LABEL, data_args=["tls-crt=test-cert", "tls-key=test-key"])
     await ops_test.model.grant_secret(secret_name=TLS_SECRET_LABEL, application="istio-pilot")
-    await ops_test.model.applications[istio_charms["istio-pilot"]].set_config({'tls-secret-id':secret_id})
+    await ops_test.model.applications["istio-pilot"].set_config({'tls-secret-id':secret_id})
