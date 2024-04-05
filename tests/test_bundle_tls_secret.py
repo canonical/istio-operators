@@ -28,7 +28,7 @@ async def test_build_and_deploy_istio_charms(ops_test: OpsTest):
     charms_path = "./charms/istio"
     istio_charms = await ops_test.build_charms(f"{charms_path}-gateway", f"{charms_path}-pilot")
 
-    istio_pilot = await ops_test.model.deploy(
+    await ops_test.model.deploy(
         istio_charms["istio-pilot"],
         application_name=ISTIO_PILOT,
         config={"default-gateway": DEFAULT_GATEWAY_NAME},
