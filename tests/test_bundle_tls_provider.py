@@ -17,7 +17,6 @@ GATEWAY_RESOURCE = create_namespaced_resource(
 
 SELF_SIGNED_CERTIFICATES = "self-signed-certificates"
 SELF_SIGNED_CERTIFICATES_CHANNEL = "latest/stable"
-SELF_SIGNED_CERTIFICATES_TRUST = True
 
 
 @pytest.fixture(scope="session")
@@ -58,11 +57,11 @@ async def test_build_and_deploy_istio_charms(ops_test: OpsTest):
 
     await ops_test.model.deploy(
         SELF_SIGNED_CERTIFICATES,
-        channel=SELF_SIGNED_CERTIFICATES,
+        channel=SELF_SIGNED_CERTIFICATES_CHANNEL,
     )
 
     await ops_test.model.add_relation(
-        f"{ISTIO_PILOT}:certificates", "self-signed-certificates:certificates"
+        f"{ISTIO_PILOT}:certificates", f"SELF_SIGNED_CERTIFICATES:certificates"
     )
 
     await ops_test.model.wait_for_idle(
