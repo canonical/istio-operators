@@ -16,7 +16,7 @@ GATEWAY_RESOURCE = create_namespaced_resource(
 )
 
 SELF_SIGNED_CERTIFICATES = "self-signed-certificates"
-SELF_SIGNED_CERTIFICATES_CHANNEL = "edge"
+SELF_SIGNED_CERTIFICATES_CHANNEL = "latest/edge"
 SELF_SIGNED_CERTIFICATES_TRUST = True
 
 
