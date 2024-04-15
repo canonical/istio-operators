@@ -135,7 +135,11 @@ async def test_gateway_info_relation(ops_test: OpsTest):
     TODO (https://github.com/canonical/istio-operators/issues/259): Change this from using a
      specific charm that implements ingress's requirer interface to a generic charm
     """
-    await ops_test.model.deploy(TENSORBOARD_CONTROLLER, channel=TENSORBOARD_CONTROLLER_CHANNEL, trust=TRUST_TENSORBOARD_CONTROLLER)
+    await ops_test.model.deploy(
+        TENSORBOARD_CONTROLLER,
+        channel=TENSORBOARD_CONTROLLER_CHANNEL,
+        trust=TRUST_TENSORBOARD_CONTROLLER,
+    )
 
     await ops_test.model.add_relation(
         f"{ISTIO_PILOT}:gateway-info", f"{TENSORBOARD_CONTROLLER}:gateway-info"
