@@ -21,12 +21,10 @@ ISTIO_GATEWAY_APP_NAME = "istio-ingressgateway"
 PROMETHEUS_K8S = "prometheus-k8s"
 PROMETHEUS_K8S_CHANNEL = "latest/stable"
 PROMETHEUS_K8S_TRUST = True
-GRAFANA_K8S = "grafana-k8s"
-GRAFANA_K8S_CHANNEL = "latest/stable"
-GRAFANA_K8S_TRUST = True
 PROMETHEUS_SCRAPE_K8S = "prometheus-scrape-config-k8s"
 PROMETHEUS_SCRAPE_K8S_CHANNEL = "latest/stable"
 PROMETHEUS_SCRAPE_CONFIG = {"scrape_interval": "30s"}
+
 
 @pytest.mark.abort_on_fail
 async def test_build_and_deploy_istio_charms(ops_test: OpsTest):
@@ -77,7 +75,9 @@ async def test_prometheus_grafana_integration_istio_pilot(ops_test: OpsTest):
 
     await ops_test.model.wait_for_idle(status="active", timeout=60 * 20)
     status = await ops_test.model.get_status()
-    prometheus_unit_ip = status["applications"][PROMETHEUS_K8S]["units"][f"{PROMETHEUS_K8S}/0"]["address"]
+    prometheus_unit_ip = status["applications"][PROMETHEUS_K8S]["units"][f"{PROMETHEUS_K8S}/0"][
+        "address"
+    ]
     log.info(f"Prometheus available at http://{prometheus_unit_ip}:9090")
 
     for attempt in retry_for_5_attempts:
@@ -103,7 +103,9 @@ async def test_istio_pilot_alert_rules(ops_test: OpsTest):
     """Test alert rules availability and match with what is found in the source code."""
 
     status = await ops_test.model.get_status()
-    prometheus_unit_ip = status["applications"][PROMETHEUS_K8S]["units"][f"{PROMETHEUS-K8S}/0"]["address"]
+    prometheus_unit_ip = status["applications"][PROMETHEUS_K8S]["units"][f"{PROMETHEUS_K8S}/0"][
+        "address"
+    ]
 
     # Get targets and assert they are available
     targets_url = f"http://{prometheus_unit_ip}:9090/api/v1/targets"

@@ -19,6 +19,7 @@ SELF_SIGNED_CERTIFICATES = "self-signed-certificates"
 SELF_SIGNED_CERTIFICATES_CHANNEL = "edge"
 SELF_SIGNED_CERTIFICATES_TRUST = True
 
+
 @pytest.fixture(scope="session")
 def lightkube_client() -> lightkube.Client:
     client = lightkube.Client()
