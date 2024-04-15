@@ -16,7 +16,7 @@ GATEWAY_RESOURCE = create_namespaced_resource(
 )
 
 SELF_SIGNED_CERTIFICATES = "self-signed-certificates"
-SELF_SIGNED_CERTIFICATES_CHANNEL = "stable"
+SELF_SIGNED_CERTIFICATES_CHANNEL = "latest/stable"
 SELF_SIGNED_CERTIFICATES_TRUST = True
 
 
