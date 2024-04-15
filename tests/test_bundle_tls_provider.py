@@ -15,6 +15,9 @@ GATEWAY_RESOURCE = create_namespaced_resource(
     plural="gateways",
 )
 
+SELF_SIGNED_CERTIFICATES = "self-signed-certificates"
+SELF_SIGNED_CERTIFICATES_CHANNEL = "edge"
+SELF_SIGNED_CERTIFICATES_TRUST = True
 
 @pytest.fixture(scope="session")
 def lightkube_client() -> lightkube.Client:
@@ -53,8 +56,8 @@ async def test_build_and_deploy_istio_charms(ops_test: OpsTest):
     )
 
     await ops_test.model.deploy(
-        "self-signed-certificates",
-        channel="edge",
+        SELF_SIGNED_CERTIFICATES,
+        channel=SELF_SIGNED_CERTIFICATES,
     )
 
     await ops_test.model.add_relation(
