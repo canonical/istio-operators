@@ -18,6 +18,14 @@ ISTIO_PILOT = "istio-pilot"
 ISTIO_GATEWAY_APP_NAME = "istio-ingressgateway"
 
 
+PROMETHEUS_K8S = "prometheus-k8s"
+PROMETHEUS_K8S_CHANNEL = "1.0/stable"
+PROMETHEUS_K8S_TRUST = True
+PROMETHEUS_SCRAPE_K8S = "prometheus-scrape-config-k8s"
+PROMETHEUS_SCRAPE_K8S_CHANNEL = "1.0/stable"
+PROMETHEUS_SCRAPE_CONFIG = {"scrape_interval": "30s"}
+
+
 @pytest.mark.abort_on_fail
 async def test_build_and_deploy_istio_charms(ops_test: OpsTest):
     # Build, deploy, and relate istio charms
@@ -48,23 +56,28 @@ async def test_build_and_deploy_istio_charms(ops_test: OpsTest):
 
 async def test_prometheus_grafana_integration_istio_pilot(ops_test: OpsTest):
     """Deploy prometheus and required relations, then test the metrics."""
-    prometheus = "prometheus-k8s"
-    prometheus_scrape = "prometheus-scrape-config-k8s"
-    scrape_config = {"scrape_interval": "30s"}
-
-    # Deploy and relate prometheus
-    await ops_test.model.deploy(prometheus, channel="latest/stable", trust=True)
-    await ops_test.model.deploy(prometheus_scrape, channel="latest/stable", config=scrape_config)
-
-    await ops_test.model.add_relation(ISTIO_PILOT, prometheus_scrape)
-    await ops_test.model.add_relation(
-        f"{prometheus}:metrics-endpoint", f"{prometheus_scrape}:metrics-endpoint"
+    await ops_test.model.deploy(
+        PROMETHEUS_K8S,
+        channel=PROMETHEUS_K8S_CHANNEL,
+        trust=PROMETHEUS_K8S_TRUST,
+    )
+    await ops_test.model.deploy(
+        PROMETHEUS_SCRAPE_K8S,
+        channel=PROMETHEUS_SCRAPE_K8S_CHANNEL,
+        config=PROMETHEUS_SCRAPE_CONFIG,
     )
 
-    await ops_test.model.wait_for_idle(status="active", timeout=90 * 10)
+    await ops_test.model.add_relation("istio-pilot", PROMETHEUS_SCRAPE_K8S)
+    await ops_test.model.add_relation(
+        f"{PROMETHEUS_K8S}:metrics-endpoint",
+        f"{PROMETHEUS_SCRAPE_K8S}:metrics-endpoint",
+    )
 
+    await ops_test.model.wait_for_idle(status="active", timeout=60 * 20)
     status = await ops_test.model.get_status()
-    prometheus_unit_ip = status["applications"][prometheus]["units"][f"{prometheus}/0"]["address"]
+    prometheus_unit_ip = status["applications"][PROMETHEUS_K8S]["units"][f"{PROMETHEUS_K8S}/0"][
+        "address"
+    ]
     log.info(f"Prometheus available at http://{prometheus_unit_ip}:9090")
 
     for attempt in retry_for_5_attempts:
@@ -89,9 +102,10 @@ async def test_prometheus_grafana_integration_istio_pilot(ops_test: OpsTest):
 async def test_istio_pilot_alert_rules(ops_test: OpsTest):
     """Test alert rules availability and match with what is found in the source code."""
 
-    prometheus = "prometheus-k8s"
     status = await ops_test.model.get_status()
-    prometheus_unit_ip = status["applications"][prometheus]["units"][f"{prometheus}/0"]["address"]
+    prometheus_unit_ip = status["applications"][PROMETHEUS_K8S]["units"][f"{PROMETHEUS_K8S}/0"][
+        "address"
+    ]
 
     # Get targets and assert they are available
     targets_url = f"http://{prometheus_unit_ip}:9090/api/v1/targets"
