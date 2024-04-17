@@ -22,16 +22,16 @@ log = logging.getLogger(__name__)
 # Test dependencies
 DEX_AUTH = "dex-auth"
 DEX_AUTH_CHANNEL = "latest/edge"
-TRUST_DEX_AUTH = True
+DEX_AUTH_TRUST = True
 OIDC_GATEKEEPER = "oidc-gatekeeper"
 OIDC_GATEKEEPER_CHANNEL = "latest/edge"
-TRUST_OIDC_GATEKEEPER = False
+OIDC_GATEKEEPER_TRUST = False
 TENSORBOARD_CONTROLLER = "tensorboard-controller"
 TENSORBOARD_CONTROLLER_CHANNEL = "latest/edge"
-TRUST_TENSORBOARD_CONTROLLER = True
+TENSORBOARD_CONTROLLER_TRUST = True
 INGRESS_REQUIRER = "kubeflow-volumes"
 INGRESS_REQUIRER_CHANNEL = "latest/edge"
-TRUST_INGRESS_REQUIRER = True
+INGRESS_REQUIRER_TRUST = True
 
 ISTIO_PILOT = "istio-pilot"
 ISTIO_GATEWAY_APP_NAME = "istio-ingressgateway"
@@ -111,7 +111,7 @@ async def test_ingress_relation(ops_test: OpsTest):
      specific charm that implements ingress's requirer interface to a generic charm
     """
     await ops_test.model.deploy(
-        INGRESS_REQUIRER, channel=INGRESS_REQUIRER_CHANNEL, trust=TRUST_INGRESS_REQUIRER
+        INGRESS_REQUIRER, channel=INGRESS_REQUIRER_CHANNEL, trust=INGRESS_REQUIRER_TRUST
     )
 
     await ops_test.model.add_relation(f"{ISTIO_PILOT}:ingress", f"{INGRESS_REQUIRER}:ingress")
@@ -138,7 +138,7 @@ async def test_gateway_info_relation(ops_test: OpsTest):
     await ops_test.model.deploy(
         TENSORBOARD_CONTROLLER,
         channel=TENSORBOARD_CONTROLLER_CHANNEL,
-        trust=TRUST_TENSORBOARD_CONTROLLER,
+        trust=TENSORBOARD_CONTROLLER_TRUST,
     )
 
     await ops_test.model.add_relation(
@@ -251,7 +251,7 @@ async def test_enable_ingress_auth(ops_test: OpsTest):
     await ops_test.model.deploy(
         DEX_AUTH,
         channel=DEX_AUTH_CHANNEL,
-        trust=TRUST_DEX_AUTH,
+        trust=DEX_AUTH_TRUST,
         config={
             "static-username": USERNAME,
             "static-password": PASSWORD,
@@ -262,7 +262,7 @@ async def test_enable_ingress_auth(ops_test: OpsTest):
     await ops_test.model.deploy(
         OIDC_GATEKEEPER,
         channel=OIDC_GATEKEEPER_CHANNEL,
-        trust=TRUST_OIDC_GATEKEEPER,
+        trust=OIDC_GATEKEEPER_TRUST,
         config={"public-url": regular_ingress_gateway_ip},
     )
 
