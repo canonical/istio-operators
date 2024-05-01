@@ -10,5 +10,3 @@ packaging
 requests
 serialized-data-interface
 tenacity
-# from prometheus_k8s.v0.prometheus_scrape.py
-cosl
