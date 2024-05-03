@@ -55,7 +55,7 @@ jobs:
           - integration-tls-provider
           - integration-tls-secret
     env:
-      CRAFT_SHARED_CACHE: /home/runner/.cache/shared_charmcraft_cache
+      CRAFT_SHARED_CACHE: /home/runner/snap/charmcraft/common/cache/charmcraft/
     steps:
       - name: Check out repo
         uses: actions/checkout@v4
