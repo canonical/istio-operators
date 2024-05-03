@@ -99,14 +99,14 @@ jobs:
           find $CRAFT_SHARED_CACHE | wc -l
           find $CRAFT_SHARED_CACHE/wheels | wc -l
     
-        - name: Setup Debug Artifact Collection
-          run: mkdir tmp
-          if: failure()
-    
-        - name: Collect charmcraft logs
-          if: failure()
-          run: |
-            cat /home/runner/.local/state/charmcraft/log/charmcraft-*.log | tee tmp/charmcraft.log
+      - name: Setup Debug Artifact Collection
+        run: mkdir tmp
+        if: failure()
+  
+      - name: Collect charmcraft logs
+        if: failure()
+        run: |
+          cat /home/runner/.local/state/charmcraft/log/charmcraft-*.log | tee tmp/charmcraft.log
   
       - name: Collect Juju status
         if: failure()
