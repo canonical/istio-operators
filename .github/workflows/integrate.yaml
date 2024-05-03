@@ -82,7 +82,7 @@ jobs:
         restore-keys: craft-shared-cache
 
     # DEBUG: remove this
-    - name: emit pip cache directory contents
+    - name: emit charmcraft cache directory contents
       run: |
         find $CRAFT_SHARED_CACHE | wc -l
         find $CRAFT_SHARED_CACHE/wheels | wc -l
@@ -94,7 +94,7 @@ jobs:
         timeout-minutes: 80
 
     # DEBUG: remove this
-    - name: emit pip cache directory contents
+    - name: emit charmcraft cache directory contents
       run: |
         find $CRAFT_SHARED_CACHE | wc -l
         find $CRAFT_SHARED_CACHE/wheels | wc -l
