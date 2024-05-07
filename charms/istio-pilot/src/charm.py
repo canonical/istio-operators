@@ -674,7 +674,7 @@ class Operator(CharmBase):
             gateway_name=self._gateway_name,
             gateway_namespace=self._gateway_namespace,
             gateway_up=self._is_gateway_up,
-            gateway_ip=self._get_gateway_address_from_svc(svc),
+            gateway_ip=_get_gateway_address_from_svc(svc),
         )
 
     def _reconcile_gateway(self):
