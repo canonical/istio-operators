@@ -30,7 +30,6 @@ from ops.model import (
     Application,
     BlockedStatus,
     MaintenanceStatus,
-    ModelError,
     SecretNotFoundError,
     WaitingStatus,
 )
@@ -78,7 +77,6 @@ INSTALL_FAILED_MSG = (
     "{message} Make sure the cluster has no Istio installations already present and "
     "that you have provided the right configuration values."
 )
-TLS_SECRET_LABEL = "istio-tls-secret"
 UPGRADE_FAILED_MSG = (
     "Failed to upgrade Istio.  {message}  To recover Istio, see [the upgrade docs]"
     "(https://github.com/canonical/istio-operators/blob/main/charms/istio-pilot/README.md) for "
@@ -858,8 +856,8 @@ class Operator(CharmBase):
 
         # FIXME: remove the try/catch block and just return the dictionary that contains
         # data from the CertHandler after 1.21
-        try:
-            tls_secret = self.model.get_secret(id=self._tls_secret_id, label=TLS_SECRET_LABEL)
+        if self._use_https_with_tls_secret():
+            tls_secret = self.model.get_secret(id=self._tls_secret_id)
             return {
                 "tls-crt": base64.b64encode(
                     tls_secret.get_content(refresh=True)["tls-crt"].encode("ascii")
@@ -868,15 +866,10 @@ class Operator(CharmBase):
                     tls_secret.get_content(refresh=True)["tls-key"].encode("ascii")
                 ).decode("utf-8"),
             }
-        except SecretNotFoundError:
-            return {
-                "tls-crt": base64.b64encode(self._cert_handler.cert.encode("ascii")).decode(
-                    "utf-8"
-                ),
-                "tls-key": base64.b64encode(self._cert_handler.key.encode("ascii")).decode(
-                    "utf-8"
-                ),
-            }
+        return {
+            "tls-crt": base64.b64encode(self._cert_handler.cert.encode("ascii")).decode("utf-8"),
+            "tls-key": base64.b64encode(self._cert_handler.key.encode("ascii")).decode("utf-8"),
+        }
 
     # ---- Start of the block
     # ---- WARNING: this feature is not recommended, but is supported in 1.17-1.21.
@@ -918,26 +911,23 @@ class Operator(CharmBase):
             return False
 
         try:
-            secret = self.model.get_secret(id=self._tls_secret_id, label=TLS_SECRET_LABEL)
-        except SecretNotFoundError:
-            raise ErrorWithStatus(
-                "tls-secret-id was provided, but the secret could not be found - "
-                "please provide a secret ID of a secret that exists.\n"
-                f"Also make sure the name of the secret is {TLS_SECRET_LABEL}",
-                BlockedStatus,
-            )
-        except ModelError as e:
-            if "ERROR permission denied" in e.args:
+            secret = self.model.get_secret(id=self._tls_secret_id)
+        except SecretNotFoundError as secret_error:
+            if "not granted access to" in secret_error.args[0]:
                 # Block the unit when there is an ERROR permission denied
                 raise ErrorWithStatus(
                     (
-                        f"Permission denied trying to access {TLS_SECRET_LABEL}.\n"
-                        f"Access to the istio-tls-secret id: {self._tls_secret_id} must be granted."
+                        f"Permission denied trying to access TLS secret.\n"
+                        f"Access to the secret with id: {self._tls_secret_id} must be granted."
                         " See juju grant-secret --help for details on granting permission."
                     ),
                     BlockedStatus,
                 )
-            raise e
+            raise ErrorWithStatus(
+                "tls-secret-id was provided, but the secret could not be found - "
+                "please provide a secret ID of a secret that exists.",
+                BlockedStatus,
+            )
 
         try:
             tls_key = secret.get_content(refresh=True)["tls-key"]
@@ -948,7 +938,7 @@ class Operator(CharmBase):
                 "make sure they are passed as contents of the {TLS_SECRET_LABEL} secret."
             )
             raise ErrorWithStatus(
-                f"Missing TLS {ke.args} value(s), please add them to the {TLS_SECRET_LABEL} secret",
+                f"Missing TLS {ke.args} value(s), please add them to the TLS secret",
                 BlockedStatus,
             )
 

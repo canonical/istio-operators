@@ -1564,85 +1564,68 @@ class TestCharmUpgrade:
         with expected_context:
             assert harness.charm._use_https() == expected_return
 
-    # FIXME: this test is skipped because as of Apr 2nd, 2024 there is no supported
-    # way for creating user secrets.
-    # After this is supported, this test case must be changed.
-    # https://github.com/canonical/operator/issues/1166 for more context.
-    @pytest.mark.skip(
-        "Right now there is no support for creating"
-        "user secrets with harness, see canonical/operator#1166"
-    )
-    @pytest.mark.parametrize(
-        "tls_cert, tls_key, expected_return, expected_context",
-        [
-            ("", "", None, pytest.raises(ErrorWithStatus)),
-            ("x", "y", True, does_not_raise()),
-            ("x", "", None, pytest.raises(ErrorWithStatus)),
-            ("", "y", None, pytest.raises(ErrorWithStatus)),
-        ],
-    )
     def test_use_https_with_tls_secret_found(
         self,
-        tls_cert,
-        tls_key,
-        expected_return,
-        expected_context,
         harness,
         mocked_cert_subject,
     ):
-        """Test the method returns a correct bool when the config is there and the secret is added.
-
-        Parameters:
-          tls_cert(str): TLS cert value (comes from a secret)
-          tls_key(str): TLS key value (comes from a secret)
-          expected_return(bool): the expected return of the use_https_with_tls_secret method
-          expected_context: if the method should raise or not
-        Example:
-          If tls_cert and tls_key both have values, the use_https_with_tls_secret() method
-          must return True; if both are empty the return must be False; and if just one
-          value is set, the method should raise ErrorWithStatus.
-        """
-        harness.begin()
-        # FIXME: this is a placeholder, the actual implementation may vary, see the linked
-        # comment above.
-        secret_id = harness.add_user_secret()
+        """Test the method returns True when the secret is found."""
+        secret_content = {"tls-crt": "a-tls-crt", "tls-key": "a-tls-key"}
+        secret_id = harness.add_user_secret(secret_content)
+        harness.grant_secret(secret_id, "istio-pilot")
         harness.update_config({"tls-secret-id": secret_id})
 
-        with expected_context:
-            assert harness.charm._use_https_with_tls_secret() == expected_return
-
-    @pytest.mark.skip(
-        "Right now there is no support for creating"
-        "user secrets with harness, see canonical/operator#1166"
-    )
-    def test_use_https_with_tls_secret_secret_not_found(self, harness):
-        """Test the method raises ErrorWithStatus when the secret is not found."""
         harness.begin()
-        # FIXME: this is a placeholder, the actual implementation may vary, see the linked
-        # comment above.
-        secret_id = harness.add_user_secret()
+        assert harness.charm._use_https_with_tls_secret() is True
+
+    def test_use_https_with_tls_secret_not_found(self, harness, mocked_cert_subject):
+        """Test the method returns False when the secret ID is not passed."""
+        harness.begin()
+        assert harness.charm._use_https_with_tls_secret() is False
+
+    def test_use_https_with_tls_secret_not_found_with_id(
+        self,
+        harness,
+        mocked_cert_subject,
+    ):
+        """Test the method raises if the provided secret cannot be found by the provided ID."""
+        secret_id = "secret:some-invalid-id"
         harness.update_config({"tls-secret-id": secret_id})
-        with pytest.raises(ErrorWithStatus) as err:
+
+        harness.begin()
+        with pytest.raises(ErrorWithStatus) as error_with_status:
             harness.charm._use_https_with_tls_secret()
-            assert "tls-secret-id was provided, but the secret could not be found - " in err.msg
-            assert err.status_type == BlockedStatus
+        assert error_with_status.value.status_type == BlockedStatus
+        assert (
+            "tls-secret-id was provided, but the secret could not be found -"
+            in error_with_status.value.msg
+        )
 
-    @pytest.mark.skip(
-        "Right now there is no support for creating"
-        "user secrets with harness, see canonical/operator#1166"
-    )
+    def test_use_https_with_tls_secret_permission_denied(
+        self,
+        harness,
+        mocked_cert_subject,
+    ):
+        """Test the method raises if the application has not been granted access to the secret."""
+        secret_content = {"tls-crt": "a-tls-crt", "tls-key": "a-tls-key"}
+        secret_id = harness.add_user_secret(secret_content)
+        harness.update_config({"tls-secret-id": secret_id})
+        harness.begin()
+        with pytest.raises(ErrorWithStatus) as error_with_status:
+            harness.charm._use_https_with_tls_secret()
+        assert "Permission denied trying to access" in error_with_status.value.msg
+        assert error_with_status.value.status_type == BlockedStatus
+
     def test_tls_info_from_secret(self, harness, mocked_lightkube_client):
         """Test the method returns a populated dictionary with TLS information from a secret."""
-        harness.begin()
-        # FIXME: this is a placeholder, the actual implementation may vary, see the linked
-        # comment above.
-        secret_id = harness.add_user_secret(
-            contents={"tls-crt": "cert-value", "tls-key": "key-value"}
-        )
+        secret_content = {"tls-crt": "a-tls-crt", "tls-key": "a-tls-key"}
+        secret_id = harness.add_user_secret(secret_content)
+        harness.grant_secret(secret_id, "istio-pilot")
         harness.update_config({"tls-secret-id": secret_id})
 
-        tls_crt_encoded = base64.b64encode("cert-value".encode("ascii")).decode("utf-8")
-        tls_key_encoded = base64.b64encode("key-value".encode("ascii")).decode("utf-8")
+        harness.begin()
+        tls_crt_encoded = base64.b64encode("a-tls-crt".encode("ascii")).decode("utf-8")
+        tls_key_encoded = base64.b64encode("a-tls-key".encode("ascii")).decode("utf-8")
 
         assert harness.charm._tls_info["tls-crt"] == tls_crt_encoded
         assert harness.charm._tls_info["tls-key"] == tls_key_encoded
