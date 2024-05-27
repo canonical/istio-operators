@@ -1601,6 +1601,9 @@ class TestCharmUpgrade:
             in error_with_status.value.msg
         )
 
+    @pytest.mark.skip(
+        "Harness is not modeling the granted access correctly, see canonical/operator#1229"
+    )  # noqa
     def test_use_https_with_tls_secret_permission_denied(
         self,
         harness,
@@ -1613,7 +1616,7 @@ class TestCharmUpgrade:
         harness.begin()
         with pytest.raises(ErrorWithStatus) as error_with_status:
             harness.charm._use_https_with_tls_secret()
-        assert "Permission denied trying to access" in error_with_status.value.msg
+        assert "ERROR permission denied" in error_with_status.value.msg
         assert error_with_status.value.status_type == BlockedStatus
 
     def test_tls_info_from_secret(self, harness, mocked_lightkube_client):

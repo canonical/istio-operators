@@ -30,6 +30,7 @@ from ops.model import (
     Application,
     BlockedStatus,
     MaintenanceStatus,
+    ModelError,
     SecretNotFoundError,
     WaitingStatus,
 )
@@ -120,22 +121,13 @@ class Operator(CharmBase):
         self.framework.observe(self._cert_handler.on.cert_changed, self.reconcile)
 
         # ---- Start of the block
-        # ---- WARNING: this feature is not recommended, but is supported in 1.17-1.21.
+        # ---- WARNING: this feature is not recommended, but is supported in 1.17-1.22.
         # ---- For details please refer to canonical/istio-operators#380.
-        # ---- FIXME: Remove this block after releasing 1.21.
+        # ---- FIXME: Remove this block after releasing 1.22.
         # Save TLS information and reconcile
         self._tls_secret_id = self.config.get("tls-secret-id")
         self.framework.observe(self.on.secret_changed, self.reconcile)
 
-        # Remove TLS information and reconcile
-        # NOTE: contrary to what users would think, removing a user secret
-        # via the CLI "juju remove-secret <secret:secret-ID> will not trigger
-        # a secret_remove event.
-        # The way I have found a workaround is to remove the config option
-        # that stores the secret ID, that way the logic for handling a config-changed
-        # runs and updates the bits where the secret contents are used, in our case
-        # the TLS configuration of the Gateway.
-        # self.framework.observe(self.on.secret_remove, self.reconcile)
         # ---- End of the block
 
         # Event handling for managing the Istio control plane
@@ -854,8 +846,8 @@ class Operator(CharmBase):
         otherwise, the information shared by a TLS certificate provider.
         """
 
-        # FIXME: remove the try/catch block and just return the dictionary that contains
-        # data from the CertHandler after 1.21
+        # FIXME: remove the if statement and just return the dictionary that contains
+        # data from the CertHandler after 1.22
         if self._use_https_with_tls_secret():
             tls_secret = self.model.get_secret(id=self._tls_secret_id)
             return {
@@ -872,9 +864,9 @@ class Operator(CharmBase):
         }
 
     # ---- Start of the block
-    # ---- WARNING: this feature is not recommended, but is supported in 1.17-1.21.
+    # ---- WARNING: this feature is not recommended, but is supported in 1.17-1.22.
     # ---- For details please refer to canonical/istio-operators#380.
-    # ---- FIXME: Remove this block after releasing 1.21.
+    # ---- FIXME: Remove this block after releasing 1.22.
     def _use_https(self) -> bool:
         """Return True if only one of the TLS configurations are enabled, False if none are.
 
@@ -912,8 +904,14 @@ class Operator(CharmBase):
 
         try:
             secret = self.model.get_secret(id=self._tls_secret_id)
-        except SecretNotFoundError as secret_error:
-            if "not granted access to" in secret_error.args[0]:
+        except SecretNotFoundError:
+            raise ErrorWithStatus(
+                "tls-secret-id was provided, but the secret could not be found - "
+                "please provide a secret ID of a secret that exists.",
+                BlockedStatus,
+            )
+        except ModelError as model_error:
+            if "ERROR permission denied" in model_error.args[0]:
                 # Block the unit when there is an ERROR permission denied
                 raise ErrorWithStatus(
                     (
@@ -923,22 +921,17 @@ class Operator(CharmBase):
                     ),
                     BlockedStatus,
                 )
-            raise ErrorWithStatus(
-                "tls-secret-id was provided, but the secret could not be found - "
-                "please provide a secret ID of a secret that exists.",
-                BlockedStatus,
-            )
 
         try:
             tls_key = secret.get_content(refresh=True)["tls-key"]
             tls_crt = secret.get_content(refresh=True)["tls-crt"]
-        except KeyError as ke:
+        except KeyError as err:
             self.log.error(
-                f"Cannot configure TLS - Missing TLS {ke.args} value(s), "
-                "make sure they are passed as contents of the {TLS_SECRET_LABEL} secret."
+                f"Cannot configure TLS - Missing TLS {err.args} value(s), "
+                "make sure they are passed as contents of the TLS secret."
             )
             raise ErrorWithStatus(
-                f"Missing TLS {ke.args} value(s), please add them to the TLS secret",
+                f"Missing TLS {err.args} value(s), please add them to the TLS secret",
                 BlockedStatus,
             )
 
@@ -948,7 +941,7 @@ class Operator(CharmBase):
 
     # ---- End of the block
 
-    # FIXME: Replace the below line with the one commented out after releasing 1.21
+    # FIXME: Replace the below line with the one commented out after releasing 1.22
     # def _use_https(self) -> bool:
     def _use_https_with_tls_provider(self) -> bool:
         """Return True if TLS key and cert are provided by a TLS cert provider, False otherwise.
