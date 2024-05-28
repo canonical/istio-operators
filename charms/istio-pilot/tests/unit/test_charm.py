@@ -1601,6 +1601,9 @@ class TestCharmUpgrade:
             in error_with_status.value.msg
         )
 
+    # FIXME: remove the skip after https://bugs.launchpad.net/juju/+bug/2067336 is fixed
+    # and fix the exception message to match the actual juju behaviour
+    # See canonical/istio-operators#420 for more details
     @pytest.mark.skip(
         "Harness is not modeling the granted access correctly, see canonical/operator#1229"
     )  # noqa

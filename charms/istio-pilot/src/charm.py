@@ -910,6 +910,11 @@ class Operator(CharmBase):
                 "please provide a secret ID of a secret that exists.",
                 BlockedStatus,
             )
+        # FIXME: right now, juju will raise a ModelError when the application hasn't been
+        # granted access to the secret, but because of https://bugs.launchpad.net/juju/+bug/2067336
+        # this behaviour will change. Once that is done, we must ensure we reflect the change by
+        # removing this exception and add a new one that covers the actual behaviour.
+        # See canonical/istio-operators#420 for more details
         except ModelError as model_error:
             if "ERROR permission denied" in model_error.args[0]:
                 # Block the unit when there is an ERROR permission denied
