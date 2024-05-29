@@ -570,7 +570,7 @@ class Operator(CharmBase):
                     f" departing application's name.  We assume that the departing application's"
                     f" is not in routes.keys='{list(routes.keys())}'."
                 )
-            else:
+            elif routes:
                 routes.pop((event.relation, event.app))
 
         return routes
