@@ -33,6 +33,6 @@ metadata:
   namespace: {{ namespace }}
 type: kubernetes.io/tls
 data:
-  tls.crt: {{ ssl_crt }}
-  tls.key: {{ ssl_key }}
+  tls.crt: {{ tls_crt }}
+  tls.key: {{ tls_key }}
 {% endif %}
