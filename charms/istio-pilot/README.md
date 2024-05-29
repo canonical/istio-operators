@@ -11,7 +11,10 @@ juju deploy istio-pilot --trust
 juju deploy istio-gateway --trust --config kind=ingress istio-ingressgateway
 juju relate istio-pilot istio-ingressgateway
 ```
+
 ## Enable TLS ingress gateway for a single host
+
+### TLS certificate providers
 
 This charm provides means to integrate with TLS certificates providers that help with this configuration. The following can be used as TLS certificates providers depending on the use case or security requirements of an organisation:
 
@@ -26,6 +29,37 @@ juju relate istio-pilot:certificates <TLS certificates providers>:certificates
 > Please refer to the [Secure your charm deployments with X.509 certificates](https://charmhub.io/topics/secure-your-charm-deployments-with-x-509-certificates) entry to understand the different use cases and TLS certificates providers offerings.
 
 > Please refer to the official documentation for more details about the [TLS ingress gateway for a single host](https://istio.io/latest/docs/tasks/traffic-management/ingress/secure-ingress/#configure-a-tls-ingress-gateway-for-a-single-host).
+
+### TLS cert and key
+
+⚠️ WARNING: This feature has been added due to #380, but will be supported only in 1.17 and 1.22 (and the versions released in between), after that, it will be removed in favour of integrating with a TLS certificates provider.
+
+> NOTE: this feature works with juju 3.4 and above.
+
+This charm allows TLS certificate and key files to configure the TLS ingress gateway.
+
+1. [Create a user secret](https://juju.is/docs/juju/manage-secrets#heading--add-a-secret) to hold the TLS certificate and key values (as strings)
+
+```
+juju add-secret istio-tls-secret tls-crt="$(cat CERT_FILE)" tls-key=$"$(cat KEY_FILE)"
+```
+
+where
+
+* `tls-crt` holds the value of the TLS certificate file as a string
+* `tls-key` holds the value of the TLS key file as a string
+
+2. [Grant `istio-pilot` access](https://juju.is/docs/juju/manage-secrets#heading--grant-access-to-a-secret) to the secret
+
+```
+juju grant-secret istio-tls-secret istio-pilot
+```
+
+3. Pass the secret ID as a configuration
+
+```
+juju config istio-pilot tls-secret-id=secret:<secret ID resulting from step 1>
+```
 
 ## Enable the Istio CNI plugin
 
