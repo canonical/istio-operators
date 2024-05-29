@@ -14,7 +14,7 @@ GATEWAY_RESOURCE = create_namespaced_resource(
     kind="Gateway",
     plural="gateways",
 )
-
+TLS_SECRET_LABEL = "istio-tls-secret"
 
 @pytest.fixture(scope="session")
 def lightkube_client() -> lightkube.Client:
@@ -52,7 +52,7 @@ async def test_build_and_deploy_istio_charms(ops_test: OpsTest):
         timeout=90 * 10,
     )
 
-    await run_save_tls_secret_action(ops_test)
+    await add_and_grant_tls_secret_action(ops_test)
 
 
 @tenacity.retry(
@@ -88,10 +88,8 @@ def test_tls_configuration(lightkube_client, ops_test: OpsTest):
     assert servers_dict_tls["credentialName"] == secret.metadata.name
 
 
-async def run_save_tls_secret_action(ops_test: OpsTest):
-    """Run the save-tls-secret action."""
-    istio_pilot_unit = ops_test.model.applications[ISTIO_PILOT].units[0]
-    istio_pilot_unit_action = await istio_pilot_unit.run_action(
-        action_name="set-tls", **{"ssl-key": "key", "ssl-crt": "crt"}
-    )
-    await ops_test.model.get_action_output(action_uuid=istio_pilot_unit_action.entity_id, wait=120)
+async def add_and_grant_tls_secret_action(ops_test: OpsTest):
+    """Add istio-tls-secret and grant istio-pilot access to it."""
+    secret_id = await ops_test.model.add_secret(name=TLS_SECRET_LABEL, data_args=["tls-crt=test-cert", "tls-key=test-key"])
+    await ops_test.model.grant_secret(secret_name=TLS_SECRET_LABEL, application="istio-pilot")
+    await ops_test.model.applications["istio-pilot"].set_config({'tls-secret-id':secret_id})
