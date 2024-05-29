@@ -607,7 +607,7 @@ class Operator(CharmBase):
                     f" is not in routes.keys='{list(routes.keys())}'."
                 )
             elif routes:
-                routes.pop((event.relation, event.app))
+                routes.pop((event.relation, event.app), None)
 
         return routes
 
