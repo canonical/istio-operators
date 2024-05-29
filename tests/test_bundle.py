@@ -322,8 +322,8 @@ async def test_disable_ingress_auth(ops_test: OpsTest):
         apps=[ISTIO_PILOT],
         status="active",
         raise_on_blocked=False,
-        raise_on_error=False,
-        timeout=60 * 10,
+        raise_on_error=True,
+        timeout=90,
     )
 
     gateway_ip = await get_gateway_ip(ops_test)
