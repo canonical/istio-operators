@@ -16,6 +16,7 @@ GATEWAY_RESOURCE = create_namespaced_resource(
 )
 TLS_SECRET_LABEL = "istio-tls-secret"
 
+
 @pytest.fixture(scope="session")
 def lightkube_client() -> lightkube.Client:
     client = lightkube.Client()
@@ -90,6 +91,8 @@ def test_tls_configuration(lightkube_client, ops_test: OpsTest):
 
 async def add_and_grant_tls_secret_action(ops_test: OpsTest):
     """Add istio-tls-secret and grant istio-pilot access to it."""
-    secret_id = await ops_test.model.add_secret(name=TLS_SECRET_LABEL, data_args=["tls-crt=test-cert", "tls-key=test-key"])
+    secret_id = await ops_test.model.add_secret(
+        name=TLS_SECRET_LABEL, data_args=["tls-crt=test-cert", "tls-key=test-key"]
+    )
     await ops_test.model.grant_secret(secret_name=TLS_SECRET_LABEL, application="istio-pilot")
-    await ops_test.model.applications["istio-pilot"].set_config({'tls-secret-id':secret_id})
+    await ops_test.model.applications["istio-pilot"].set_config({"tls-secret-id": secret_id})
