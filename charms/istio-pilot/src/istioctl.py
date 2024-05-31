@@ -103,7 +103,6 @@ class Istioctl:
             subprocess.check_call(
                 [
                     self._istioctl_path,
-                    "x",
                     "precheck",
                 ]
             )
@@ -122,7 +121,6 @@ class Istioctl:
             subprocess.check_call(
                 [
                     self._istioctl_path,
-                    "x",
                     "uninstall",
                     "--purge",
                     "-y",
