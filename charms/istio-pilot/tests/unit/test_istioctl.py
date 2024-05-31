@@ -152,7 +152,7 @@ def test_istioctl_remove(mocked_check_call):
 
     ictl.remove()
 
-    mocked_check_call.assert_called_once_with([ISTIOCTL_BINARY, "x", "uninstall", "--purge", "-y"])
+    mocked_check_call.assert_called_once_with([ISTIOCTL_BINARY, "uninstall", "--purge", "-y"])
 
 
 def test_istioctl_remove_error(mocked_check_call_failing):
@@ -167,7 +167,7 @@ def test_istioctl_precheck(mocked_check_call):
 
     ictl.precheck()
 
-    mocked_check_call.assert_called_once_with([ISTIOCTL_BINARY, "x", "precheck"])
+    mocked_check_call.assert_called_once_with([ISTIOCTL_BINARY, "precheck"])
 
 
 def test_istioctl_precheck_error(mocked_check_call_failing):
