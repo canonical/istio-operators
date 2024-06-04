@@ -167,7 +167,7 @@ def test_istioctl_precheck(mocked_check_call):
 
     ictl.precheck()
 
-    mocked_check_call.assert_called_once_with([ISTIOCTL_BINARY, "precheck"])
+    mocked_check_call.assert_called_once_with([ISTIOCTL_BINARY, "x", "precheck"])
 
 
 def test_istioctl_precheck_error(mocked_check_call_failing):
