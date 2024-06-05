@@ -1357,6 +1357,8 @@ class TestCharmUpgrade:
         harness.charm.upgrade_charm("mock_event")
 
         # Assert that the upgrade was successful
+        image_config = yaml.safe_load(harness.model.config["image-configuration"])
+        pilot_image_tag = image_config["global-tag"]
         mocked_istioctl_class.assert_called_with(
             "./istioctl",
             model_name,
@@ -1365,7 +1367,7 @@ class TestCharmUpgrade:
                 "--set",
                 "values.pilot.image=pilot",
                 "--set",
-                "values.global.tag=1.17.3",
+                f"values.global.tag={pilot_image_tag}",
                 "--set",
                 "values.global.hub=docker.io/istio",
                 "--set",
