@@ -25,7 +25,7 @@ options:
   image-configuration:
     default: |
       pilot-image: 'pilot'  # values.pilot.image
-      global-tag: '1.17.3'  # values.global.tag
+      global-tag: '1.22.0'  # values.global.tag
       global-hub: 'docker.io/istio' # values.global.hub
       global-proxy-image: 'proxyv2' # values.global.proxy.image
       global-proxy-init-image: 'proxyv2' # values.global.proxy_init.image
