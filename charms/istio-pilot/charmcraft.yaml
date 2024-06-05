@@ -12,5 +12,5 @@ parts:
     build-packages: [git, rustc, cargo, libffi-dev, libssl-dev, pkg-config]
   istioctl:
     plugin: dump
-    source: https://github.com/istio/istio/releases/download/1.17.3/istioctl-1.17.3-linux-amd64.tar.gz
+    source: https://github.com/istio/istio/releases/download/1.18.7/istioctl-1.18.7-linux-amd64.tar.gz
     source-type: tar
