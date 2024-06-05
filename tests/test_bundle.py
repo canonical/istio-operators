@@ -35,7 +35,7 @@ INGRESS_REQUIRER_TRUST = True
 
 ISTIO_PILOT = "istio-pilot"
 ISTIO_GATEWAY_APP_NAME = "istio-ingressgateway"
-
+ISTIO_RELEASE = "release-1.22"
 USERNAME = "user123"
 PASSWORD = "user123"
 
@@ -156,7 +156,7 @@ async def test_gateway_info_relation(ops_test: OpsTest):
 
 @pytest.mark.abort_on_fail
 async def test_deploy_bookinfo_example(ops_test: OpsTest):
-    root_url = "https://raw.githubusercontent.com/istio/istio/release-1.11/samples/bookinfo"
+    root_url = f"https://raw.githubusercontent.com/istio/istio/{ISTIO_RELEASE}/samples/bookinfo"
     bookinfo_namespace = f"{ops_test.model_name}-bookinfo"
 
     await ops_test.run(
