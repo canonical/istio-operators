@@ -23,4 +23,4 @@ requires:
     versions: [v1]
     __schema_source: https://raw.githubusercontent.com/canonical/operator-schemas/master/k8s-service.yaml
 assumes:
-- juju >= 2.9.0
+- juju >= 3.1
