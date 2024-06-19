@@ -48,7 +48,7 @@ jobs:
       matrix:
         microk8s-versions:
           - 1.25-strict/stable
-          - 1.26-strict/stable
+          - 1.27-strict/stable
         integration-types:
           - integration
           - integration-tls-provider
