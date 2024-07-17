@@ -58,6 +58,9 @@ def all_operator_reconcile_handlers_mocked(mocker):
         "_reconcile_ingress_auth": mocker.patch("charm.Operator._reconcile_ingress_auth"),
         "_reconcile_gateway": mocker.patch("charm.Operator._reconcile_gateway"),
         "_remove_gateway": mocker.patch("charm.Operator._remove_gateway"),
+        "_assert_gateway_service_status": mocker.patch(
+            "charm.Operator._assert_gateway_service_status"
+        ),
         "_send_gateway_info": mocker.patch("charm.Operator._send_gateway_info"),
         "_get_ingress_data": mocker.patch("charm.Operator._get_ingress_data"),
         "_reconcile_ingress": mocker.patch("charm.Operator._reconcile_ingress"),
@@ -269,8 +272,10 @@ class TestCharmEvents:
         )
 
     @patch("charm.Operator._handle_istio_pilot_relation")
+    @patch("charm.Operator._is_gateway_service_up", new_callable=PropertyMock)
     def test_ingress_relation(
         self,
+        mocked_is_gateway_service_up,
         mocked_handle_istio_pilot_relation,
         harness,
         mocker,
@@ -287,6 +292,7 @@ class TestCharmEvents:
 
         """
         krh_class, krh_lightkube_client = kubernetes_resource_handler_with_client
+        mocked_is_gateway_service_up.return_value = True
 
         model_name = "my-model"
         gateway_name = "my-gateway"
@@ -590,6 +596,24 @@ class TestCharmHelpers:
             assert gateway_port == expected_port
 
     @pytest.mark.parametrize(
+        "is_gateway_service_up, expected_context",
+        [
+            (True, does_not_raise()),
+            (False, pytest.raises(ErrorWithStatus)),
+        ],
+    )
+    @patch("charm.Operator._is_gateway_service_up", new_callable=PropertyMock)
+    def test_assert_gateway_service_status(
+        self, mocked_is_gateway_service_up, is_gateway_service_up, expected_context, harness
+    ):
+        """Tests whether _assert_gateway_service_status raises as expected when service is down."""
+        harness.begin()
+        mocked_is_gateway_service_up.return_value = is_gateway_service_up
+
+        with expected_context:
+            harness.charm._assert_gateway_service_status()
+
+    @pytest.mark.parametrize(
         "lightkube_client_get_side_effect, expected_is_up, context_raised",
         [
             (None, True, does_not_raise()),
@@ -626,6 +650,7 @@ class TestCharmHelpers:
             ("mock_loadbalancer_ip_service", True),
             ("mock_loadbalancer_hostname_service_not_ready", False),
             ("mock_loadbalancer_ip_service_not_ready", False),
+            ("mock_loadbalancer_ip_service_missing", False),
         ],
     )
     def test_is_gateway_service_up(
@@ -1713,6 +1738,20 @@ def mock_loadbalancer_ip_service_not_ready():
             "apiVersion": "v1",
             "kind": "Service",
             "status": {"loadBalancer": {"ingress": []}},
+            "spec": {"type": "LoadBalancer", "clusterIP": "10.10.10.10"},
+        }
+    )
+    return mock_nodeport_service
+
+
+@pytest.fixture()
+def mock_loadbalancer_ip_service_missing():
+    """This happens if LoadBalancer external IP is <pending> like if there is no provisioner."""
+    mock_nodeport_service = codecs.from_dict(
+        {
+            "apiVersion": "v1",
+            "kind": "Service",
+            "status": {"loadBalancer": {}},
             "spec": {"type": "LoadBalancer", "clusterIP": "10.10.10.10"},
         }
     )
