@@ -22,5 +22,10 @@ requires:
           - service-port
     versions: [v1]
     __schema_source: https://raw.githubusercontent.com/canonical/operator-schemas/master/k8s-service.yaml
+provides:
+  metrics-endpoint:
+    interface: prometheus_scrape
+  grafana-dashboard:
+    interface: grafana_dashboard
 assumes:
 - juju >= 3.1
