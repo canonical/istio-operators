@@ -23,6 +23,7 @@ log = logging.getLogger(__name__)
 ISTIO_PILOT = "istio-pilot"
 ISTIO_PILOT_ALER_RULES = Path("./charms/istio-pilot/src/prometheus_alert_rules")
 ISTIO_GATEWAY_APP_NAME = "istio-ingressgateway"
+ISTIO_GATEWAY_ALER_RULES = Path("./charms/istio-ingressgateway/src/prometheus_alert_rules")
 
 
 @pytest.mark.abort_on_fail
@@ -98,7 +99,9 @@ async def test_metrics_enpoint(charm, metrics_path, metrics_port, ops_test):
     await assert_metrics_endpoint(app, metrics_port=metrics_port, metrics_path=metrics_path)
 
 
-@pytest.mark.parametrize("charm, path_to_alert_rules", [(ISTIO_PILOT, ISTIO_PILOT_ALER_RULES)])
+@pytest.mark.parametrize("charm, path_to_alert_rules", [
+    (ISTIO_PILOT, ISTIO_PILOT_ALER_RULES), (ISTIO_GATEWAY_APP_NAME, ISTIO_PILOT_ALER_RULES)
+])
 async def test_alert_rules(charm, path_to_alert_rules, ops_test):
     """Test check charm alert rules and rules defined in relation data bag."""
     app = ops_test.model.applications[charm]
