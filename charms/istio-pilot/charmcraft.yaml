@@ -8,7 +8,6 @@ bases:
       channel: "20.04"
 parts:
   charm:
-    charm-python-packages: [setuptools, pip, jsonschema, cryptography, cffi]
     build-packages: [git, rustc, cargo, libffi-dev, libssl-dev, pkg-config]
   istioctl:
     plugin: dump

@@ -8,4 +8,4 @@ bases:
         channel: '20.04'
 parts:
   charm:
-    charm-python-packages: [setuptools, pip]
+    build-packages: [git, rustc, cargo, libffi-dev, libssl-dev, pkg-config]
