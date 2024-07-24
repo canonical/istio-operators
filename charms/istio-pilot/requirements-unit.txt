@@ -22,6 +22,7 @@ certifi==2024.7.4
     #   requests
 cffi==1.16.0
     # via
+    #   -r requirements.in
     #   cryptography
     #   pynacl
 charmed-kubeflow-chisme==0.4.2
@@ -37,6 +38,7 @@ coverage==7.6.0
 cryptography==43.0.0
     # via
     #   -r requirements-unit.in
+    #   -r requirements.in
     #   paramiko
 deepdiff==6.2.1
     # via charmed-kubeflow-chisme
@@ -71,6 +73,7 @@ jinja2==3.1.4
 jsonschema==4.17.3
     # via
     #   -r requirements-unit.in
+    #   -r requirements.in
     #   serialized-data-interface
 juju==3.5.2.0
     # via charmed-kubeflow-chisme

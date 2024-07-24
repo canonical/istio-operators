@@ -8,7 +8,8 @@ bases:
       channel: "20.04"
 parts:
   charm:
-    build-packages: [rustc, cargo, libffi-dev, libssl-dev, pkg-config]
+    charm-python-packages: [setuptools, pip]
+    build-packages: [git, rustc, cargo, libffi-dev, libssl-dev, pkg-config]
   istioctl:
     plugin: dump
     source: https://github.com/istio/istio/releases/download/1.22.0/istioctl-1.22.0-linux-amd64.tar.gz
