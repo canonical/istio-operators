@@ -1902,7 +1902,7 @@
                 "type": "prometheus",
                 "uid": "${prometheusds}"
               },
-              "expr": "sum(irate(galley_validation_failed[5m]))",
+              "expr": "sum(rate(galley_validation_failed[5m]))",
               "interval": "",
               "legendFormat": "Validation (Failure)",
               "refId": "B"
@@ -1912,7 +1912,7 @@
                 "type": "prometheus",
                 "uid": "${prometheusds}"
               },
-              "expr": "sum(irate(galley_validation_config_updates[5m]))",
+              "expr": "sum(rate(galley_validation_config_updates[5m]))",
               "interval": "",
               "legendFormat": "Validation updates",
               "refId": "C"
@@ -1922,7 +1922,7 @@
                 "type": "prometheus",
                 "uid": "${prometheusds}"
               },
-              "expr": "sum(irate(galley_validation_config_update_error[5m]))",
+              "expr": "sum(rate(galley_validation_config_update_error[5m]))",
               "interval": "",
               "legendFormat": "Validation updates (Failure)",
               "refId": "D"
