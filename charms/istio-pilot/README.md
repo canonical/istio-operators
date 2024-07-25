@@ -77,7 +77,7 @@ These values vary on each Kubernetes installation and depends on the CNI's confi
 
 Please note that if any of these configurations are missing, or not provided at all, the Istio CNI plugin will not be enabled on initial installations/upgrades,  or it will be disabled on existing installations with the plugin.
 
-> NOTE: This capability is only available in `istio-pilot` > 1.17/x; if you haven't already, please ugrade to the latest version of this charm before proceeding with the following instructions.
+> NOTE: This capability is only available in `istio-pilot` > 1.17/x; if you haven't already, please upgrade to the latest version of this charm before proceeding with the following instructions.
 
 #### More information
 * [Network Plugins](https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/network-plugins/)
