@@ -6,10 +6,8 @@ from pathlib import Path
 
 import pytest
 from charmed_kubeflow_chisme.testing import (
-    APP_GRAFANA_DASHBOARD,
     APP_METRICS_ENDPOINT,
     GRAFANA_AGENT_APP,
-    GRAFANA_AGENT_GRAFANA_DASHBOARD,
     GRAFANA_AGENT_METRICS_ENDPOINT,
     assert_alert_rules,
     assert_metrics_endpoint,
@@ -58,17 +56,6 @@ async def test_build_and_deploy_istio_charms(ops_test: OpsTest):
     )
     # Note(rgildein): Using this until the [1] is not fixed.
     # [1]: https://github.com/canonical/charmed-kubeflow-chisme/issues/117
-    log.info(
-        "Adding relation: %s:%s and %s:%s",
-        ISTIO_GATEWAY_APP_NAME,
-        APP_GRAFANA_DASHBOARD,
-        GRAFANA_AGENT_APP,
-        GRAFANA_AGENT_GRAFANA_DASHBOARD,
-    )
-    await ops_test.model.integrate(
-        f"{ISTIO_GATEWAY_APP_NAME}:{APP_GRAFANA_DASHBOARD}",
-        f"{GRAFANA_AGENT_APP}:{GRAFANA_AGENT_GRAFANA_DASHBOARD}",
-    )
     log.info(
         "Adding relation: %s:%s and %s:%s",
         ISTIO_GATEWAY_APP_NAME,

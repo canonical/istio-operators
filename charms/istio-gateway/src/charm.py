@@ -2,7 +2,6 @@
 
 import logging
 
-from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from jinja2 import Environment, FileSystemLoader
 from lightkube import Client, codecs
@@ -35,7 +34,7 @@ class Operator(CharmBase):
             self.framework.observe(event, self.start)
         self.framework.observe(self.on.remove, self.remove)
 
-        # metrics and dashboard relation configuration
+        # metrics relation configuration
         self.prometheus_provider = MetricsEndpointProvider(
             charm=self,
             relation_name="metrics-endpoint",
@@ -51,7 +50,6 @@ class Operator(CharmBase):
                 }
             ],
         )
-        self.dashboard_provider = GrafanaDashboardProvider(self)
 
     def start(self, event):
         """Event handler for StartEevnt."""

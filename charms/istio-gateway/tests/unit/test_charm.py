@@ -158,10 +158,3 @@ def test_metrics(harness):
                 }
             ],
         )
-
-
-def test_grafana_dashboard(harness):
-    """Test GrafanaDashboardProvider initialization."""
-    with patch("charm.GrafanaDashboardProvider") as mock_grafana:
-        harness.begin()
-        mock_grafana.assert_called_once_with(harness.charm)

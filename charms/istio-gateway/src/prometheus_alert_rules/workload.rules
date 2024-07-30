@@ -1,6 +1,6 @@
 # Note(rgildein): Alert rules come from the source https://github.com/istio/tools/blob/6d537aee69ec7e9da007f311562496f7ac1cb691/perf/stability/alertmanager/prometheusrule.yaml#L28-L47
 groups:
-  - name: Workload
+  - name: IstioGatewayWorkload
     rules:
       - alert: HTTP5xxRateHigh
         annotations:
