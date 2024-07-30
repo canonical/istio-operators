@@ -263,13 +263,15 @@ async def test_enable_ingress_auth(ops_test: OpsTest):
         OIDC_GATEKEEPER,
         channel=OIDC_GATEKEEPER_CHANNEL,
         trust=OIDC_GATEKEEPER_TRUST,
-        config={"public-url": regular_ingress_gateway_ip},
     )
 
-    await ops_test.model.add_relation(f"{ISTIO_PILOT}:ingress", f"{DEX_AUTH}:ingress")
-    await ops_test.model.add_relation(f"{ISTIO_PILOT}:ingress", f"{OIDC_GATEKEEPER}:ingress")
-    await ops_test.model.add_relation(f"{OIDC_GATEKEEPER}:oidc-client", f"{DEX_AUTH}:oidc-client")
-    await ops_test.model.add_relation(
+    await ops_test.model.integrate(f"{ISTIO_PILOT}:ingress", f"{DEX_AUTH}:ingress")
+    await ops_test.model.integrate(f"{ISTIO_PILOT}:ingress", f"{OIDC_GATEKEEPER}:ingress")
+    await ops_test.model.integrate(f"{OIDC_GATEKEEPER}:oidc-client", f"{DEX_AUTH}:oidc-client")
+    await ops_test.model.integrate(
+        f"{OIDC_GATEKEEPER}:dex-oidc-config", f"{DEX_AUTH}:dex-oidc-config"
+    )
+    await ops_test.model.integrate(
         f"{ISTIO_PILOT}:ingress-auth", f"{OIDC_GATEKEEPER}:ingress-auth"
     )
 
