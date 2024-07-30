@@ -1,8 +1,0 @@
-alert: IstioPilotDuplicateEntry
-expr: sum(rate(pilot_duplicate_envoy_clusters{}[5m])) > 0
-for: 0m
-labels:
-  severity: critical
-annotations:
-  summary: Istio Pilot Duplicate Entry (instance {{ $labels.instance }})
-  description: "Istio pilot duplicate entry error.\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"

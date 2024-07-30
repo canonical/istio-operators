@@ -1,0 +1,18 @@
+# Note(rgildein): Alert rules come from the source https://github.com/istio/tools/blob/6d537aee69ec7e9da007f311562496f7ac1cb691/perf/stability/alertmanager/prometheusrule.yaml#L11-L26
+groups:
+  - name: IstioGatewatBasic
+    rules:
+      - alert: IngressTrafficMissing
+        annotations:
+          summary: 'ingress gateway traffic missing'
+          description: '[Critical]: ingress gateway traffic missing, likely other monitors are misleading, check client logs'
+        expr: >
+          absent(reporter="source", source_workload=~"istio-(ingress|egress)gateway-workload"})==1
+        for: 5m
+      - alert: IstioMetricsMissing
+        annotations:
+          summary: 'Istio Metrics missing'
+          description: '[Critical]: Check prometheus deployment or whether the prometheus filters are applied correctly'
+        expr: >
+          absent(istio_requests_total)==1 or absent(istio_request_duration_milliseconds_bucket)==1
+        for: 5m
