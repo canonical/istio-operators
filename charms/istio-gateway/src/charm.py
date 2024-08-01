@@ -2,6 +2,7 @@
 
 import logging
 
+from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from jinja2 import Environment, FileSystemLoader
 from lightkube import Client, codecs
 from lightkube.core.exceptions import ApiError
@@ -11,6 +12,9 @@ from ops.model import ActiveStatus, BlockedStatus, StatusBase, WaitingStatus
 from serialized_data_interface import NoCompatibleVersions, NoVersionsListed, get_interfaces
 
 SUPPORTED_GATEWAY_SERVICE_TYPES = ["LoadBalancer", "ClusterIP", "NodePort"]
+
+METRICS_PATH = "/stats/prometheus"
+METRICS_PORT = 9090
 
 
 class Operator(CharmBase):
@@ -29,6 +33,23 @@ class Operator(CharmBase):
         ]:
             self.framework.observe(event, self.start)
         self.framework.observe(self.on.remove, self.remove)
+
+        # metrics relation configuration
+        self.prometheus_provider = MetricsEndpointProvider(
+            charm=self,
+            relation_name="metrics-endpoint",
+            jobs=[
+                {
+                    "metrics_path": METRICS_PATH,
+                    # Note(rgildein): Service is defined in manifest.yaml and without using full
+                    # path, the grafana-agent will be using IP of application pod instead of IP
+                    # of workload deployment.
+                    "static_configs": [
+                        {"targets": [f"istio-gateway-metrics.{self.model.name}.svc:{9090}"]}
+                    ],
+                }
+            ],
+        )
 
     def start(self, event):
         """Event handler for StartEevnt."""

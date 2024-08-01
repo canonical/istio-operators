@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import pytest
 import yaml
 from lightkube.core.exceptions import ApiError
@@ -138,3 +140,21 @@ def test_service_type(configured_harness_only_ingress, gateway_service_type, moc
 
     assert workload_service["spec"].get("type") == gateway_service_type
     assert configured_harness_only_ingress.charm.model.unit.status == ActiveStatus("")
+
+
+def test_metrics(harness):
+    """Test MetricsEndpointProvider initialization."""
+    with patch("charm.MetricsEndpointProvider") as mock_metrics:
+        harness.begin()
+        mock_metrics.assert_called_once_with(
+            charm=harness.charm,
+            relation_name="metrics-endpoint",
+            jobs=[
+                {
+                    "metrics_path": "/stats/prometheus",
+                    "static_configs": [
+                        {"targets": [f"istio-gateway-metrics.{harness.model.name}.svc:9090"]}
+                    ],
+                }
+            ],
+        )
