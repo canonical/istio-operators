@@ -308,3 +308,25 @@ spec:
   selector:
     istio: {{ kind }}gateway
   type: {{ 'ClusterIP' if kind == 'egress' else gateway_service_type }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: istio-{{ kind }}gateway
+    install.operator.istio.io/owning-resource: unknown
+    istio: {{ kind }}gateway
+    istio.io/rev: default
+    operator.istio.io/component: "{{ kind|capitalize }}Gateways"
+    release: istio
+  name: istio-gateway-metrics
+  namespace: {{ namespace }}
+spec:
+  ports:
+    - name: metrics
+      port: 9090
+      protocol: TCP
+      targetPort: 15020
+  selector:
+    istio: {{ kind }}gateway
+  type: ClusterIP

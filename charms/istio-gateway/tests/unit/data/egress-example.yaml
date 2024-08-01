@@ -303,3 +303,25 @@ spec:
   selector:
     istio: egressgateway
   type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: istio-egressgateway
+    install.operator.istio.io/owning-resource: unknown
+    istio: egressgateway
+    istio.io/rev: default
+    operator.istio.io/component: "EgressGateways"
+    release: istio
+  name: istio-gateway-metrics
+  namespace: None
+spec:
+  ports:
+    - name: metrics
+      port: 9090
+      protocol: TCP
+      targetPort: 15020
+  selector:
+    istio: egressgateway
+  type: ClusterIP

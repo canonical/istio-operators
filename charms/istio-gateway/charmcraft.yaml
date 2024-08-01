@@ -9,3 +9,4 @@ bases:
 parts:
   charm:
     charm-python-packages: [setuptools, pip]
+    build-packages: [git, rustc, cargo, libffi-dev, libssl-dev, pkg-config]
