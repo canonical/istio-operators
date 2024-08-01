@@ -1949,7 +1949,7 @@
   "schemaVersion": 38,
   "style": "dark",
   "tags": [
-    "Kubeflow",
+    "CKF",
     "istio"
   ],
   "templating": {
