@@ -8,7 +8,7 @@ annotated-types==0.7.0
     # via pydantic
 anyio==4.4.0
     # via httpx
-attrs==23.2.0
+attrs==24.1.0
     # via jsonschema
 certifi==2024.7.4
     # via
@@ -17,7 +17,7 @@ certifi==2024.7.4
     #   requests
 charset-normalizer==3.3.2
     # via requests
-cosl==0.0.15
+cosl==0.0.19
     # via -r requirements.in
 exceptiongroup==1.2.2
     # via anyio
