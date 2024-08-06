@@ -1892,7 +1892,7 @@
                 "type": "prometheus",
                 "uid": "${prometheusds}"
               },
-              "expr": "sum(rate(galley_validation_passed[5m]))",
+              "expr": "sum(irate(galley_validation_passed[5m]))",
               "interval": "",
               "legendFormat": "Validations (Success)",
               "refId": "A"
