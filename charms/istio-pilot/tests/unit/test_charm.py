@@ -1372,6 +1372,8 @@ class TestCharmUpgrade:
                 "values.global.proxy.image=proxyv2",
                 "--set",
                 "values.global.proxy_init.image=proxyv2",
+                "--set",
+                "meshConfig.accessLogFile=/dev/stdout",
             ],
         )
         mocked_istioctl.upgrade.assert_called_with()
