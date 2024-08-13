@@ -10,6 +10,7 @@ from charmed_kubeflow_chisme.testing import (
     GRAFANA_AGENT_APP,
     GRAFANA_AGENT_METRICS_ENDPOINT,
     assert_alert_rules,
+    assert_grafana_dashboards,
     assert_metrics_endpoint,
     deploy_and_assert_grafana_agent,
     get_alert_rules,
@@ -22,6 +23,7 @@ ISTIO_PILOT = "istio-pilot"
 ISTIO_PILOT_ALER_RULES = Path("./charms/istio-pilot/src/prometheus_alert_rules")
 ISTIO_GATEWAY_APP_NAME = "istio-ingressgateway"
 ISTIO_GATEWAY_ALER_RULES = Path("./charms/istio-gateway/src/prometheus_alert_rules")
+ISTIO_PILOT_DASHBOARDS = {"istio_control_plane.json"}
 
 
 @pytest.mark.abort_on_fail
@@ -95,3 +97,10 @@ async def test_alert_rules(charm, path_to_alert_rules, ops_test):
     alert_rules = get_alert_rules(path_to_alert_rules)
     log.info("found alert_rules: %s", alert_rules)
     await assert_alert_rules(app, alert_rules)
+
+
+@pytest.mark.parametrize("charm, dashboards", [(ISTIO_PILOT, ISTIO_PILOT_DASHBOARDS)])
+async def test_grafana_dashboards(charm, dashboards, ops_test):
+    """Test Grafana dashboards are defined in relation data bag."""
+    app = ops_test.model.applications[charm]
+    await assert_grafana_dashboards(app, dashboards)
