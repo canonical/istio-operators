@@ -116,6 +116,7 @@ jobs:
     name: Observability Integration Test
     runs-on: ubuntu-20.04
     strategy:
+      fail-fast: false
       matrix:
         microk8s-versions:
           - 1.25-strict/stable
