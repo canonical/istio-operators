@@ -54,6 +54,14 @@ jobs:
           - integration-tls-provider
           - integration-tls-secret
     steps:
+      # Ideally we'd use self-hosted runners, but this effort is still not stable
+      # This action will remove unused software (dotnet, haskell, android libs, codeql,
+      # and docker images) from the GH runner.
+      # This leaves ~45GB free as of 2024-04-10, but this amount has varied as GH changed their
+      # runners
+      - name: Maximise GH runner space
+        uses: jlumbroso/free-disk-space@v1.3.1
+
       - name: Check out repo
         uses: actions/checkout@v3
   
@@ -65,30 +73,30 @@ jobs:
           microk8s-addons: "dns hostpath-storage rbac metallb:10.64.140.43-10.64.140.49"
           juju-channel: 3.4/stable
           charmcraft-channel: latest/candidate
-  
+
       - name: Run integration tests
         run: |
           juju add-model test-istio
           tox -e ${{ matrix.integration-types }} -- --model test-istio
         timeout-minutes: 80
-  
+
       - name: Setup Debug Artifact Collection
         run: mkdir tmp
         if: failure()
-  
+
       - name: Collect charmcraft logs
         if: failure()
         run: |
           cat /home/runner/.local/state/charmcraft/log/charmcraft-*.log | tee tmp/charmcraft.log
-  
+
       - name: Collect Juju status
         if: failure()
         run: juju status | tee tmp/juju-status.txt
-  
+
       - name: Collect Juju log
         if: failure()
         run: juju debug-log --replay --no-tail | tee tmp/juju-status.txt
-  
+
       - name: Collect Kube status
         if: failure()
         run: |
@@ -98,13 +106,13 @@ jobs:
           kubectl describe deployments -A | tee tmp/kube-deployments.txt
           kubectl describe replicasets -A | tee tmp/kubectl-replicasets.txt
           kubectl exec -n test-istio istio-pilot-0 --container charm -- agents/unit-istio-pilot-0/charm/istioctl analyze -n test-istio | tee tmp/istioctl-analyze.txt
-  
+
       - name: Collect Kube logs
         if: failure()
         run: |
           kubectl logs -n test-istio --tail 1000 -lapp.kubernetes.io/name=istio-pilot -c charm | tee tmp/istio-pilot.log
           kubectl logs -n test-istio --tail 1000 -lapp.kubernetes.io/name=istio-ingressgateway-operator -c charm | tee tmp/istio-ingressgateway-operator.log
-  
+
       - name: Upload debug artifacts
         if: failure()
         uses: actions/upload-artifact@v3
@@ -132,7 +140,7 @@ jobs:
           microk8s-addons: "dns hostpath-storage rbac metallb:10.64.140.43-10.64.140.49"
           juju-channel: 3.4/stable
           charmcraft-channel: latest/candidate
- 
+
       - name: Run observability integration tests
         run: |
           juju add-model cos-test
