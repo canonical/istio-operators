@@ -24,7 +24,6 @@ def lightkube_client() -> lightkube.Client:
 
 
 @pytest.mark.abort_on_fail
-@pytest.mark.skip_if_deployed
 async def test_build_and_deploy_istio_charms(ops_test: OpsTest):
     """Build and deploy istio-operators with TLS configuration."""
     charms_path = "./charms/istio"

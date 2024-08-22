@@ -243,7 +243,7 @@ class Operator(CharmBase):
                     "--set",
                     f"values.cni.cniConfDir={self.model.config['cni-conf-dir']}",
                     "--set",
-                    "values.sidecarInjectorWebhook.injectedAnnotations.traffic\\.sidecar\\.istio\\.io/excludeOutboundIPRanges=0.0.0.0/0",  # noqa
+                    "values.sidecarInjectorWebhook.injectedAnnotations.traffic\.sidecar\.istio\.io/excludeOutboundIPRanges=0.0.0.0/0",  # noqa
                 ]
             )
         return extra_flags
