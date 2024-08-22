@@ -277,7 +277,7 @@ async def test_enable_ingress_auth(ops_test: OpsTest):
     await ops_test.model.wait_for_idle(
         status="active",
         raise_on_blocked=False,
-        timeout=90 * 10,
+        timeout=60 * 15,
     )
 
     # Wait for the pods from our secondary workload, just in case.  This should be faster than
