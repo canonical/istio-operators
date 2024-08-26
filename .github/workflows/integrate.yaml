@@ -68,13 +68,21 @@ jobs:
   
       - name: Run integration tests
         run: |
+          ./tools/disk-space.sh &
           juju add-model test-istio
           tox -e ${{ matrix.integration-types }} -- --model test-istio
+          echo ------------- TESTS FINISHED -----------"
+          date "+%H:%M:%S   %d/%m/%y"
         timeout-minutes: 80
   
       - name: Setup Debug Artifact Collection
         run: mkdir tmp
         if: failure()
+  
+      - name: Collect disk space monitoring logs
+        if: failure() || cancelled()
+        run: |
+          cat disk-size-logs.txt | tee tmp/disk-size-logs.txt
   
       - name: Collect charmcraft logs
         if: failure()
@@ -135,8 +143,16 @@ jobs:
  
       - name: Run observability integration tests
         run: |
+          ./tools/disk-space.sh &
           juju add-model cos-test
           tox -vve cos-integration -- --model cos-test
+          echo ------------- TESTS FINISHED -----------"
+          date "+%H:%M:%S   %d/%m/%y"
 
       - run: kubectl get pod/prometheus-k8s-0 -n knative-test -o=jsonpath='{.status}'
         if: failure()
+
+      - name: Collect disk space monitoring logs
+        if: failure() || cancelled()
+        run: |
+          cat disk-size-logs.txt | tee tmp/disk-size-logs.txt
