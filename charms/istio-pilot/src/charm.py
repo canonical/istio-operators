@@ -17,7 +17,7 @@ from charms.istio_pilot.v0.istio_gateway_info import (
     DEFAULT_RELATION_NAME as GATEWAY_INFO_RELATION_NAME,
 )
 from charms.istio_pilot.v0.istio_gateway_info import GatewayProvider
-from charms.observability_libs.v0.cert_handler import CertHandler
+from charms.observability_libs.v1.cert_handler import CertHandler
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from lightkube import Client
 from lightkube.core.exceptions import ApiError
@@ -112,7 +112,6 @@ class Operator(CharmBase):
         self._cert_handler = CertHandler(
             self,
             key="istio-cert",
-            peer_relation_name=self.peer_relation_name,
             cert_subject=self._cert_subject,
         )
 
@@ -862,8 +861,12 @@ class Operator(CharmBase):
                 ).decode("utf-8"),
             }
         return {
-            "tls-crt": base64.b64encode(self._cert_handler.cert.encode("ascii")).decode("utf-8"),
-            "tls-key": base64.b64encode(self._cert_handler.key.encode("ascii")).decode("utf-8"),
+            "tls-crt": base64.b64encode(self._cert_handler.server_cert.encode("ascii")).decode(
+                "utf-8"
+            ),
+            "tls-key": base64.b64encode(self._cert_handler.private_key.encode("ascii")).decode(
+                "utf-8"
+            ),
         }
 
     # ---- Start of the block
@@ -964,16 +967,16 @@ class Operator(CharmBase):
 
         # If the certificates relation is established, we can assume
         # that we want to configure TLS
-        if _xor(self._cert_handler.cert, self._cert_handler.key):
+        if _xor(self._cert_handler.server_cert, self._cert_handler.private_key):
             # Fail if tls is only partly configured as this is probably a mistake
             missing = "pkey"
-            if not self._cert_handler.cert:
+            if not self._cert_handler.server_cert:
                 missing = "CA cert"
             raise ErrorWithStatus(
                 f"Missing {missing}, cannot configure TLS",
                 BlockedStatus,
             )
-        if self._cert_handler.cert and self._cert_handler.key:
+        if self._cert_handler.server_cert and self._cert_handler.private_key:
             return True
 
     def _log_and_set_status(self, status):
