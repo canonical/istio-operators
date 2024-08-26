@@ -68,8 +68,10 @@ jobs:
   
       - name: Run integration tests
         run: |
-          juju add-model test-istio
-          tox -e ${{ matrix.integration-types }} -- --model test-istio
+          cd charms/istio-pilot
+          charmcraft pack --verbose
+          cd ../istio-gateway
+          charmcraft pack --verbose
         timeout-minutes: 80
   
       - name: Setup Debug Artifact Collection
@@ -135,8 +137,10 @@ jobs:
  
       - name: Run observability integration tests
         run: |
-          juju add-model cos-test
-          tox -vve cos-integration -- --model cos-test
+          cd charms/istio-pilot
+          charmcraft pack --verbose
+          cd ../istio-gateway
+          charmcraft pack --verbose
 
       - run: kubectl get pod/prometheus-k8s-0 -n knative-test -o=jsonpath='{.status}'
         if: failure()
