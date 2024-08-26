@@ -264,11 +264,13 @@ async def test_enable_ingress_auth(ops_test: OpsTest):
         trust=OIDC_GATEKEEPER_TRUST,
     )
 
-    await ops_test.model.add_relation(f"{ISTIO_PILOT}:ingress", f"{DEX_AUTH}:ingress")
-    await ops_test.model.add_relation(f"{ISTIO_PILOT}:ingress", f"{OIDC_GATEKEEPER}:ingress")
-    await ops_test.model.add_relation(f"{OIDC_GATEKEEPER}:oidc-client", f"{DEX_AUTH}:oidc-client")
-    await ops_test.model.add_relation(f"{OIDC_GATEKEEPER}:dex-oidc-config", f"{DEX_AUTH}:dex-oidc-config")
-    await ops_test.model.add_relation(
+    await ops_test.model.integrate(f"{ISTIO_PILOT}:ingress", f"{DEX_AUTH}:ingress")
+    await ops_test.model.integrate(f"{ISTIO_PILOT}:ingress", f"{OIDC_GATEKEEPER}:ingress")
+    await ops_test.model.integrate(f"{OIDC_GATEKEEPER}:oidc-client", f"{DEX_AUTH}:oidc-client")
+    await ops_test.model.integrate(
+        f"{OIDC_GATEKEEPER}:dex-oidc-config", f"{DEX_AUTH}:dex-oidc-config"
+    )
+    await ops_test.model.integrate(
         f"{ISTIO_PILOT}:ingress-auth", f"{OIDC_GATEKEEPER}:ingress-auth"
     )
 
@@ -276,7 +278,7 @@ async def test_enable_ingress_auth(ops_test: OpsTest):
     await ops_test.model.wait_for_idle(
         status="active",
         raise_on_blocked=False,
-        timeout=90 * 10,
+        timeout=60 * 15,
     )
 
     # Wait for the pods from our secondary workload, just in case.  This should be faster than
