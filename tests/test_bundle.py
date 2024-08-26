@@ -80,13 +80,14 @@ async def test_kubectl_access(ops_test: OpsTest):
 async def test_build_and_deploy_istio_charms(ops_test: OpsTest):
     # Build, deploy, and relate istio charms
     charms_path = "./charms/istio"
-    istio_charms = await ops_test.build_charms(f"{charms_path}-gateway", f"{charms_path}-pilot")
+    istio_pilot = await ops_test.build_charm(f"{charms_path}-pilot")
+    istio_gateway = await ops_test.build_charm(f"{charms_path}-gateway")
 
     await ops_test.model.deploy(
-        istio_charms["istio-pilot"], application_name=ISTIO_PILOT, series="focal", trust=True
+        istio_pilot, application_name=ISTIO_PILOT, series="focal", trust=True
     )
     await ops_test.model.deploy(
-        istio_charms["istio-gateway"],
+        istio_gateway,
         application_name=ISTIO_GATEWAY_APP_NAME,
         series="focal",
         config={"kind": "ingress"},
