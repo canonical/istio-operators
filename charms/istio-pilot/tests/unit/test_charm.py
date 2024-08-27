@@ -140,15 +140,21 @@ class TestCharmEvents:
     their handling, etc).
     """
 
-    def test_event_observing(self, harness, mocker, mocked_cert_subject):
-        harness.begin()
+    @patch("charm.Istioctl")
+    def test_event_observing(self, mocked_istioctl, harness, mocker, mocked_cert_subject):
+        harness.begin_with_initial_hooks()
         mocked_install = mocker.patch("charm.Operator.install")
         mocked_remove = mocker.patch("charm.Operator.remove")
         mocked_upgrade_charm = mocker.patch("charm.Operator.upgrade_charm")
         mocked_reconcile = mocker.patch("charm.Operator.reconcile")
 
-        RelationCreatedEvent
         harness.charm.on.install.emit()
+        mocked_istioctl.assert_called_once_with(
+            "./istioctl",
+            harness.charm.model.name,
+            "minimal",
+            istioctl_extra_flags=harness.charm._istioctl_extra_flags,
+        )
         assert_called_once_and_reset(mocked_install)
 
         harness.charm.on.remove.emit()
@@ -582,8 +588,8 @@ class TestCharmHelpers:
 
         harness.charm._cert_handler = MagicMock()
         harness.charm._cert_handler.enabled = cert_handler_enabled
-        harness.charm._cert_handler.cert = tls_cert
-        harness.charm._cert_handler.key = tls_key
+        harness.charm._cert_handler.server_cert = tls_cert
+        harness.charm._cert_handler.private_key = tls_key
 
         with expected_context:
             gateway_port = harness.charm._gateway_port
@@ -883,8 +889,8 @@ class TestCharmHelpers:
         harness.begin()
         harness.charm._cert_handler = MagicMock()
         harness.charm._cert_handler.enabled = True
-        harness.charm._cert_handler.cert = "some-cert"
-        harness.charm._cert_handler.key = "some-key"
+        harness.charm._cert_handler.server_cert = "some-cert"
+        harness.charm._cert_handler.private_key = "some-key"
 
         # Act
         harness.charm._reconcile_gateway()
@@ -1297,8 +1303,8 @@ class TestCharmHelpers:
         harness.begin()
         harness.charm._cert_handler = MagicMock()
         harness.charm._cert_handler.enabled = cert_handler_enabled
-        harness.charm._cert_handler.cert = tls_cert
-        harness.charm._cert_handler.key = tls_key
+        harness.charm._cert_handler.server_cert = tls_cert
+        harness.charm._cert_handler.private_key = tls_key
 
         with expected_context:
             assert harness.charm._use_https_with_tls_provider() == expected_return
@@ -1508,8 +1514,8 @@ class TestCharmUpgrade:
         """Test the method returns a populated dictionary with TLS information."""
         harness.begin()
         harness.charm._cert_handler = MagicMock()
-        harness.charm._cert_handler.cert = "cert-value"
-        harness.charm._cert_handler.key = "key-value"
+        harness.charm._cert_handler.server_cert = "cert-value"
+        harness.charm._cert_handler.private_key = "key-value"
 
         tls_crt_encoded = base64.b64encode("cert-value".encode("ascii")).decode("utf-8")
         tls_key_encoded = base64.b64encode("key-value".encode("ascii")).decode("utf-8")
