@@ -7,7 +7,7 @@ groups:
           summary: 'ingress gateway traffic missing'
           description: '[Critical]: ingress gateway traffic missing, likely other monitors are misleading, check client logs'
         expr: >
-          absent(reporter="source", source_workload=~"istio-(ingress|egress)gateway-workload"})==1
+          absent(istio_requests_total{reporter="source", source_workload=~"istio-(ingress|egress)gateway-workload"})==1
         for: 5m
       - alert: IstioMetricsMissing
         annotations:
