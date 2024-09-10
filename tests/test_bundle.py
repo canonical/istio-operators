@@ -15,6 +15,7 @@ from lightkube.generic_resource import (
     create_namespaced_resource,
     load_in_cluster_generic_resources,
 )
+from lightkube.resources.apps_v1 import Deployment
 from pytest_operator.plugin import OpsTest
 
 log = logging.getLogger(__name__)
@@ -330,6 +331,27 @@ async def test_disable_ingress_auth(ops_test: OpsTest):
     await assert_page_reachable(
         url=f"http://{gateway_ip}/productpage", title="Simple Bookstore App"
     )
+
+
+async def test_gateway_replicas_config(ops_test: OpsTest):
+    """Test the replicas config takes effect in the Deployment."""
+
+    replicas_value = "2"
+    await ops_test.model.applications[ISTIO_GATEWAY_APP_NAME].set_config(
+        {"replicas": replicas_value}
+    )
+    await ops_test.model.wait_for_idle(apps=[ISTIO_GATEWAY_APP_NAME], status="active", timeout=300)
+
+    client = lightkube.Client()
+    gateway_deployment = client.get(
+        Deployment, name="istio-ingressgateway-workload", namespace=ops_test.model_name
+    )
+
+    assert gateway_deployment.spec.replicas == int(replicas_value)
+    # TODO: assert antiaffinity contents
+    # assert gateway_deployment.spec.template.spec.affinity == "expected"
+
+    # TODO: assert second pod is not scheduled
 
 
 async def test_charms_removal(ops_test: OpsTest):
