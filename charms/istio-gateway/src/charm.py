@@ -114,6 +114,7 @@ class Operator(CharmBase):
             proxy_image=self.model.config["proxy-image"],
             pilot_host="foo",
             pilot_port="foo",
+            replicas=self.model.config["replicas"],
         )
 
         try:
