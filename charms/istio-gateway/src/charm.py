@@ -94,6 +94,7 @@ class Operator(CharmBase):
             pilot_host=pilot["service-name"],
             pilot_port=pilot["service-port"],
             gateway_service_type=self.model.config["gateway_service_type"],
+            replicas=self.model.config["replicas"],
         )
 
         for obj in codecs.load_all_yaml(rendered):

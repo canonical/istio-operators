@@ -25,6 +25,18 @@ metadata:
   name: istio-{{ kind }}gateway-workload
   namespace: {{ namespace }}
 spec:
+  replicas: {{ replicas }}
+{% if replicas > 1 %}
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchExpressions:
+          - key: app
+            operator: In
+            values:
+            - istio-{{ kind }}gateway
+{% endif %}
   selector:
     matchLabels:
       app: istio-{{ kind }}gateway
