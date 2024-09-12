@@ -16,6 +16,7 @@ from lightkube.generic_resource import (
     load_in_cluster_generic_resources,
 )
 from lightkube.resources.apps_v1 import Deployment
+from lightkube.resources.core_v1 import Pod
 from pytest_operator.plugin import OpsTest
 
 log = logging.getLogger(__name__)
@@ -45,6 +46,10 @@ VIRTUAL_SERVICE_LIGHTKUBE_RESOURCE = create_namespaced_resource(
     version="v1alpha3",
     kind="VirtualService",
     plural="virtualservices",
+)
+
+EXPECTED_LABEL_SELECTOR = (
+    "LabelSelectorRequirement(key='app', operator='In', values=['istio-ingressgateway'])"
 )
 
 
@@ -334,7 +339,11 @@ async def test_disable_ingress_auth(ops_test: OpsTest):
 
 
 async def test_gateway_replicas_config(ops_test: OpsTest):
-    """Test the replicas config takes effect in the Deployment."""
+    """Test changing the replicas config to 2, and then:
+    1. Assert the replicas in the Deployment spec went up to 2.
+    2. Assert the Deployment has the antiaffinity rule as expected.
+    3. Assert the new Pod was not scheduled due to only 1 Node being available.
+    """
 
     replicas_value = "2"
     await ops_test.model.applications[ISTIO_GATEWAY_APP_NAME].set_config(
@@ -343,15 +352,45 @@ async def test_gateway_replicas_config(ops_test: OpsTest):
     await ops_test.model.wait_for_idle(apps=[ISTIO_GATEWAY_APP_NAME], status="active", timeout=300)
 
     client = lightkube.Client()
+
+    # Get the gateway Deployment
     gateway_deployment = client.get(
         Deployment, name="istio-ingressgateway-workload", namespace=ops_test.model_name
     )
 
+    # Assert the Deployment has the number of replicas from the config
     assert gateway_deployment.spec.replicas == int(replicas_value)
-    # TODO: assert antiaffinity contents
-    # assert gateway_deployment.spec.template.spec.affinity == "expected"
+    # Assert the Deployment has the correct antiaffinity rule
+    assert (
+        str(
+            gateway_deployment.spec.template.spec.affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution[  # noqa E501
+                0
+            ].labelSelector.matchExpressions[
+                0
+            ]
+        )
+        == EXPECTED_LABEL_SELECTOR
+    )
 
-    # TODO: assert second pod is not scheduled
+    # List gateway pods that are in Pending status
+    pending_gateway_pods = list(
+        client.list(
+            Pod,
+            namespace=ops_test.model_name,
+            labels={"app": "istio-ingressgateway"},
+            fields={"status.phase": "Pending"},
+        )
+    )
+
+    # Assert one Pod is in Pending status
+    assert len(pending_gateway_pods) == 1
+
+    # Get the status message for the Pending pod
+    pending_gateway_pod = pending_gateway_pods[0]
+    message = pending_gateway_pod.status.conditions[0].message
+
+    # Assert the status message is about anti-affinity
+    assert "didn't match pod anti-affinity rules" in message
 
 
 async def test_charms_removal(ops_test: OpsTest):
