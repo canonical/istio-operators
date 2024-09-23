@@ -44,8 +44,11 @@ jobs:
   terraform-checks:
     name: Terraform
     uses: canonical/charmed-kubeflow-workflows/.github/workflows/terraform-checks.yaml@main
+    strategy:
+      matrix:
+        charm: [gateway, pilot]
     with:
-      charm-path: ./charms/argo-controller
+      charm-path: ./charms/istio-${{ matrix.charm }}
       model: kubeflow
       channel: latest/edge
         
