@@ -4,7 +4,7 @@ output "app_name" {
 
 output "provides" {
   value = {
-	metrics_endpoint = "metrics-endpoint"
+    metrics_endpoint = "metrics-endpoint"
   }
 }
 

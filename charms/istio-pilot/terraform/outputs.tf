@@ -4,12 +4,12 @@ output "app_name" {
 
 output "provides" {
   value = {
-	metrics_endpoint = "metrics-endpoint",
-	grafana_dashboard = "grafana-dashboard",
-	istio_pilot = "istio-pilot",
-	ingress = "ingress",
-	ingress_auth = "ingress-auth",
-	gateway_info = "gatway-info"
+    metrics_endpoint  = "metrics-endpoint",
+    grafana_dashboard = "grafana-dashboard",
+    istio_pilot       = "istio-pilot",
+    ingress           = "ingress",
+    ingress_auth      = "ingress-auth",
+    gateway_info      = "gatway-info"
   }
 }
 
