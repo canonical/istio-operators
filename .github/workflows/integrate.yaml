@@ -49,7 +49,6 @@ jobs:
         charm: [gateway, pilot]
     with:
       charm-path: ./charms/istio-${{ matrix.charm }}
-      model: kubeflow
       channel: latest/edge
         
   integration:
