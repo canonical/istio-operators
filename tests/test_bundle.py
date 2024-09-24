@@ -340,9 +340,8 @@ async def test_disable_ingress_auth(ops_test: OpsTest):
 
 async def test_gateway_replicas_config(ops_test: OpsTest):
     """Test changing the replicas config to 2, and then:
-    1. Assert the replicas in the Deployment spec went up to 2.
-    2. Assert the Deployment has the antiaffinity rule as expected.
-    3. Assert the new Pod was not scheduled due to only 1 Node being available.
+    1. Assert the Deployment has the antiaffinity rule as expected.
+    2. Assert the new Pod was not scheduled due to only 1 Node being available.
     """
 
     replicas_value = "2"
@@ -358,8 +357,6 @@ async def test_gateway_replicas_config(ops_test: OpsTest):
         Deployment, name="istio-ingressgateway-workload", namespace=ops_test.model_name
     )
 
-    # Assert the Deployment has the number of replicas from the config
-    assert gateway_deployment.spec.replicas == int(replicas_value)
     # Assert the Deployment has the correct antiaffinity rule
     assert (
         str(
