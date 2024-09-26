@@ -49,6 +49,7 @@ jobs:
         charm: [gateway, pilot]
     with:
       charm-path: ./charms/istio-${{ matrix.charm }}
+      channel: 1.22/stable
         
   integration:
     name: Integration Test
