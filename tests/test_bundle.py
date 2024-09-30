@@ -48,10 +48,6 @@ VIRTUAL_SERVICE_LIGHTKUBE_RESOURCE = create_namespaced_resource(
     plural="virtualservices",
 )
 
-EXPECTED_LABEL_SELECTOR = (
-    "LabelSelectorRequirement(key='app', operator='In', values=['istio-ingressgateway'])"
-)
-
 
 @pytest.mark.abort_on_fail
 async def test_kubectl_access(ops_test: OpsTest):
@@ -339,9 +335,8 @@ async def test_disable_ingress_auth(ops_test: OpsTest):
 
 
 async def test_gateway_replicas_config(ops_test: OpsTest):
-    """Test changing the replicas config to 2, and then:
-    1. Assert the Deployment has the antiaffinity rule as expected.
-    2. Assert the new Pod was not scheduled due to only 1 Node being available.
+    """Test changing the replicas config to 2, and Assert the new Pod was not scheduled
+    due to only 1 Node being available.
     """
 
     replicas_value = "2"
@@ -351,23 +346,6 @@ async def test_gateway_replicas_config(ops_test: OpsTest):
     await ops_test.model.wait_for_idle(apps=[ISTIO_GATEWAY_APP_NAME], status="active", timeout=300)
 
     client = lightkube.Client()
-
-    # Get the gateway Deployment
-    gateway_deployment = client.get(
-        Deployment, name="istio-ingressgateway-workload", namespace=ops_test.model_name
-    )
-
-    # Assert the Deployment has the correct antiaffinity rule
-    assert (
-        str(
-            gateway_deployment.spec.template.spec.affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution[  # noqa E501
-                0
-            ].labelSelector.matchExpressions[
-                0
-            ]
-        )
-        == EXPECTED_LABEL_SELECTOR
-    )
 
     # List gateway pods that are in Pending status
     pending_gateway_pods = list(

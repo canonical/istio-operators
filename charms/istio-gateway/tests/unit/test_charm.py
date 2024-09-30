@@ -160,6 +160,49 @@ def test_metrics(harness):
         )
 
 
+def test_manifests_applied_with_anti_affinity(configured_harness, kind, mocked_client):
+    """
+    Asserts that the Deployment manifest called by `lightkube_client.apply`
+    contains the correct anti-affinity rule
+    """
+
+    # Arrange
+    # Reset the mock so that the calls list does not include any calls from other hooks
+    mocked_client.reset_mock()
+
+    # Define the expected labelSelector based on the kind
+    expected_label_selector = {"key": "app", "operator": "In", "values": [f"istio-{kind}gateway"]}
+
+    # Act
+    configured_harness.charm.on.start.emit()
+
+    actual_objects = []
+
+    # Get all the objects called by lightkube client `.apply`
+    for call in mocked_client.return_value.apply.call_args_list:
+        # The first (and only) argument to the apply method is the obj
+        # Convert the object to a dictionary and add it to the list
+        actual_objects.append(call.args[0].to_dict())
+
+    # Filter out the objects with Deployment kind
+    deployments = filter(lambda obj: obj.get("kind") == "Deployment", actual_objects)
+    # The gateway deployment is the only Deployment object in the manifests
+    gateway_deployment = list(deployments)[0]
+
+    # Assert
+    assert (
+        gateway_deployment["spec"]
+        .get("template")
+        .get("spec")
+        .get("affinity")
+        .get("podAntiAffinity")
+        .get("requiredDuringSchedulingIgnoredDuringExecution")[0]
+        .get("labelSelector")
+        .get("matchExpressions")[0]
+        == expected_label_selector
+    )
+
+
 def test_manifests_applied_with_replicas_config(configured_harness, mocked_client):
     """
     Asserts that the Deployment manifest called by `lightkube_client.apply`
