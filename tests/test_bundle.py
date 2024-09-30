@@ -333,7 +333,7 @@ async def test_disable_ingress_auth(ops_test: OpsTest):
     )
 
 
-async def test_gateway_replicas_config(ops_test: OpsTest):
+async def test_gateway_replicas_config_pod_anti_affinity(ops_test: OpsTest):
     """Test changing the replicas config to 2, and Assert the new Pod was not scheduled
     due to only 1 Node being available.
     """

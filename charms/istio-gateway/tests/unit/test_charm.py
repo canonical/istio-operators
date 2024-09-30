@@ -189,7 +189,7 @@ def test_manifests_applied_with_anti_affinity(configured_harness, kind, mocked_c
     # The gateway deployment is the only Deployment object in the manifests
     gateway_deployment = list(deployments)[0]
 
-    # Assert
+    # Assert the Deployment has the correct antiaffinity rule
     assert (
         gateway_deployment["spec"]
         .get("template")
