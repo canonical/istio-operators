@@ -15,7 +15,6 @@ from lightkube.generic_resource import (
     create_namespaced_resource,
     load_in_cluster_generic_resources,
 )
-from lightkube.resources.apps_v1 import Deployment
 from lightkube.resources.core_v1 import Pod
 from pytest_operator.plugin import OpsTest
 
