@@ -25,6 +25,7 @@ metadata:
   name: istio-{{ kind }}gateway-workload
   namespace: {{ namespace }}
 spec:
+  replicas: {{ replicas }}
   selector:
     matchLabels:
       app: istio-{{ kind }}gateway
@@ -54,6 +55,15 @@ spec:
         sidecar.istio.io/inject: "false"
     spec:
       affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - istio-{{ kind }}gateway
+            topologyKey: kubernetes.io/hostname
         nodeAffinity:
           preferredDuringSchedulingIgnoredDuringExecution: null
           requiredDuringSchedulingIgnoredDuringExecution: null
