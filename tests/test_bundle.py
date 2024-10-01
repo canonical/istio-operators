@@ -15,6 +15,7 @@ from lightkube.generic_resource import (
     create_namespaced_resource,
     load_in_cluster_generic_resources,
 )
+from lightkube.resources.core_v1 import Pod
 from pytest_operator.plugin import OpsTest
 
 log = logging.getLogger(__name__)
@@ -330,6 +331,40 @@ async def test_disable_ingress_auth(ops_test: OpsTest):
     await assert_page_reachable(
         url=f"http://{gateway_ip}/productpage", title="Simple Bookstore App"
     )
+
+
+async def test_gateway_replicas_config_pod_anti_affinity(ops_test: OpsTest):
+    """Test changing the replicas config to 2, and Assert the new Pod was not scheduled
+    due to only 1 Node being available.
+    """
+
+    replicas_value = "2"
+    await ops_test.model.applications[ISTIO_GATEWAY_APP_NAME].set_config(
+        {"replicas": replicas_value}
+    )
+    await ops_test.model.wait_for_idle(apps=[ISTIO_GATEWAY_APP_NAME], status="active", timeout=300)
+
+    client = lightkube.Client()
+
+    # List gateway pods that are in Pending status
+    pending_gateway_pods = list(
+        client.list(
+            Pod,
+            namespace=ops_test.model_name,
+            labels={"app": "istio-ingressgateway"},
+            fields={"status.phase": "Pending"},
+        )
+    )
+
+    # Assert one Pod is in Pending status
+    assert len(pending_gateway_pods) == 1
+
+    # Get the status message for the Pending pod
+    pending_gateway_pod = pending_gateway_pods[0]
+    message = pending_gateway_pod.status.conditions[0].message
+
+    # Assert the status message is about anti-affinity
+    assert "didn't match pod anti-affinity rules" in message
 
 
 async def test_charms_removal(ops_test: OpsTest):

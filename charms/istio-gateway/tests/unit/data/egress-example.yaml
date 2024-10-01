@@ -24,6 +24,7 @@ metadata:
   name: istio-egressgateway-workload
   namespace: None
 spec:
+  replicas: 1
   selector:
     matchLabels:
       app: istio-egressgateway
@@ -53,6 +54,15 @@ spec:
         sidecar.istio.io/inject: "false"
     spec:
       affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - istio-egressgateway
+            topologyKey: kubernetes.io/hostname
         nodeAffinity:
           preferredDuringSchedulingIgnoredDuringExecution: null
           requiredDuringSchedulingIgnoredDuringExecution: null

@@ -12,3 +12,7 @@ options:
     default: 'docker.io/istio/proxyv2:1.22.0'
     description: Istio Proxy image
     type: string
+  replicas:
+    default: 1
+    description: Number of replicas for the istio-ingressgateway pods
+    type: int
