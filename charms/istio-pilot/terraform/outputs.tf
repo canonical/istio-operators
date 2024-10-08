@@ -9,7 +9,7 @@ output "provides" {
     istio_pilot       = "istio-pilot",
     ingress           = "ingress",
     ingress_auth      = "ingress-auth",
-    gateway_info      = "gatway-info"
+    gateway_info      = "gateway-info"
   }
 }
 
