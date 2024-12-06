@@ -17,7 +17,7 @@ from charms.istio_pilot.v0.istio_gateway_info import (
     DEFAULT_RELATION_NAME as GATEWAY_INFO_RELATION_NAME,
 )
 from charms.istio_pilot.v0.istio_gateway_info import GatewayProvider
-from charms.observability_libs.v1.cert_handler import CertHandler
+from charms.tls_certificates_interface.v4.tls_certificates import TLSCertificatesRequiresV4, Mode, CertificateRequestAttributes
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from lightkube import Client
 from lightkube.core.exceptions import ApiError
@@ -107,17 +107,18 @@ class Operator(CharmBase):
         self.log = logging.getLogger(__name__)
         self._field_manager = "lightkube"
 
-        # Instantiate a CertHandler
         self.peer_relation_name = "peers"
-        self._cert_handler = CertHandler(
-            self,
-            key="istio-cert",
-            cert_subject=self._cert_subject,
+        self._certificates = TLSCertificatesRequiresV4(
+            charm=self,
+            relationship_name="certificates",
+            certificate_requests=self._get_certificate_requests(),
+            mode=Mode.UNIT,
+            refresh_events=[self.on.config_changed],
         )
 
-        # Observe this custom event emitted by the cert_handler library on certificate
-        # available, revoked, invalidated, or if the certs relation is broken
-        self.framework.observe(self._cert_handler.on.cert_changed, self.reconcile)
+        # Observe this custom event emitted by the tls certificates library on certificate
+        # available.
+        self.framework.observe(self._certificates.on.certificate_available, self.reconcile)
 
         # ---- Start of the block
         # ---- WARNING: this feature is not recommended, but is supported in 1.17-1.22.
@@ -453,15 +454,24 @@ class Operator(CharmBase):
         if not self.unit.is_leader():
             self.log.info("Not a leader, skipping setup")
             raise ErrorWithStatus("Waiting for leadership", WaitingStatus)
+    
+    def get_certificate_requests(self) -> List[CertificateRequestAttributes]:
+        """Return a list of certificate requests."""
+        return [
+            CertificateRequestAttributes(
+                common_name=self.cert_subject,
+            ),
+        ]
 
     @property
-    def _cert_subject(self) -> Optional[str]:
+    def _cert_subject(self) -> str:
         """Return the certificate subject to be used in the CSR.
 
         If the csr-domain-name configuration option is set, this value is used;
         otherwise, use the IP address or hostname of the actual ingress gateway service.
         Lastly, if for any reason the service address cannot be retrieved, None will be returned.
         """
+        default_common_name = self.unit.name.replace("/", "-")
         # Prioritise the csr-domain-name config option
         if csr_domain_name := self.model.config["csr-domain-name"]:
             return csr_domain_name
@@ -471,13 +481,11 @@ class Operator(CharmBase):
             svc = self._get_gateway_service()
         except ApiError:
             self.log.info("Could not retrieve the gateway service address for using in the CSR.")
-            return None
+            return default_common_name
 
         svc_address = _get_gateway_address_from_svc(svc)
 
-        # NOTE: returning None here means that the CSR will have the unit name as cert subject
-        # this is an implementation detail of the cert_hanlder library.
-        return svc_address if svc_address else None
+        return svc_address if svc_address else default_common_name
 
     @property
     def _gateway_port(self):
@@ -847,9 +855,6 @@ class Operator(CharmBase):
         the istio-tls-secret is found, it is prioritised and returned;
         otherwise, the information shared by a TLS certificate provider.
         """
-
-        # FIXME: remove the if statement and just return the dictionary that contains
-        # data from the CertHandler after 1.22
         if self._use_https_with_tls_secret():
             tls_secret = self.model.get_secret(id=self._tls_secret_id)
             return {
@@ -860,13 +865,22 @@ class Operator(CharmBase):
                     tls_secret.get_content(refresh=True)["tls-key"].encode("ascii")
                 ).decode("utf-8"),
             }
+        provider_certificate, private_key = self._certificates.get_assigned_certificate(
+            certificate_request=self._certificates.get_certificate_requests()[0]
+        )
+        if not provider_certificate:
+            self.log.warning("Provider certificate not found")
+            return {}
+        if not provider_certificate.certificate:
+            self.log.warning("Certificate not found")
+            return {}
+        if not private_key:
+            self.log.warning("Private key not found.")
+            return {}
+        
         return {
-            "tls-crt": base64.b64encode(self._cert_handler.server_cert.encode("ascii")).decode(
-                "utf-8"
-            ),
-            "tls-key": base64.b64encode(self._cert_handler.private_key.encode("ascii")).decode(
-                "utf-8"
-            ),
+            "tls-crt": str(provider_certificate.certificate),
+            "tls-key": str(private_key),
         }
 
     # ---- Start of the block
@@ -960,24 +974,26 @@ class Operator(CharmBase):
         Raises:
             ErrorWithStatus: if one of the values is missing.
         """
-
-        # Immediately return False if the CertHandler is not enabled
-        if not self._cert_handler.enabled:
-            return False
-
-        # If the certificates relation is established, we can assume
-        # that we want to configure TLS
-        if _xor(self._cert_handler.server_cert, self._cert_handler.private_key):
-            # Fail if tls is only partly configured as this is probably a mistake
-            missing = "pkey"
-            if not self._cert_handler.server_cert:
-                missing = "CA cert"
+        provider_certificate, private_key = self._certificates.get_assigned_certificate(
+            certificate_request=self._certificates.get_certificate_requests()[0]
+        )
+        if not provider_certificate:
             raise ErrorWithStatus(
-                f"Missing {missing}, cannot configure TLS",
+                f"Missing provider certificate, cannot configure TLS",
                 BlockedStatus,
             )
-        if self._cert_handler.server_cert and self._cert_handler.private_key:
-            return True
+        if not provider_certificate.certificate:
+            raise ErrorWithStatus(
+                f"Missing certificate, cannot configure TLS",
+                BlockedStatus,
+            )
+        if not private_key:
+            raise ErrorWithStatus(
+                f"Missing private key, cannot configure TLS",
+                BlockedStatus,
+            )
+        
+        return True
 
     def _log_and_set_status(self, status):
         """Sets the status of the charm and logs the status message.
