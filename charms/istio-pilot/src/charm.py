@@ -111,7 +111,7 @@ class Operator(CharmBase):
         self._certificates = TLSCertificatesRequiresV4(
             charm=self,
             relationship_name="certificates",
-            certificate_requests=self._get_certificate_requests(),
+            certificate_requests=self.get_certificate_requests(),
             mode=Mode.UNIT,
             refresh_events=[self.on.config_changed],
         )
@@ -459,7 +459,7 @@ class Operator(CharmBase):
         """Return a list of certificate requests."""
         return [
             CertificateRequestAttributes(
-                common_name=self.cert_subject,
+                common_name=self._cert_subject,
             ),
         ]
 
@@ -866,7 +866,7 @@ class Operator(CharmBase):
                 ).decode("utf-8"),
             }
         provider_certificate, private_key = self._certificates.get_assigned_certificate(
-            certificate_request=self._certificates.get_certificate_requests()[0]
+            certificate_request=self._certificates.certificate_requests[0]
         )
         if not provider_certificate:
             self.log.warning("Provider certificate not found")
@@ -974,24 +974,20 @@ class Operator(CharmBase):
         Raises:
             ErrorWithStatus: if one of the values is missing.
         """
+        if len(self._certificates.certificate_requests) == 0:
+            return False
         provider_certificate, private_key = self._certificates.get_assigned_certificate(
-            certificate_request=self._certificates.get_certificate_requests()[0]
+            certificate_request=self._certificates.certificate_requests[0]
         )
         if not provider_certificate:
-            raise ErrorWithStatus(
-                f"Missing provider certificate, cannot configure TLS",
-                BlockedStatus,
-            )
+            self.log.warning("Provider certificate not found")
+            return False
         if not provider_certificate.certificate:
-            raise ErrorWithStatus(
-                f"Missing certificate, cannot configure TLS",
-                BlockedStatus,
-            )
+            self.log.warning("Certificate not found")
+            return False
         if not private_key:
-            raise ErrorWithStatus(
-                f"Missing private key, cannot configure TLS",
-                BlockedStatus,
-            )
+            self.log.warning("Private key not found.")
+            return False
         
         return True
 
