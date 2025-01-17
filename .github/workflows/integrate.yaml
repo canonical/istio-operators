@@ -136,8 +136,8 @@ jobs:
     strategy:
       matrix:
         microk8s-versions:
-          - 1.25-strict/stable
-          - 1.26-strict/stable
+          - 1.31-strict/stable
+          - 1.31-strict/stable
     steps:
       - name: Check out repo
         uses: actions/checkout@v4
