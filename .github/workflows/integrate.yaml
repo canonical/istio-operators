@@ -55,9 +55,10 @@ jobs:
     runs-on: ubuntu-20.04
     strategy:
       matrix:
+        # We test with highest and lowest supported versions of k8s
         microk8s-versions:
-          - 1.27-strict/stable
-          - 1.30-strict/stable
+          - 1.29-strict/stable
+          - 1.31-strict/stable
         integration-types:
           - integration
           - integration-tls-provider
@@ -133,11 +134,6 @@ jobs:
   integration-observability:
     name: Observability Integration Test
     runs-on: ubuntu-20.04
-    strategy:
-      matrix:
-        microk8s-versions:
-          - 1.25-strict/stable
-          - 1.26-strict/stable
     steps:
       - name: Check out repo
         uses: actions/checkout@v4
@@ -146,7 +142,7 @@ jobs:
         uses: charmed-kubernetes/actions-operator@main
         with:
           provider: microk8s
-          channel: ${{ matrix.microk8s-versions }}
+          channel: 1.31-strict/stable
           microk8s-addons: "dns hostpath-storage rbac metallb:10.64.140.43-10.64.140.49"
           juju-channel: 3.6/stable
           # Pinned to 3.x/stable due to https://github.com/canonical/charmcraft/issues/1845
