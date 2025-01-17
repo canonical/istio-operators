@@ -56,8 +56,9 @@ jobs:
     strategy:
       matrix:
         microk8s-versions:
-          - 1.27-strict/stable
+          - 1.29-strict/stable
           - 1.30-strict/stable
+          - 1.31-strict/stable
         integration-types:
           - integration
           - integration-tls-provider
@@ -136,7 +137,8 @@ jobs:
     strategy:
       matrix:
         microk8s-versions:
-          - 1.31-strict/stable
+          - 1.29-strict/stable
+          - 1.30-strict/stable
           - 1.31-strict/stable
     steps:
       - name: Check out repo
