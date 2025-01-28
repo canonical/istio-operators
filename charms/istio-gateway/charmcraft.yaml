@@ -66,7 +66,7 @@ parts:
       cp requirements.txt "$CRAFT_PART_INSTALL/requirements.txt"
   # "files" part name is arbitrary; use for consistency
   files:
-    plugin: dump
+    plugin: stage
     source: .
     stage:
       - LICENSE
