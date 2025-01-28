@@ -82,7 +82,6 @@ jobs:
           channel: ${{ matrix.microk8s-versions }}
           microk8s-addons: "dns hostpath-storage rbac metallb:10.64.140.43-10.64.140.49"
           juju-channel: 3.6/stable
-          charmcraft-channel: latest/candidate  # TODO: remove after charmcraft 3.3 stable release
 
       - name: Run integration tests
         run: |
@@ -144,7 +143,6 @@ jobs:
           channel: 1.31-strict/stable
           microk8s-addons: "dns hostpath-storage rbac metallb:10.64.140.43-10.64.140.49"
           juju-channel: 3.6/stable
-          charmcraft-channel: latest/candidate  # TODO: remove after charmcraft 3.3 stable release
 
       - name: Run observability integration tests
         run: |
