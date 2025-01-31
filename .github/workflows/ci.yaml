@@ -201,7 +201,7 @@ jobs:
       - name: Run observability integration tests
         run: |
           juju add-model cos-test
-          tox -vve cos-integration -- --model cos-test --charms-path=${{ github.workspace }}/charms/
+          tox -vve cos-integration -- --model cos-test --charms-path=${{ github.workspace }}/charms
 
       - run: kubectl get pod/prometheus-k8s-0 -n knative-test -o=jsonpath='{.status}'
         if: failure()
