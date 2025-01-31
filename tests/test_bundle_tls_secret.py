@@ -1,12 +1,17 @@
+from pathlib import Path
+
 import lightkube
 import pytest
 import tenacity
+import yaml
 from lightkube.generic_resource import create_namespaced_resource
 from lightkube.resources.core_v1 import Secret
 from pytest_operator.plugin import OpsTest
 
-ISTIO_PILOT = "istio-pilot"
+ISTIO_GATEWAY_METADATA = yaml.safe_load(Path("charms/istio-gateway/metadata.yaml").read_text())
+ISTIO_PILOT_METADATA = yaml.safe_load(Path("charms/istio-pilot/metadata.yaml").read_text())
 ISTIO_GATEWAY_APP_NAME = "istio-ingressgateway"
+ISTIO_PILOT_APP_NAME = "istio-pilot"
 DEFAULT_GATEWAY_NAME = "test-gateway"
 GATEWAY_RESOURCE = create_namespaced_resource(
     group="networking.istio.io",
@@ -24,27 +29,37 @@ def lightkube_client() -> lightkube.Client:
 
 
 @pytest.mark.abort_on_fail
-async def test_build_and_deploy_istio_charms(ops_test: OpsTest):
+async def test_build_and_deploy_istio_charms(ops_test: OpsTest, request):
     """Build and deploy istio-operators with TLS configuration."""
-    charms_path = "./charms/istio"
-    istio_charms = await ops_test.build_charms(f"{charms_path}-gateway", f"{charms_path}-pilot")
+    istio_gateway_name = ISTIO_GATEWAY_METADATA["name"]
+    istio_pilot_name = ISTIO_PILOT_METADATA["name"]
+    if charms_path := request.config.getoption("--charms-path"):
+        istio_gateway = (
+            f"{charms_path}/{istio_gateway_name}/{istio_gateway_name}_ubuntu@20.04-amd64.charm"
+        )
+        istio_pilot = (
+            f"{charms_path}/{istio_pilot_name}/{istio_pilot_name}_ubuntu@20.04-amd64.charm"
+        )
+    else:
+        istio_gateway = await ops_test.build_charm("charms/istio-gateway")
+        istio_pilot = await ops_test.build_charm("charms/istio-pilot")
 
     await ops_test.model.deploy(
-        istio_charms["istio-pilot"],
-        application_name=ISTIO_PILOT,
+        istio_pilot,
+        application_name=ISTIO_PILOT_APP_NAME,
         config={"default-gateway": DEFAULT_GATEWAY_NAME},
         trust=True,
     )
 
     await ops_test.model.deploy(
-        istio_charms["istio-gateway"],
+        istio_gateway,
         application_name=ISTIO_GATEWAY_APP_NAME,
         config={"kind": "ingress"},
         trust=True,
     )
 
     await ops_test.model.add_relation(
-        f"{ISTIO_PILOT}:istio-pilot", f"{ISTIO_GATEWAY_APP_NAME}:istio-pilot"
+        f"{ISTIO_PILOT_APP_NAME}:istio-pilot", f"{ISTIO_GATEWAY_APP_NAME}:istio-pilot"
     )
 
     await ops_test.model.wait_for_idle(
