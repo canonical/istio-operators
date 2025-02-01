@@ -632,6 +632,7 @@ class TestCharmHelpers:
             ("mock_loadbalancer_ip_service", True),
             ("mock_loadbalancer_hostname_service_not_ready", False),
             ("mock_loadbalancer_ip_service_not_ready", False),
+            ("mock_loadbalancer_service_not_ready_returning_none_for_ingresses", False),
         ],
     )
     def test_is_gateway_service_up(
@@ -661,6 +662,7 @@ class TestCharmHelpers:
             ("mock_loadbalancer_ip_service", "127.0.0.1"),
             ("mock_loadbalancer_hostname_service_not_ready", None),
             ("mock_loadbalancer_ip_service_not_ready", None),
+            ("mock_loadbalancer_service_not_ready_returning_none_for_ingresses", None),
         ],
     )
     def test_get_gateway_address_from_svc(
@@ -1732,6 +1734,18 @@ def mock_loadbalancer_hostname_service_not_ready():
             "apiVersion": "v1",
             "kind": "Service",
             "status": {"loadBalancer": {"ingress": []}},
+            "spec": {"type": "LoadBalancer", "clusterIP": "10.10.10.10"},
+        }
+    )
+    return mock_nodeport_service
+
+@pytest.fixture()
+def mock_loadbalancer_service_not_ready_returning_none_for_ingresses():
+    mock_nodeport_service = codecs.from_dict(
+        {
+            "apiVersion": "v1",
+            "kind": "Service",
+            "status": {"loadBalancer": {"ingress": None}},
             "spec": {"type": "LoadBalancer", "clusterIP": "10.10.10.10"},
         }
     )
