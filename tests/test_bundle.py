@@ -34,8 +34,10 @@ INGRESS_REQUIRER = "kubeflow-volumes"
 INGRESS_REQUIRER_CHANNEL = "latest/edge"
 INGRESS_REQUIRER_TRUST = True
 
-ISTIO_PILOT = "istio-pilot"
+ISTIO_GATEWAY_METADATA = yaml.safe_load(Path("charms/istio-gateway/metadata.yaml").read_text())
+ISTIO_PILOT_METADATA = yaml.safe_load(Path("charms/istio-pilot/metadata.yaml").read_text())
 ISTIO_GATEWAY_APP_NAME = "istio-ingressgateway"
+ISTIO_PILOT_APP_NAME = "istio-pilot"
 ISTIO_RELEASE = "release-1.22"
 USERNAME = "user123"
 PASSWORD = "user123"
@@ -78,24 +80,36 @@ async def test_kubectl_access(ops_test: OpsTest):
 
 
 @pytest.mark.abort_on_fail
-async def test_build_and_deploy_istio_charms(ops_test: OpsTest):
+async def test_build_and_deploy_istio_charms(ops_test: OpsTest, request):
     # Build, deploy, and relate istio charms
-    charms_path = "./charms/istio"
-    istio_charms = await ops_test.build_charms(f"{charms_path}-gateway", f"{charms_path}-pilot")
+    istio_gateway_name = ISTIO_GATEWAY_METADATA["name"]
+    istio_pilot_name = ISTIO_PILOT_METADATA["name"]
+    if charms_path := request.config.getoption("--charms-path"):
+        istio_gateway = (
+            f"{charms_path}/{istio_gateway_name}/{istio_gateway_name}_ubuntu@20.04-amd64.charm"
+        )
+        istio_pilot = (
+            f"{charms_path}/{istio_pilot_name}/{istio_pilot_name}_ubuntu@20.04-amd64.charm"
+        )
+    else:
+        istio_gateway = await ops_test.build_charm("charms/istio-gateway")
+        istio_pilot = await ops_test.build_charm("charms/istio-pilot")
 
     await ops_test.model.deploy(
-        istio_charms["istio-pilot"], application_name=ISTIO_PILOT, series="focal", trust=True
+        istio_pilot,
+        application_name=ISTIO_PILOT_APP_NAME,
+        trust=True,
     )
+
     await ops_test.model.deploy(
-        istio_charms["istio-gateway"],
+        istio_gateway,
         application_name=ISTIO_GATEWAY_APP_NAME,
-        series="focal",
         config={"kind": "ingress"},
         trust=True,
     )
 
     await ops_test.model.add_relation(
-        f"{ISTIO_PILOT}:istio-pilot", f"{ISTIO_GATEWAY_APP_NAME}:istio-pilot"
+        f"{ISTIO_PILOT_APP_NAME}:istio-pilot", f"{ISTIO_GATEWAY_APP_NAME}:istio-pilot"
     )
 
     await ops_test.model.wait_for_idle(
@@ -115,7 +129,9 @@ async def test_ingress_relation(ops_test: OpsTest):
         INGRESS_REQUIRER, channel=INGRESS_REQUIRER_CHANNEL, trust=INGRESS_REQUIRER_TRUST
     )
 
-    await ops_test.model.add_relation(f"{ISTIO_PILOT}:ingress", f"{INGRESS_REQUIRER}:ingress")
+    await ops_test.model.add_relation(
+        f"{ISTIO_PILOT_APP_NAME}:ingress", f"{INGRESS_REQUIRER}:ingress"
+    )
 
     await ops_test.model.wait_for_idle(
         status="active",
@@ -143,7 +159,7 @@ async def test_gateway_info_relation(ops_test: OpsTest):
     )
 
     await ops_test.model.add_relation(
-        f"{ISTIO_PILOT}:gateway-info", f"{TENSORBOARD_CONTROLLER}:gateway-info"
+        f"{ISTIO_PILOT_APP_NAME}:gateway-info", f"{TENSORBOARD_CONTROLLER}:gateway-info"
     )
 
     # tensorboard_controller will go Active if the relation is established
@@ -264,14 +280,14 @@ async def test_enable_ingress_auth(ops_test: OpsTest):
         channel=OIDC_GATEKEEPER_CHANNEL,
         trust=OIDC_GATEKEEPER_TRUST,
     )
-    await ops_test.model.integrate(f"{ISTIO_PILOT}:ingress", f"{DEX_AUTH}:ingress")
-    await ops_test.model.integrate(f"{ISTIO_PILOT}:ingress", f"{OIDC_GATEKEEPER}:ingress")
+    await ops_test.model.integrate(f"{ISTIO_PILOT_APP_NAME}:ingress", f"{DEX_AUTH}:ingress")
+    await ops_test.model.integrate(f"{ISTIO_PILOT_APP_NAME}:ingress", f"{OIDC_GATEKEEPER}:ingress")
     await ops_test.model.integrate(f"{OIDC_GATEKEEPER}:oidc-client", f"{DEX_AUTH}:oidc-client")
     await ops_test.model.integrate(
         f"{OIDC_GATEKEEPER}:dex-oidc-config", f"{DEX_AUTH}:dex-oidc-config"
     )
     await ops_test.model.integrate(
-        f"{ISTIO_PILOT}:ingress-auth", f"{OIDC_GATEKEEPER}:ingress-auth"
+        f"{ISTIO_PILOT_APP_NAME}:ingress-auth", f"{OIDC_GATEKEEPER}:ingress-auth"
     )
 
     # Wait for the oidc/dex charms to become active
@@ -314,13 +330,13 @@ async def test_disable_ingress_auth(ops_test: OpsTest):
 
     Uses the previously deployed bookinfo application for testing.
     """
-    await ops_test.model.applications[ISTIO_PILOT].remove_relation(
+    await ops_test.model.applications[ISTIO_PILOT_APP_NAME].remove_relation(
         "ingress-auth", f"{OIDC_GATEKEEPER}:ingress-auth"
     )
 
     # Wait for the istio-pilot charm to settle back down
     await ops_test.model.wait_for_idle(
-        apps=[ISTIO_PILOT],
+        apps=[ISTIO_PILOT_APP_NAME],
         status="active",
         raise_on_blocked=False,
         raise_on_error=False,
@@ -372,7 +388,7 @@ async def test_charms_removal(ops_test: OpsTest):
     # NOTE: the istio-gateway charm has to be removed before istio-pilot since
     # the latter contains all the CRDs that istio-gateway depends on.
     await ops_test.model.remove_application(ISTIO_GATEWAY_APP_NAME, block_until_done=True)
-    await ops_test.model.remove_application(ISTIO_PILOT, block_until_done=True)
+    await ops_test.model.remove_application(ISTIO_PILOT_APP_NAME, block_until_done=True)
 
 
 def deploy_workload_with_gateway(workload_name: str, gateway_port: int, namespace: str):
