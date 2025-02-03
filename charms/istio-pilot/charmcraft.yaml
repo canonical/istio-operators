@@ -64,6 +64,10 @@ parts:
       craftctl default
       # Include requirements.txt in *.charm artifact for easier debugging
       cp requirements.txt "$CRAFT_PART_INSTALL/requirements.txt"
+  istioctl:
+    plugin: dump
+    source: https://github.com/istio/istio/releases/download/1.22.0/istioctl-1.22.0-linux-amd64.tar.gz
+    source-type: tar
   # "files" part name is arbitrary; use for consistency
   files:
     plugin: dump
