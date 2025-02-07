@@ -38,7 +38,7 @@ ISTIO_GATEWAY_METADATA = yaml.safe_load(Path("charms/istio-gateway/metadata.yaml
 ISTIO_PILOT_METADATA = yaml.safe_load(Path("charms/istio-pilot/metadata.yaml").read_text())
 ISTIO_GATEWAY_APP_NAME = "istio-ingressgateway"
 ISTIO_PILOT_APP_NAME = "istio-pilot"
-ISTIO_RELEASE = "release-1.22"
+ISTIO_RELEASE = "release-1.24"
 USERNAME = "user123"
 PASSWORD = "user123"
 
