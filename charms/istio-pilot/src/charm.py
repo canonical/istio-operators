@@ -119,15 +119,9 @@ class Operator(CharmBase):
         # available, revoked, invalidated, or if the certs relation is broken
         self.framework.observe(self._cert_handler.on.cert_changed, self.reconcile)
 
-        # ---- Start of the block
-        # ---- WARNING: this feature is not recommended, but is supported in 1.17-1.22.
-        # ---- For details please refer to canonical/istio-operators#380.
-        # ---- FIXME: Remove this block after releasing 1.22.
         # Save TLS information and reconcile
         self._tls_secret_id = self.config.get("tls-secret-id")
         self.framework.observe(self.on.secret_changed, self.reconcile)
-
-        # ---- End of the block
 
         # Event handling for managing the Istio control plane
         self.framework.observe(self.on.install, self.install)
@@ -845,8 +839,6 @@ class Operator(CharmBase):
         otherwise, the information shared by a TLS certificate provider.
         """
 
-        # FIXME: remove the if statement and just return the dictionary that contains
-        # data from the CertHandler after 1.22
         if self._use_https_with_tls_secret():
             tls_secret = self.model.get_secret(id=self._tls_secret_id)
             return {
@@ -866,10 +858,6 @@ class Operator(CharmBase):
             ),
         }
 
-    # ---- Start of the block
-    # ---- WARNING: this feature is not recommended, but is supported in 1.17-1.22.
-    # ---- For details please refer to canonical/istio-operators#380.
-    # ---- FIXME: Remove this block after releasing 1.22.
     def _use_https(self) -> bool:
         """Return True if only one of the TLS configurations are enabled, False if none are.
 
@@ -949,8 +937,6 @@ class Operator(CharmBase):
 
     # ---- End of the block
 
-    # FIXME: Replace the below line with the one commented out after releasing 1.22
-    # def _use_https(self) -> bool:
     def _use_https_with_tls_provider(self) -> bool:
         """Return True if TLS key and cert are provided by a TLS cert provider, False otherwise.
 
