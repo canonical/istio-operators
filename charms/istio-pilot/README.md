@@ -32,8 +32,6 @@ juju relate istio-pilot:certificates <TLS certificates providers>:certificates
 
 ### TLS cert and key
 
-⚠️ WARNING: This feature has been added due to #380, but will be supported only in 1.17 and 1.22 (and the versions released in between), after that, it will be removed in favour of integrating with a TLS certificates provider.
-
 > NOTE: this feature works with juju 3.4 and above.
 
 This charm allows TLS certificate and key files to configure the TLS ingress gateway.
