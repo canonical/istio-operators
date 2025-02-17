@@ -8,17 +8,17 @@ annotated-types==0.7.0
     # via pydantic
 anyio==4.5.2
     # via httpx
-attrs==24.3.0
+attrs==25.1.0
     # via jsonschema
-certifi==2024.12.14
+certifi==2025.1.31
     # via
     #   httpcore
     #   httpx
     #   requests
 charset-normalizer==3.4.1
     # via requests
-cosl==0.0.50
-    # via -r requirements.in
+cosl==0.0.54
+    # via -r /tmp/renovate/repos/github/canonical/istio-operators/charms/istio-gateway/requirements.in
 coverage==7.6.1
     # via -r requirements-unit.in
 exceptiongroup==1.2.2
@@ -41,26 +41,26 @@ importlib-resources==6.4.5
 iniconfig==2.0.0
     # via pytest
 jinja2==3.1.5
-    # via -r requirements.in
+    # via -r /tmp/renovate/repos/github/canonical/istio-operators/charms/istio-gateway/requirements.in
 jsonschema==4.17.3
     # via serialized-data-interface
 lightkube==0.17.1
     # via
+    #   -r /tmp/renovate/repos/github/canonical/istio-operators/charms/istio-gateway/requirements.in
     #   -r requirements-unit.in
-    #   -r requirements.in
     #   cosl
 lightkube-models==1.32.0.8
     # via
-    #   -r requirements.in
+    #   -r /tmp/renovate/repos/github/canonical/istio-operators/charms/istio-gateway/requirements.in
     #   lightkube
 markupsafe==2.1.5
     # via jinja2
 oci-image==1.0.0
-    # via -r requirements.in
-ops==2.17.1
+    # via -r /tmp/renovate/repos/github/canonical/istio-operators/charms/istio-gateway/requirements.in
+ops==2.18.1
     # via
+    #   -r /tmp/renovate/repos/github/canonical/istio-operators/charms/istio-gateway/requirements.in
     #   -r requirements-unit.in
-    #   -r requirements.in
     #   cosl
     #   serialized-data-interface
 packaging==24.2
@@ -69,7 +69,7 @@ pkgutil-resolve-name==1.3.10
     # via jsonschema
 pluggy==1.5.0
     # via pytest
-pydantic==2.10.5
+pydantic==2.10.6
     # via cosl
 pydantic-core==2.27.2
     # via pydantic
@@ -90,10 +90,10 @@ pyyaml==6.0.2
     #   serialized-data-interface
 requests==2.32.3
     # via
-    #   -r requirements.in
+    #   -r /tmp/renovate/repos/github/canonical/istio-operators/charms/istio-gateway/requirements.in
     #   serialized-data-interface
 serialized-data-interface==0.7.0
-    # via -r requirements.in
+    # via -r /tmp/renovate/repos/github/canonical/istio-operators/charms/istio-gateway/requirements.in
 sniffio==1.3.1
     # via anyio
 tenacity==9.0.0
