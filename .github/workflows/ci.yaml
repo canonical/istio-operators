@@ -53,7 +53,7 @@ jobs:
 
   lint:
     name: Lint Code
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         charm: [pilot, gateway]
@@ -64,7 +64,7 @@ jobs:
 
   unit:
     name: Unit Test
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         charm: [pilot, gateway]
@@ -98,7 +98,7 @@ jobs:
   integration:
     name: Integration Test
     needs: build
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         # We test with highest and lowest supported versions of k8s
@@ -186,7 +186,7 @@ jobs:
   integration-observability:
     name: Observability Integration Test
     needs: build
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out repo
         uses: actions/checkout@v4
