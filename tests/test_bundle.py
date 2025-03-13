@@ -143,7 +143,9 @@ async def test_ingress_relation(ops_test: OpsTest):
 
     # Confirm that the UI is reachable through the ingress
     gateway_ip = await get_gateway_ip(ops_test)
-    await assert_page_reachable(url=f"http://{gateway_ip}/volumes/", title="Frontend")
+    await assert_page_reachable(
+        url=f"http://{gateway_ip}/volumes/", title="Frontend", headers={"kubeflow-userid": "user"}
+    )
 
 
 async def test_gateway_info_relation(ops_test: OpsTest):
@@ -460,11 +462,11 @@ def assert_url_get(url, allowed_statuses: list, disallowed_statuses: list):
     wait=tenacity.wait_exponential(multiplier=1, min=1, max=10),
     reraise=True,
 )
-async def assert_page_reachable(url, title):
+async def assert_page_reachable(url, title, headers: dict = {}):
     """Asserts that a page with a specific title is reachable at a given url."""
     log.info(f"Attempting to access url '{url}' to assert it has title '{title}'")
     async with aiohttp.ClientSession(raise_for_status=True) as client:
-        results = await client.get(url)
+        results = await client.get(url=url, headers=headers)
         soup = BeautifulSoup(await results.text())
 
     assert soup.title.string == title
