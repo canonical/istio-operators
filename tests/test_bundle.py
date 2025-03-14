@@ -143,8 +143,13 @@ async def test_ingress_relation(ops_test: OpsTest):
 
     # Confirm that the UI is reachable through the ingress
     gateway_ip = await get_gateway_ip(ops_test)
+    # In KF, oidc-authservice adds the kubeflow-userid header once the request is authenticated.
+    # Thus, every web app expect this header to be present.
+    # See https://github.com/arrikto/oidc-authservice?tab=readme-ov-file#sequence-diagram-for-an-authentication-flow  # noqa: E501
     await assert_page_reachable(
-        url=f"http://{gateway_ip}/volumes/", title="Frontend", headers={"kubeflow-userid": "user"}
+        url=f"http://{gateway_ip}/volumes/",
+        title="Frontend",
+        headers={"kubeflow-userid": "random-user"},
     )
 
 
