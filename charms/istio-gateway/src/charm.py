@@ -152,7 +152,7 @@ class Operator(CharmBase):
             pilot_port=pilot["service-port"],
             gateway_service_type=self.model.config["gateway_service_type"],
             replicas=self.model.config["replicas"],
-            annotations=self._worklod_service_annotations or {},
+            annotations=self._worklod_service_annotations,
         )
 
         for obj in codecs.load_all_yaml(rendered):
