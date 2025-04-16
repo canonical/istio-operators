@@ -73,6 +73,26 @@ def test_start_apply(configured_harness, kind, mocked_client):
     assert configured_harness.charm.model.unit.status == ActiveStatus("")
 
 
+def test_apply_with_annotations(configured_harness, kind, mocked_client):
+    # Reset the mock so that the calls list does not include any calls from other hooks
+    mocked_client.reset_mock()
+
+    configured_harness.charm.on.start.emit()
+    actual_objects = []
+    expected_objects = list(yaml.safe_load_all(open(f"tests/unit/data/{kind}-example.yaml")))
+
+    # the apply method is called for every object in the manifest
+    for call in mocked_client.return_value.apply.call_args_list:
+        # Ensure the server side apply calls include the namespace kwarg
+        assert call.kwargs["namespace"] == "None"
+        # The first (and only) argument to the apply method is the obj
+        # Convert the object to a dictionary and add it to the list
+        actual_objects.append(call.args[0].to_dict())
+
+    assert expected_objects == actual_objects
+    assert configured_harness.charm.model.unit.status == ActiveStatus("")
+
+
 def test_removal(configured_harness, kind, mocked_client, mocker):
     mocked_client.reset_mock()
     configured_harness.charm.on.remove.emit()
@@ -236,3 +256,21 @@ def test_manifests_applied_with_replicas_config(configured_harness, mocked_clien
     # Assert
     assert gateway_deployment["spec"].get("replicas") == replicas_config_value
     assert configured_harness.charm.model.unit.status == ActiveStatus("")
+
+
+def test__worklod_service_annotations(configured_harness, mocked_client):
+    """Ensure the _worklod_service_annotations property returns expected annotations."""
+
+    # Arrange
+    # Reset the mock so that the calls list does not include any calls from other hooks
+    mocked_client.reset_mock()
+
+    configured_harness.update_config(
+        {"annotations": "service.beta.kubernetes.io/mycloud-load-balancer-internal=true"}
+    )
+    expected_annotations = {"service.beta.kubernetes.io/mycloud-load-balancer-internal": "true"}
+
+    # Act
+    configured_harness.charm.on.install.emit()
+
+    assert configured_harness.charm._worklod_service_annotations == expected_annotations

@@ -1,4 +1,15 @@
 options:
+  annotations:
+    default: ''
+    type: string
+    description: |
+      A comma-separated list of annotations to apply to the Ingress Service
+      to enable customisation for cloud providers or integrations.
+      The format should be: `key1=value1,key2=value2,key3=value3`.
+      For example:
+        "external-dns.alpha.kubernetes.io/hostname=example.com,service.beta.kubernetes.io/aws-load-balancer-type=nlb"
+      Please ensure you follow the rules in:
+        https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/#syntax-and-character-set
   kind:
     default: ''
     description: Kind of Istio gateway. Must be set to one of `ingress`, `egress`
