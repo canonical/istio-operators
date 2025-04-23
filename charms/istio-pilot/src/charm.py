@@ -113,6 +113,8 @@ class Operator(CharmBase):
             self,
             key="istio-cert",
             cert_subject=self._cert_subject,
+            # If _cert_subject is None, CertHandler will use the Service FQDN
+            sans=[self._cert_subject] if self._cert_subject else None,
         )
 
         # Observe this custom event emitted by the cert_handler library on certificate
@@ -452,9 +454,10 @@ class Operator(CharmBase):
     def _cert_subject(self) -> Optional[str]:
         """Return the certificate subject to be used in the CSR.
 
-        If the csr-domain-name configuration option is set, this value is used;
-        otherwise, use the IP address or hostname of the actual ingress gateway service.
-        Lastly, if for any reason the service address cannot be retrieved, None will be returned.
+        If the csr-domain-name configuration option is set, this value is used for both
+        cert_subject and sans; otherwise, use the IP address or hostname of the actual
+        ingress gateway service. Lastly, if for any reason the service address cannot be
+        retrieved, None will be returned.
         """
         # Prioritise the csr-domain-name config option
         if csr_domain_name := self.model.config["csr-domain-name"]:
@@ -464,7 +467,7 @@ class Operator(CharmBase):
         try:
             svc = self._get_gateway_service()
         except ApiError:
-            self.log.info("Could not retrieve the gateway service address for using in the CSR.")
+            self.log.info("Could not retrieve the gateway service address.")
             return None
 
         svc_address = _get_gateway_address_from_svc(svc)
