@@ -63,7 +63,8 @@ parts:
       rustup default 1.83.0  # renovate: charmcraft-rust-latest
 
       # Install the following packages from binary to avoid python/importlib_metadata#516
-      PIP_BREAK_SYSTEM_PACKAGES=true python3 -m pip install --only-binary :all: cosl==0.0.57 lightkube==0.17.1 lightkube-models==1.32.0.8 \
+      PIP_BREAK_SYSTEM_PACKAGES=true python3 -m pip install --target $CRAFT_PART_BUILD_WORK --only-binary :all: \
+        cosl==0.0.57 lightkube==0.17.1 lightkube-models==1.32.0.8 \
         requests==2.32.3 serialized-data-interface==0.7.0
 
       craftctl default
