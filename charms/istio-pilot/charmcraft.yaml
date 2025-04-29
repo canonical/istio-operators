@@ -38,7 +38,7 @@ parts:
     after:
       - python-deps
     python-requirements: [requirements.txt]
-    # Commented out as we are not building the dependant packages from source
+    # Commented out as we are not building the dependent packages from source
     # due to canonical/bundle-kubeflow/issues/1255
     # Install these once the issue is solved and we can install from source again
     #build-packages:
@@ -47,7 +47,7 @@ parts:
     #  - pkg-config  # Needed to build Python dependencies with Rust from source
     override-build: |
 
-      # (rust) Commented out as we are not building the dependant packages from source
+      # (rust) Commented out as we are not building the dependent packages from source
       # due to canonical/bundle-kubeflow/issues/1255
       # Install these once the issue is solved and we can install from source again
 
