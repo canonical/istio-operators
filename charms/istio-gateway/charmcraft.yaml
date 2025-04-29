@@ -69,7 +69,7 @@ parts:
 
       # Copy python packages into the final charm
       mkdir -p $CRAFT_PART_INSTALL/usr/local/lib/python3.8/dist-packages/
-      cp --archive --recursive --reflink=auto /usr/local/lib/python3.10/dist-packages/* $CRAFT_PART_INSTALL/usr/local/lib/python3.8/dist-packages/
+      cp --archive --recursive --reflink=auto /usr/local/lib/python3.8/dist-packages/* $CRAFT_PART_INSTALL/usr/local/lib/python3.8/dist-packages/
 
       craftctl default
       # Include requirements.txt in *.charm artifact for easier debugging
