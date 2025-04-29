@@ -1,22 +1,17 @@
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
-# Please note this file introduces dependencies from the charm's requirements.in,
-# special attention must be taken when updating this or the other .in file to try
-# to avoid incompatibilities.
-# Rules for editing this file:
-#   * Removing a dependency that is no longer used in the unit test file(s)
-#     is allowed, and should not represent any risk.
-#   * Adding a dependency in this file means the dependency is directly used
-#     in the unit test files(s).
-#   * ALL python packages/libs used directly in the unit test file(s) must be
-#     listed here even if requirements.in is already adding them. This will
-#     add clarity to the dependency list.
-#   * Pinning a version of a python package/lib shared with requirements.in
-#     must not introduce any incompatibilities.
 coverage
 lightkube
 ops
 pytest
 pytest-mock
 pyyaml
--r requirements.in
+-r requirements.txt
+
+# Explicitly adding these packages as they were removed from requirements.txt
+# Remove them when canonical/bundle-kubeflow#1255 gets resolved
+cosl==0.0.57
+lightkube==0.17.1
+lightkube-models==1.32.0.8
+requests==2.32.3
+serialized-data-interface==0.7.0

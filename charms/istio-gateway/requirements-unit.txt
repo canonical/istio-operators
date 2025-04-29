@@ -17,8 +17,8 @@ certifi==2024.12.14
     #   requests
 charset-normalizer==3.4.1
     # via requests
-cosl==0.0.50
-    # via -r requirements.in
+cosl==0.0.57
+    # via -r requirements-unit.in
 coverage==7.6.1
     # via -r requirements-unit.in
 exceptiongroup==1.2.2
@@ -41,26 +41,27 @@ importlib-resources==6.4.5
 iniconfig==2.0.0
     # via pytest
 jinja2==3.1.5
-    # via -r requirements.in
+    # via -r requirements.txt
 jsonschema==4.17.3
     # via serialized-data-interface
 lightkube==0.17.1
     # via
     #   -r requirements-unit.in
-    #   -r requirements.in
     #   cosl
 lightkube-models==1.32.0.8
     # via
-    #   -r requirements.in
+    #   -r requirements-unit.in
     #   lightkube
 markupsafe==2.1.5
-    # via jinja2
+    # via
+    #   -r requirements.txt
+    #   jinja2
 oci-image==1.0.0
-    # via -r requirements.in
+    # via -r requirements.txt
 ops==2.17.1
     # via
     #   -r requirements-unit.in
-    #   -r requirements.in
+    #   -r requirements.txt
     #   cosl
     #   serialized-data-interface
 packaging==24.2
@@ -84,16 +85,17 @@ pytest-mock==3.14.0
 pyyaml==6.0.2
     # via
     #   -r requirements-unit.in
+    #   -r requirements.txt
     #   cosl
     #   lightkube
     #   ops
     #   serialized-data-interface
 requests==2.32.3
     # via
-    #   -r requirements.in
+    #   -r requirements-unit.in
     #   serialized-data-interface
 serialized-data-interface==0.7.0
-    # via -r requirements.in
+    # via -r requirements-unit.in
 sniffio==1.3.1
     # via anyio
 tenacity==9.0.0
@@ -110,6 +112,8 @@ typing-extensions==4.12.2
 urllib3==2.2.3
     # via requests
 websocket-client==1.8.0
-    # via ops
+    # via
+    #   -r requirements.txt
+    #   ops
 zipp==3.20.2
     # via importlib-resources
