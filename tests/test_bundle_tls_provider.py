@@ -6,6 +6,10 @@ import tenacity
 import yaml
 from lightkube.generic_resource import create_namespaced_resource
 from lightkube.resources.core_v1 import Secret
+from dependencies import (
+    SELF_SIGNED_CERTIFICATES,
+    SELF_SIGNED_CERTIFICATES_CHANNEL
+)
 from pytest_operator.plugin import OpsTest
 
 ISTIO_GATEWAY_METADATA = yaml.safe_load(Path("charms/istio-gateway/metadata.yaml").read_text())
@@ -19,10 +23,6 @@ GATEWAY_RESOURCE = create_namespaced_resource(
     kind="Gateway",
     plural="gateways",
 )
-
-SELF_SIGNED_CERTIFICATES = "self-signed-certificates"
-SELF_SIGNED_CERTIFICATES_CHANNEL = "latest/edge"
-SELF_SIGNED_CERTIFICATES_TRUST = True
 
 
 @pytest.fixture(scope="session")

@@ -1,0 +1,14 @@
+SELF_SIGNED_CERTIFICATES = "self-signed-certificates"
+SELF_SIGNED_CERTIFICATES_CHANNEL = "latest/edge"
+DEX_AUTH = "dex-auth"
+DEX_AUTH_CHANNEL = "latest/edge"
+DEX_AUTH_TRUST = True
+OIDC_GATEKEEPER = "oidc-gatekeeper"
+OIDC_GATEKEEPER_CHANNEL = "latest/edge"
+OIDC_GATEKEEPER_TRUST = False
+TENSORBOARD_CONTROLLER = "tensorboard-controller"
+TENSORBOARD_CONTROLLER_CHANNEL = "latest/edge"
+TENSORBOARD_CONTROLLER_TRUST = True
+KUBEFLOW_VOLUMES = "kubeflow-volumes"
+KUBEFLOW_VOLUMES_CHANNEL = "latest/edge"
+KUBEFLOW_VOLUMES_TRUST = True
