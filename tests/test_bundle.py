@@ -10,6 +10,20 @@ import requests
 import tenacity
 import yaml
 from bs4 import BeautifulSoup
+from dependencies import (
+    DEX_AUTH,
+    DEX_AUTH_CHANNEL,
+    DEX_AUTH_TRUST,
+    KUBEFLOW_VOLUMES,
+    KUBEFLOW_VOLUMES_CHANNEL,
+    KUBEFLOW_VOLUMES_TRUST,
+    OIDC_GATEKEEPER,
+    OIDC_GATEKEEPER_CHANNEL,
+    OIDC_GATEKEEPER_TRUST,
+    TENSORBOARD_CONTROLLER,
+    TENSORBOARD_CONTROLLER_CHANNEL,
+    TENSORBOARD_CONTROLLER_TRUST,
+)
 from lightkube import codecs
 from lightkube.generic_resource import (
     create_namespaced_resource,
@@ -20,19 +34,6 @@ from pytest_operator.plugin import OpsTest
 
 log = logging.getLogger(__name__)
 
-# Test dependencies
-DEX_AUTH = "dex-auth"
-DEX_AUTH_CHANNEL = "latest/edge"
-DEX_AUTH_TRUST = True
-OIDC_GATEKEEPER = "oidc-gatekeeper"
-OIDC_GATEKEEPER_CHANNEL = "latest/edge"
-OIDC_GATEKEEPER_TRUST = False
-TENSORBOARD_CONTROLLER = "tensorboard-controller"
-TENSORBOARD_CONTROLLER_CHANNEL = "latest/edge"
-TENSORBOARD_CONTROLLER_TRUST = True
-INGRESS_REQUIRER = "kubeflow-volumes"
-INGRESS_REQUIRER_CHANNEL = "latest/edge"
-INGRESS_REQUIRER_TRUST = True
 
 ISTIO_GATEWAY_METADATA = yaml.safe_load(Path("charms/istio-gateway/metadata.yaml").read_text())
 ISTIO_PILOT_METADATA = yaml.safe_load(Path("charms/istio-pilot/metadata.yaml").read_text())
@@ -126,11 +127,11 @@ async def test_ingress_relation(ops_test: OpsTest):
      specific charm that implements ingress's requirer interface to a generic charm
     """
     await ops_test.model.deploy(
-        INGRESS_REQUIRER, channel=INGRESS_REQUIRER_CHANNEL, trust=INGRESS_REQUIRER_TRUST
+        KUBEFLOW_VOLUMES, channel=KUBEFLOW_VOLUMES_CHANNEL, trust=KUBEFLOW_VOLUMES_TRUST
     )
 
     await ops_test.model.add_relation(
-        f"{ISTIO_PILOT_APP_NAME}:ingress", f"{INGRESS_REQUIRER}:ingress"
+        f"{ISTIO_PILOT_APP_NAME}:ingress", f"{KUBEFLOW_VOLUMES}:ingress"
     )
 
     await ops_test.model.wait_for_idle(
@@ -139,7 +140,7 @@ async def test_ingress_relation(ops_test: OpsTest):
         timeout=90 * 10,
     )
 
-    assert_virtualservice_exists(name=INGRESS_REQUIRER, namespace=ops_test.model_name)
+    assert_virtualservice_exists(name=KUBEFLOW_VOLUMES, namespace=ops_test.model_name)
 
     # Confirm that the UI is reachable through the ingress
     gateway_ip = await get_gateway_ip(ops_test)

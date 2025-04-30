@@ -4,6 +4,7 @@ import lightkube
 import pytest
 import tenacity
 import yaml
+from dependencies import SELF_SIGNED_CERTIFICATES, SELF_SIGNED_CERTIFICATES_CHANNEL
 from lightkube.generic_resource import create_namespaced_resource
 from lightkube.resources.core_v1 import Secret
 from pytest_operator.plugin import OpsTest
@@ -19,10 +20,6 @@ GATEWAY_RESOURCE = create_namespaced_resource(
     kind="Gateway",
     plural="gateways",
 )
-
-SELF_SIGNED_CERTIFICATES = "self-signed-certificates"
-SELF_SIGNED_CERTIFICATES_CHANNEL = "latest/edge"
-SELF_SIGNED_CERTIFICATES_TRUST = True
 
 
 @pytest.fixture(scope="session")
