@@ -63,13 +63,9 @@ parts:
       rustup default 1.83.0  # renovate: charmcraft-rust-latest
 
       # Install the following packages from binary to avoid python/importlib_metadata#516
-      PIP_BREAK_SYSTEM_PACKAGES=true python3 -m pip install --only-binary :all: \
+      PIP_BREAK_SYSTEM_PACKAGES=true python3 -m pip install --only-binary :all: --target $CRAFT_PART_BUILD/lib \
         cosl==0.0.57 lightkube==0.17.1 lightkube-models==1.32.0.8 \
         requests==2.32.3 serialized-data-interface==0.7.0
-
-      # Copy python packages into the final charm
-      mkdir -p $CRAFT_PART_INSTALL/usr/local/lib/python3.8/dist-packages/
-      cp --archive --recursive --reflink=auto /usr/local/lib/python3.8/dist-packages/* $CRAFT_PART_INSTALL/usr/local/lib/python3.8/dist-packages/
 
       craftctl default
       # Include requirements.txt in *.charm artifact for easier debugging
