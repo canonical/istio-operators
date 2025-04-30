@@ -1,10 +1,8 @@
 jinja2
 ops
+requests
+serialized-data-interface
+lightkube
+lightkube-models
 oci-image
-
-# Commenting due to canonical/bundle-kubeflow#1255
-#cosl
-#serialized-data-interface
-#lightkube
-#lightkube-models
-#requests
+cosl

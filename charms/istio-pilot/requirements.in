@@ -1,17 +1,15 @@
+charmed-kubeflow-chisme
 jinja2
+lightkube
+lightkube-models
 ops
 packaging
-cffi
-
-# Commenting due to canonical/bundle-kubeflow#1255
+requests
+serialized-data-interface
+tenacity
 # from prometheus_k8s.v0.prometheus_scrape.py
-#cosl
-#charmed-kubeflow-chisme
+cosl
 # required for tls interface 
-#cryptography
-#jsonschema
-#lightkube
-#lightkube-models
-#requests
-#serialized-data-interface
-#tenacity
+jsonschema
+cryptography
+cffi
