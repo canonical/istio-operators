@@ -22,16 +22,16 @@ log = logging.getLogger(__name__)
 
 # Test dependencies
 DEX_AUTH = "dex-auth"
-DEX_AUTH_CHANNEL = "latest/edge"
+DEX_AUTH_CHANNEL = "2.41/stable"
 DEX_AUTH_TRUST = True
 OIDC_GATEKEEPER = "oidc-gatekeeper"
-OIDC_GATEKEEPER_CHANNEL = "latest/edge"
+OIDC_GATEKEEPER_CHANNEL = "ckf-1.10/stable"
 OIDC_GATEKEEPER_TRUST = False
 TENSORBOARD_CONTROLLER = "tensorboard-controller"
-TENSORBOARD_CONTROLLER_CHANNEL = "latest/edge"
+TENSORBOARD_CONTROLLER_CHANNEL = "1.10/stable"
 TENSORBOARD_CONTROLLER_TRUST = True
 INGRESS_REQUIRER = "kubeflow-volumes"
-INGRESS_REQUIRER_CHANNEL = "latest/edge"
+INGRESS_REQUIRER_CHANNEL = "1.10/stable"
 INGRESS_REQUIRER_TRUST = True
 
 ISTIO_GATEWAY_METADATA = yaml.safe_load(Path("charms/istio-gateway/metadata.yaml").read_text())
