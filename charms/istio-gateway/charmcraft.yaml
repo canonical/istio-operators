@@ -38,6 +38,8 @@ parts:
     after:
       - python-deps
     python-requirements: [requirements.txt]
+    build-environment:
+      - PIP_CONSTRAINT: constraints.txt
     build-packages:
       - libffi-dev  # Needed to build Python dependencies with Rust from source
       - libssl-dev  # Needed to build Python dependencies with Rust from source
@@ -61,6 +63,7 @@ parts:
       # Ubuntu 22.04 archive. Install rustc and cargo using rustup instead of the Ubuntu archive
       rustup set profile minimal
       rustup default 1.83.0  # renovate: charmcraft-rust-latest
+
       craftctl default
       # Include requirements.txt in *.charm artifact for easier debugging
       cp requirements.txt "$CRAFT_PART_INSTALL/requirements.txt"
