@@ -28,6 +28,7 @@ METRICS_PORT = 9090
 # - Example invalid: "value@", "value#", "value space"
 ANNOTATION_KEY_MAX_LENGTH = 253
 ANNOTATION_VALUE_PATTERN = re.compile(r"^[\w.\-_]+$")
+ANNOTATION_KEY_START_WITH = ("kubernetes.io/", "k8s.io/")
 
 # Based on https://github.com/kubernetes/apimachinery/blob/v0.31.3/pkg/util/validation/validation.go#L204  # noqa
 # Regex for DNS1123 subdomains:
@@ -278,7 +279,7 @@ def validate_annotation_key(key: str) -> bool:
         logger.error(f"Invalid annotation key: '{key}'. Must follow Kubernetes annotation syntax.")
         return False
 
-    if key.startswith(("kubernetes.io/", "k8s.io/")):
+    if key.startswith(ANNOTATION_KEY_START_WITH):
         logger.error(f"Invalid annotation: Key '{key}' uses a reserved prefix.")
         return False
 
