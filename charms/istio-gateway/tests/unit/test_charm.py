@@ -236,3 +236,21 @@ def test_manifests_applied_with_replicas_config(configured_harness, mocked_clien
     # Assert
     assert gateway_deployment["spec"].get("replicas") == replicas_config_value
     assert configured_harness.charm.model.unit.status == ActiveStatus("")
+
+
+def test__workload_service_annotations(configured_harness, mocked_client):
+    """Ensure the _workload_service_annotations property returns expected annotations."""
+
+    # Arrange
+    # Reset the mock so that the calls list does not include any calls from other hooks
+    mocked_client.reset_mock()
+
+    configured_harness.update_config(
+        {"annotations": "service.beta.kubernetes.io/mycloud-load-balancer-internal=true"}
+    )
+    expected_annotations = {"service.beta.kubernetes.io/mycloud-load-balancer-internal": "true"}
+
+    # Act
+    configured_harness.charm.on.install.emit()
+
+    assert configured_harness.charm._workload_service_annotations == expected_annotations
