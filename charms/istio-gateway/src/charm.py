@@ -83,7 +83,7 @@ class Operator(CharmBase):
         )
 
     @property
-    def _worklod_service_annotations(self) -> Optional[Dict[str, str]]:
+    def _workload_service_annotations(self) -> Optional[Dict[str, str]]:
         """Parse config and return dict of annotations for rendering the Workload Service.
 
         Annotations are passed as a configuration option in the form of key-value pairs,
@@ -152,7 +152,7 @@ class Operator(CharmBase):
             pilot_port=pilot["service-port"],
             gateway_service_type=self.model.config["gateway_service_type"],
             replicas=self.model.config["replicas"],
-            annotations=self._worklod_service_annotations,
+            annotations=self._workload_service_annotations,
         )
 
         for obj in codecs.load_all_yaml(rendered):

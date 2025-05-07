@@ -238,8 +238,8 @@ def test_manifests_applied_with_replicas_config(configured_harness, mocked_clien
     assert configured_harness.charm.model.unit.status == ActiveStatus("")
 
 
-def test__worklod_service_annotations(configured_harness, mocked_client):
-    """Ensure the _worklod_service_annotations property returns expected annotations."""
+def test__workload_service_annotations(configured_harness, mocked_client):
+    """Ensure the _workload_service_annotations property returns expected annotations."""
 
     # Arrange
     # Reset the mock so that the calls list does not include any calls from other hooks
@@ -253,4 +253,4 @@ def test__worklod_service_annotations(configured_harness, mocked_client):
     # Act
     configured_harness.charm.on.install.emit()
 
-    assert configured_harness.charm._worklod_service_annotations == expected_annotations
+    assert configured_harness.charm._workload_service_annotations == expected_annotations
