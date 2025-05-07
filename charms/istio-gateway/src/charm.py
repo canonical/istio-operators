@@ -26,6 +26,7 @@ METRICS_PORT = 9090
 # - Does not allow empty strings
 # - Example valid: "value1", "my-value", "value.name", "value_name"
 # - Example invalid: "value@", "value#", "value space"
+ANNOTATION_KEY_MAX_LENGTH = 253
 ANNOTATION_VALUE_PATTERN = re.compile(r"^[\w.\-_]+$")
 
 # Based on https://github.com/kubernetes/apimachinery/blob/v0.31.3/pkg/util/validation/validation.go#L204  # noqa
@@ -47,6 +48,7 @@ DNS1123_SUBDOMAIN_PATTERN = re.compile(
 # - Must not be empty
 # - Example valid: "annotation", "my.annotation", "annotation-name"
 # - Example invalid: ".annotation", "annotation.", "-annotation", "annotation@key"
+QUALIFIED_NAME_MAX_LENGTH = 63
 QUALIFIED_NAME_PATTERN = re.compile(r"^[A-Za-z0-9]([-A-Za-z0-9_.]*[A-Za-z0-9])?$")
 
 
@@ -249,7 +251,7 @@ def is_qualified_name(value: str) -> bool:
     else:
         name = parts[0]  # No prefix
 
-    if not name or len(name) > 63 or not QUALIFIED_NAME_PATTERN.match(name):
+    if not name or len(name) > QUALIFIED_NAME_MAX_LENGTH or not QUALIFIED_NAME_PATTERN.match(name):
         return False
 
     return True
@@ -268,7 +270,7 @@ def validate_annotation_value(value: str) -> bool:
 
 def validate_annotation_key(key: str) -> bool:
     """Validate the annotation key."""
-    if len(key) > 253:
+    if len(key) > ANNOTATION_KEY_MAX_LENGTH:
         logger.error(f"Invalid annotation key: '{key}'. Key length exceeds 253 characters.")
         return False
 
