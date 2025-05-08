@@ -10,6 +10,7 @@ import requests
 import tenacity
 import yaml
 from bs4 import BeautifulSoup
+from charms_dependencies import DEX_AUTH, KUBEFLOW_VOLUMES, OIDC_GATEKEEPER, TENSORBOARD_CONTROLLER
 from lightkube import codecs
 from lightkube.generic_resource import (
     create_namespaced_resource,
@@ -20,19 +21,6 @@ from pytest_operator.plugin import OpsTest
 
 log = logging.getLogger(__name__)
 
-# Test dependencies
-DEX_AUTH = "dex-auth"
-DEX_AUTH_CHANNEL = "latest/edge"
-DEX_AUTH_TRUST = True
-OIDC_GATEKEEPER = "oidc-gatekeeper"
-OIDC_GATEKEEPER_CHANNEL = "latest/edge"
-OIDC_GATEKEEPER_TRUST = False
-TENSORBOARD_CONTROLLER = "tensorboard-controller"
-TENSORBOARD_CONTROLLER_CHANNEL = "latest/edge"
-TENSORBOARD_CONTROLLER_TRUST = True
-INGRESS_REQUIRER = "kubeflow-volumes"
-INGRESS_REQUIRER_CHANNEL = "latest/edge"
-INGRESS_REQUIRER_TRUST = True
 
 ISTIO_GATEWAY_METADATA = yaml.safe_load(Path("charms/istio-gateway/metadata.yaml").read_text())
 ISTIO_PILOT_METADATA = yaml.safe_load(Path("charms/istio-pilot/metadata.yaml").read_text())
@@ -126,11 +114,11 @@ async def test_ingress_relation(ops_test: OpsTest):
      specific charm that implements ingress's requirer interface to a generic charm
     """
     await ops_test.model.deploy(
-        INGRESS_REQUIRER, channel=INGRESS_REQUIRER_CHANNEL, trust=INGRESS_REQUIRER_TRUST
+        KUBEFLOW_VOLUMES.charm, channel=KUBEFLOW_VOLUMES.channel, trust=KUBEFLOW_VOLUMES.trust
     )
 
     await ops_test.model.add_relation(
-        f"{ISTIO_PILOT_APP_NAME}:ingress", f"{INGRESS_REQUIRER}:ingress"
+        f"{ISTIO_PILOT_APP_NAME}:ingress", f"{KUBEFLOW_VOLUMES.charm}:ingress"
     )
 
     await ops_test.model.wait_for_idle(
@@ -139,7 +127,7 @@ async def test_ingress_relation(ops_test: OpsTest):
         timeout=90 * 10,
     )
 
-    assert_virtualservice_exists(name=INGRESS_REQUIRER, namespace=ops_test.model_name)
+    assert_virtualservice_exists(name=KUBEFLOW_VOLUMES.charm, namespace=ops_test.model_name)
 
     # Confirm that the UI is reachable through the ingress
     gateway_ip = await get_gateway_ip(ops_test)
@@ -160,13 +148,13 @@ async def test_gateway_info_relation(ops_test: OpsTest):
      specific charm that implements ingress's requirer interface to a generic charm
     """
     await ops_test.model.deploy(
-        TENSORBOARD_CONTROLLER,
-        channel=TENSORBOARD_CONTROLLER_CHANNEL,
-        trust=TENSORBOARD_CONTROLLER_TRUST,
+        TENSORBOARD_CONTROLLER.charm,
+        channel=TENSORBOARD_CONTROLLER.channel,
+        trust=TENSORBOARD_CONTROLLER.trust,
     )
 
     await ops_test.model.add_relation(
-        f"{ISTIO_PILOT_APP_NAME}:gateway-info", f"{TENSORBOARD_CONTROLLER}:gateway-info"
+        f"{ISTIO_PILOT_APP_NAME}:gateway-info", f"{TENSORBOARD_CONTROLLER.charm}:gateway-info"
     )
 
     # tensorboard_controller will go Active if the relation is established
@@ -273,9 +261,9 @@ async def test_enable_ingress_auth(ops_test: OpsTest):
     # Deploy everything needed to implement the ingress-auth relation
     regular_ingress_gateway_ip = await get_gateway_ip(ops_test)
     await ops_test.model.deploy(
-        DEX_AUTH,
-        channel=DEX_AUTH_CHANNEL,
-        trust=DEX_AUTH_TRUST,
+        DEX_AUTH.charm,
+        channel=DEX_AUTH.channel,
+        trust=DEX_AUTH.trust,
         config={
             "static-username": USERNAME,
             "static-password": PASSWORD,
@@ -283,18 +271,22 @@ async def test_enable_ingress_auth(ops_test: OpsTest):
     )
 
     await ops_test.model.deploy(
-        OIDC_GATEKEEPER,
-        channel=OIDC_GATEKEEPER_CHANNEL,
-        trust=OIDC_GATEKEEPER_TRUST,
+        OIDC_GATEKEEPER.charm,
+        channel=OIDC_GATEKEEPER.channel,
+        trust=OIDC_GATEKEEPER.trust,
     )
-    await ops_test.model.integrate(f"{ISTIO_PILOT_APP_NAME}:ingress", f"{DEX_AUTH}:ingress")
-    await ops_test.model.integrate(f"{ISTIO_PILOT_APP_NAME}:ingress", f"{OIDC_GATEKEEPER}:ingress")
-    await ops_test.model.integrate(f"{OIDC_GATEKEEPER}:oidc-client", f"{DEX_AUTH}:oidc-client")
+    await ops_test.model.integrate(f"{ISTIO_PILOT_APP_NAME}:ingress", f"{DEX_AUTH.charm}:ingress")
     await ops_test.model.integrate(
-        f"{OIDC_GATEKEEPER}:dex-oidc-config", f"{DEX_AUTH}:dex-oidc-config"
+        f"{ISTIO_PILOT_APP_NAME}:ingress", f"{OIDC_GATEKEEPER.charm}:ingress"
     )
     await ops_test.model.integrate(
-        f"{ISTIO_PILOT_APP_NAME}:ingress-auth", f"{OIDC_GATEKEEPER}:ingress-auth"
+        f"{OIDC_GATEKEEPER.charm}:oidc-client", f"{DEX_AUTH.charm}:oidc-client"
+    )
+    await ops_test.model.integrate(
+        f"{OIDC_GATEKEEPER.charm}:dex-oidc-config", f"{DEX_AUTH.charm}:dex-oidc-config"
+    )
+    await ops_test.model.integrate(
+        f"{ISTIO_PILOT_APP_NAME}:ingress-auth", f"{OIDC_GATEKEEPER.charm}:ingress-auth"
     )
 
     # Wait for the oidc/dex charms to become active
@@ -338,7 +330,7 @@ async def test_disable_ingress_auth(ops_test: OpsTest):
     Uses the previously deployed bookinfo application for testing.
     """
     await ops_test.model.applications[ISTIO_PILOT_APP_NAME].remove_relation(
-        "ingress-auth", f"{OIDC_GATEKEEPER}:ingress-auth"
+        "ingress-auth", f"{OIDC_GATEKEEPER.charm}:ingress-auth"
     )
 
     # Wait for the istio-pilot charm to settle back down
