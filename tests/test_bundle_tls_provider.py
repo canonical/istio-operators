@@ -4,6 +4,7 @@ import lightkube
 import pytest
 import tenacity
 import yaml
+from charms_dependencies import SELF_SIGNED_CERTIFICATES
 from lightkube.generic_resource import create_namespaced_resource
 from lightkube.resources.core_v1 import Secret
 from pytest_operator.plugin import OpsTest
@@ -19,10 +20,6 @@ GATEWAY_RESOURCE = create_namespaced_resource(
     kind="Gateway",
     plural="gateways",
 )
-
-SELF_SIGNED_CERTIFICATES = "self-signed-certificates"
-SELF_SIGNED_CERTIFICATES_CHANNEL = "latest/edge"
-SELF_SIGNED_CERTIFICATES_TRUST = True
 
 
 @pytest.fixture(scope="session")
@@ -72,12 +69,12 @@ async def test_build_and_deploy_istio_charms(ops_test: OpsTest, request):
     )
 
     await ops_test.model.deploy(
-        SELF_SIGNED_CERTIFICATES,
-        channel=SELF_SIGNED_CERTIFICATES_CHANNEL,
+        SELF_SIGNED_CERTIFICATES.charm,
+        channel=SELF_SIGNED_CERTIFICATES.channel,
     )
 
     await ops_test.model.add_relation(
-        f"{ISTIO_PILOT_APP_NAME}:certificates", f"{SELF_SIGNED_CERTIFICATES}:certificates"
+        f"{ISTIO_PILOT_APP_NAME}:certificates", f"{SELF_SIGNED_CERTIFICATES.charm}:certificates"
     )
 
     await ops_test.model.wait_for_idle(
