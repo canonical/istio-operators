@@ -73,3 +73,9 @@ parts:
     source: .
     stage:
       - LICENSE
+
+  # Include the `istioctl` binary in the charm
+  istioctl:
+    plugin: dump
+    source: https://github.com/istio/istio/releases/download/1.24.2/istioctl-1.24.2-linux-amd64.tar.gz
+    source-type: tar
