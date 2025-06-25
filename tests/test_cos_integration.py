@@ -38,10 +38,10 @@ async def test_build_and_deploy_istio_charms(ops_test: OpsTest, request):
     istio_pilot_name = ISTIO_PILOT_METADATA["name"]
     if charms_path := request.config.getoption("--charms-path"):
         istio_gateway = (
-            f"{charms_path}/{istio_gateway_name}/{istio_gateway_name}_ubuntu@20.04-amd64.charm"
+            f"{charms_path}/{istio_gateway_name}/{istio_gateway_name}_ubuntu@24.04-amd64.charm"
         )
         istio_pilot = (
-            f"{charms_path}/{istio_pilot_name}/{istio_pilot_name}_ubuntu@20.04-amd64.charm"
+            f"{charms_path}/{istio_pilot_name}/{istio_pilot_name}_ubuntu@24.04-amd64.charm"
         )
     else:
         istio_gateway = await ops_test.build_charm("charms/istio-gateway")

@@ -23,8 +23,8 @@ from lightkube import Client
 from lightkube.core.exceptions import ApiError
 from lightkube.generic_resource import create_namespaced_resource
 from lightkube.resources.core_v1 import Secret, Service
+from ops import main
 from ops.charm import CharmBase, RelationBrokenEvent
-from ops.main import main
 from ops.model import (
     ActiveStatus,
     Application,
