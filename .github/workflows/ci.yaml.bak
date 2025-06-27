@@ -102,7 +102,7 @@ jobs:
     uses: canonical/data-platform-workflows/.github/workflows/build_charm.yaml@v29.2.0
     with:
       path-to-charm-directory: ${{ matrix.charm }}
-      cache: false
+      cache: true
         
   integration:
     name: Integration Test
