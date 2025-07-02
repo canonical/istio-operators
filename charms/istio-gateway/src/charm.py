@@ -8,8 +8,8 @@ from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from jinja2 import Environment, FileSystemLoader
 from lightkube import Client, codecs
 from lightkube.core.exceptions import ApiError
+from ops import main
 from ops.charm import CharmBase
-from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, StatusBase, WaitingStatus
 from serialized_data_interface import NoCompatibleVersions, NoVersionsListed, get_interfaces
 

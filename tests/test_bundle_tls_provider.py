@@ -4,6 +4,7 @@ import lightkube
 import pytest
 import tenacity
 import yaml
+from charms_dependencies import SELF_SIGNED_CERTIFICATES
 from lightkube.generic_resource import create_namespaced_resource
 from lightkube.resources.core_v1 import Secret
 from pytest_operator.plugin import OpsTest
@@ -20,10 +21,6 @@ GATEWAY_RESOURCE = create_namespaced_resource(
     plural="gateways",
 )
 
-SELF_SIGNED_CERTIFICATES = "self-signed-certificates"
-SELF_SIGNED_CERTIFICATES_CHANNEL = "1/stable"
-SELF_SIGNED_CERTIFICATES_TRUST = True
-
 
 @pytest.fixture(scope="session")
 def lightkube_client() -> lightkube.Client:
@@ -38,10 +35,10 @@ async def test_build_and_deploy_istio_charms(ops_test: OpsTest, request):
     istio_pilot_name = ISTIO_PILOT_METADATA["name"]
     if charms_path := request.config.getoption("--charms-path"):
         istio_gateway = (
-            f"{charms_path}/{istio_gateway_name}/{istio_gateway_name}_ubuntu@20.04-amd64.charm"
+            f"{charms_path}/{istio_gateway_name}/{istio_gateway_name}_ubuntu@24.04-amd64.charm"
         )
         istio_pilot = (
-            f"{charms_path}/{istio_pilot_name}/{istio_pilot_name}_ubuntu@20.04-amd64.charm"
+            f"{charms_path}/{istio_pilot_name}/{istio_pilot_name}_ubuntu@24.04-amd64.charm"
         )
     else:
         istio_gateway = await ops_test.build_charm("charms/istio-gateway")
@@ -72,12 +69,13 @@ async def test_build_and_deploy_istio_charms(ops_test: OpsTest, request):
     )
 
     await ops_test.model.deploy(
-        SELF_SIGNED_CERTIFICATES,
-        channel=SELF_SIGNED_CERTIFICATES_CHANNEL,
+        SELF_SIGNED_CERTIFICATES.charm,
+        channel=SELF_SIGNED_CERTIFICATES.channel,
     )
 
     await ops_test.model.add_relation(
-        f"{ISTIO_PILOT_APP_NAME}:certificates", f"{SELF_SIGNED_CERTIFICATES}:certificates"
+        f"{ISTIO_PILOT_APP_NAME}:certificates",
+        f"{SELF_SIGNED_CERTIFICATES.charm}:certificates",
     )
 
     await ops_test.model.wait_for_idle(
