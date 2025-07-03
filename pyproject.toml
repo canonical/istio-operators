@@ -38,3 +38,35 @@ docstring-convention = "google"
 copyright-check = "True"
 copyright-author = "Canonical Ltd."
 copyright-regexp = "Copyright\\s\\d{4}([-,]\\d{4})*\\s+%(author)s"
+
+[tool.poetry]
+package-mode = false
+
+[tool.poetry.group.fmt]
+optional = true
+
+[tool.poetry.group.fmt.dependencies]
+black = "^24.8.0"
+isort = "^5.13.2"
+
+[tool.poetry.group.lint]
+optional = true
+
+[tool.poetry.group.lint.dependencies]
+black = "^24.8.0"
+codespell = "^2.3.0"
+flake8 = "^7.0.0"
+flake8-builtins = "^2.5.0"
+flake8-copyright = "^0.2.4"
+isort = "^5.13.2"
+pep8-naming = "^0.14.1"
+pyproject-flake8 = "^7.0.0"
+
+[tool.poetry.group.integration]
+optional = true
+
+[tool.poetry.group.integration.dependencies]
+
+[project]
+name = "istio-operators"
+requires-python = ">=3.12,<4.0"
