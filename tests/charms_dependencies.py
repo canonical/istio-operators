@@ -9,7 +9,7 @@ SELF_SIGNED_CERTIFICATES = CharmSpec(
 )
 DEX_AUTH = CharmSpec(
     charm="dex-auth",
-    channel="latest/edge/pr-280",
+    channel="latest/edge",
     trust=True,
 )
 OIDC_GATEKEEPER = CharmSpec(
