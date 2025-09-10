@@ -263,7 +263,7 @@ async def test_enable_ingress_auth(ops_test: OpsTest):
     await ops_test.model.deploy(
         DEX_AUTH.charm,
         channel=DEX_AUTH.channel,
-        revision=466,
+        revision=733,
         trust=DEX_AUTH.trust,
         config={
             "static-username": USERNAME,
