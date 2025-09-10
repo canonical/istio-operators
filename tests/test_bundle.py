@@ -262,7 +262,8 @@ async def test_enable_ingress_auth(ops_test: OpsTest):
     regular_ingress_gateway_ip = await get_gateway_ip(ops_test)
     await ops_test.model.deploy(
         DEX_AUTH.charm,
-        channel=DEX_AUTH.channel,
+        # channel=DEX_AUTH.channel,
+        revision=466,
         trust=DEX_AUTH.trust,
         config={
             "static-username": USERNAME,
