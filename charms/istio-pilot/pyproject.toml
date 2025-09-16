@@ -77,7 +77,7 @@ flake8 = "^7.0.0"
 flake8-builtins = "^2.5.0"
 flake8-copyright = "^0.2.4"
 isort = "^5.13.2"
-pep8-naming = "^0.14.1"
+pep8-naming = "^0.15.0"
 pyproject-flake8 = "^7.0.0"
 
 [tool.poetry.group.unit]
