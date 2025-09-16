@@ -59,11 +59,7 @@ jobs:
         charm: [pilot, gateway]
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5.6.0
-        with:
-          python-version: "3.12"
-      - run: pip install tox
+      - run: pipx install tox
       - run: tox -e ${{ matrix.charm }}-lint
 
   unit:
@@ -74,11 +70,7 @@ jobs:
         charm: [pilot, gateway]
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5.6.0
-        with:
-          python-version: "3.12"
-      - run: pip install tox
+      - run: pipx install tox
       - run: tox -e ${{ matrix.charm }}-unit
 
   terraform-checks:
@@ -102,7 +94,7 @@ jobs:
     uses: canonical/data-platform-workflows/.github/workflows/build_charm.yaml@v29.2.0
     with:
       path-to-charm-directory: ${{ matrix.charm }}
-      cache: false
+      cache: true
         
   integration:
     name: Integration Test
@@ -111,7 +103,7 @@ jobs:
     strategy:
       matrix:
         # We test with highest and lowest supported versions of k8s
-        microk8s-versions:
+        k8s-versions:
           - 1.29-strict/stable
           - 1.32-strict/stable
         integration-types:
@@ -129,14 +121,17 @@ jobs:
 
       - name: Check out repo
         uses: actions/checkout@v4
+      - name: Install dependencies
+        run: pipx install tox
 
-      - name: Setup operator environment
-        uses: charmed-kubernetes/actions-operator@main
-        with:
-          provider: microk8s
-          channel: ${{ matrix.microk8s-versions }}
-          microk8s-addons: "dns hostpath-storage rbac metallb:10.64.140.43-10.64.140.49"
-          juju-channel: 3.6/stable
+      - name: Setup environment
+        env:
+          CONCIERGE_K8S_CHANNEL: ${{ matrix.k8s-versions }}
+        run: |
+          sudo apt-get remove -y docker-ce docker-ce-cli containerd.io
+          sudo rm -rf /run/containerd
+          sudo snap install concierge --classic
+          sudo concierge prepare --trace
 
       - name: Download packed charm(s)
         id: download-charms
@@ -199,14 +194,15 @@ jobs:
     steps:
       - name: Check out repo
         uses: actions/checkout@v4
+      - name: Install dependencies
+        run: pipx install tox
 
-      - name: Setup operator environment
-        uses: charmed-kubernetes/actions-operator@main
-        with:
-          provider: microk8s
-          channel: 1.32-strict/stable
-          microk8s-addons: "dns hostpath-storage rbac metallb:10.64.140.43-10.64.140.49"
-          juju-channel: 3.6/stable
+      - name: Setup environment
+        run: |
+          sudo apt-get remove -y docker-ce docker-ce-cli containerd.io
+          sudo rm -rf /run/containerd
+          sudo snap install concierge --classic
+          sudo concierge prepare --trace
 
       - name: Download packed charm(s)
         id: download-charms
