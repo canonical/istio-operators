@@ -1,6 +1,7 @@
 resource "juju_application" "istio_pilot" {
   charm {
     name     = "istio-pilot"
+    base     = var.base
     channel  = var.channel
     revision = var.revision
   }
