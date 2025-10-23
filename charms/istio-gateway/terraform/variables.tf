@@ -10,12 +10,6 @@ variable "base" {
   default     = "ubuntu@24.04"
 }
 
-variable "base" {
-  description = "Charm base"
-  type        = string
-  default     = "ubuntu@24.04"
-}
-
 variable "channel" {
   description = "Charm channel"
   type        = string
