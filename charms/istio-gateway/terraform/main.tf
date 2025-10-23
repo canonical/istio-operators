@@ -2,7 +2,6 @@ resource "juju_application" "istio_gateway" {
   charm {
     name     = "istio-gateway"
     base     = var.base
-    base     = var.base
     channel  = var.channel
     revision = var.revision
   }
