@@ -333,6 +333,12 @@ class Operator(CharmBase):
             handled_errors.append(err)
 
         try:
+            # If Gateway Service is not ready, notify user
+            self._assert_gateway_service_status()
+        except ErrorWithStatus as err:
+            handled_errors.append(err)
+
+        try:
             self._send_gateway_info()
         except ErrorWithStatus as err:
             handled_errors.append(err)
@@ -443,6 +449,17 @@ class Operator(CharmBase):
 
         self.log.info("Upgrade complete.")
         self.unit.status = ActiveStatus()
+
+    def _assert_gateway_service_status(self):
+        """Checks if the ingress gateway service is up, raising an ErrorWithStatus if it is not."""
+        if not self._is_gateway_service_up:
+            raise ErrorWithStatus(
+                f"Gateway Service '{self.model.config['gateway-service-name']}"
+                f" in namespace {self.model.name} is missing or does not have an"
+                f" external IP.  If this persists, there may be a problem with"
+                f" the Service.",
+                WaitingStatus,
+            )
 
     def _check_leader(self):
         """Check if this unit is a leader."""
@@ -764,7 +781,7 @@ class Operator(CharmBase):
             )
             self._log_and_set_status(status_to_publish)
             for i, error in enumerate(errors):
-                self.log.info(f"Handled error {i}/{len(errors)}: {error.status}")
+                self.log.info(f"Handled error {i+1}/{len(errors)}: {error.status}")
         else:
             self.unit.status = ActiveStatus()
 
@@ -1064,11 +1081,13 @@ def _get_address_from_loadbalancer(svc):
           (str): The hostname or IP address of the LoadBalancer service
     """
     ingresses = svc.status.loadBalancer.ingress
+
+    # May happen due to the Kubernetes cluster not having a LoadBalancer provider
+    if ingresses is None or len(ingresses) == 0:
+        return None
+
     if len(ingresses) != 1:
-        if len(ingresses) == 0:
-            return None
-        else:
-            raise ValueError("Unknown situation - LoadBalancer service has more than one ingress")
+        raise ValueError("Unknown situation - LoadBalancer service has more than one ingress")
 
     ingress = svc.status.loadBalancer.ingress[0]
     if getattr(ingress, "hostname", None) is not None:
