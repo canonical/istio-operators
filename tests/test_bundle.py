@@ -140,7 +140,7 @@ async def test_container_security_context(
     ops_test: OpsTest,
     lightkube_client: Client,
 ):
-    """Test that the security context is correctly set charms and their workloads.
+    """Test that the security context is correctly set for charms and their workloads.
 
     Verify that all pods' and containers' specs define the expected security contexts, with
     particular emphasis on user IDs and group IDs.
