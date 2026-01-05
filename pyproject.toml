@@ -67,7 +67,7 @@ optional = true
 
 [tool.poetry.group.integration.dependencies]
 juju = "<4.0"
-charmed-kubeflow-chisme = ">=0.4.11"
+charmed-kubeflow-chisme = ">=0.4.14"
 aiohttp = "^3.10.11"
 asyncio = "^3.4.3"
 beautifulsoup4 = "^4.12.3"
