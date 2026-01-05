@@ -180,7 +180,7 @@ async def test_container_security_context(
             ]
             proc = subprocess.run(cmd, stdout=subprocess.PIPE)
             stdout = proc.stdout.decode("utf8")
-            return stdout.split()
+            return stdout.split()[0]
 
         pod_name = get_istio_gateway_pod_name()
         pod_spec = lightkube_client.get(Pod, pod_name, namespace=model_name).spec
