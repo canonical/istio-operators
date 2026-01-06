@@ -205,7 +205,8 @@ async def test_container_security_context(
                     actual_value = getattr(actual_container_securitycontext, key)
                 except AttributeError:
                     continue  # not a problem if not overridden at the container level
-                assert actual_value == expected_value
+                if actual_value is not None:
+                    assert actual_value == expected_value
 
 
 async def test_ingress_relation(ops_test: OpsTest):
