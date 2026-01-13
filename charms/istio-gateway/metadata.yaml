@@ -25,5 +25,6 @@ requires:
 provides:
   metrics-endpoint:
     interface: prometheus_scrape
+charm-user: non-root
 assumes:
 - juju >= 3.1

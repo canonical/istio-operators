@@ -1,5 +1,6 @@
 import json
 import logging
+import subprocess
 from pathlib import Path
 from time import sleep
 
@@ -10,8 +11,14 @@ import requests
 import tenacity
 import yaml
 from bs4 import BeautifulSoup
+from charmed_kubeflow_chisme.testing import (
+    ContainerSecurityContext,
+    assert_security_context as assert_container_security_context,
+    generate_container_securitycontext_map,
+    get_pod_names,
+)
 from charms_dependencies import DEX_AUTH, KUBEFLOW_VOLUMES, OIDC_GATEKEEPER, TENSORBOARD_CONTROLLER
-from lightkube import codecs
+from lightkube import Client, codecs
 from lightkube.generic_resource import (
     create_namespaced_resource,
     load_in_cluster_generic_resources,
@@ -26,6 +33,12 @@ ISTIO_GATEWAY_METADATA = yaml.safe_load(Path("charms/istio-gateway/metadata.yaml
 ISTIO_PILOT_METADATA = yaml.safe_load(Path("charms/istio-pilot/metadata.yaml").read_text())
 ISTIO_GATEWAY_APP_NAME = "istio-ingressgateway"
 ISTIO_PILOT_APP_NAME = "istio-pilot"
+ISTIO_GATEWAY_KIND = "ingress"
+ISTIO_GATEWAY_INDEPENDENT_WORKLOAD_POD_SECURITY_CONTEXT: ContainerSecurityContext = {
+    "runAsGroup": 1337,
+    "runAsNonRoot": True,
+    "runAsUser": 1337,
+}
 ISTIO_RELEASE = "release-1.24"
 USERNAME = "user123"
 PASSWORD = "user123"
@@ -36,6 +49,13 @@ VIRTUAL_SERVICE_LIGHTKUBE_RESOURCE = create_namespaced_resource(
     kind="VirtualService",
     plural="virtualservices",
 )
+
+
+@pytest.fixture(scope="session")
+def lightkube_client() -> Client:
+    """Returns lightkube Kubernetes client"""
+    client = Client()
+    return client
 
 
 @pytest.mark.abort_on_fail
@@ -92,7 +112,7 @@ async def test_build_and_deploy_istio_charms(ops_test: OpsTest, request):
     await ops_test.model.deploy(
         istio_gateway,
         application_name=ISTIO_GATEWAY_APP_NAME,
-        config={"kind": "ingress"},
+        config={"kind": ISTIO_GATEWAY_KIND},
         trust=True,
     )
 
@@ -105,6 +125,88 @@ async def test_build_and_deploy_istio_charms(ops_test: OpsTest, request):
         raise_on_blocked=False,
         timeout=90 * 10,
     )
+
+
+@pytest.mark.parametrize(
+    "app_name,charm_metadata",
+    [
+        (ISTIO_GATEWAY_APP_NAME, ISTIO_GATEWAY_METADATA),
+        (ISTIO_PILOT_APP_NAME, ISTIO_PILOT_METADATA),
+    ]
+)
+async def test_container_security_context(
+    app_name: str,
+    charm_metadata: dict,
+    ops_test: OpsTest,
+    lightkube_client: Client,
+):
+    """Test that the security context is correctly set for charms and their workloads.
+
+    Verify that all pods' and containers' specs define the expected security contexts, with
+    particular emphasis on user IDs and group IDs.
+    """
+    container_name = "charm"
+    containers_to_securitycontext = generate_container_securitycontext_map(charm_metadata)
+    model_name = ops_test.model_name
+    pod_name = get_pod_names(model_name, app_name)[0]
+
+    # these charms are expected to be run without defining any workloads under "metadata.yaml", so
+    # only the charm containers are expected:
+    assert len(containers_to_securitycontext) == 1, "Only single container expected"
+    assert container_name in containers_to_securitycontext, "Charm container not found"
+
+    assert_container_security_context(
+        lightkube_client,
+        pod_name,
+        container_name,
+        containers_to_securitycontext,
+        model_name,
+    )
+
+    if app_name == ISTIO_GATEWAY_APP_NAME:
+        # this charm, despite not managing any workloads defined under "metadata.yaml"
+        # ("traditional" workloads, in Juju's sense), still indirectly operates an "independent"
+        # workload - whose security context is to be checked:
+
+        def get_istio_gateway_pod_name():
+            cmd = [
+                "kubectl",
+                "get",
+                "pods",
+                f"-n{model_name}",
+                f"-lapp=istio-{ISTIO_GATEWAY_KIND}gateway",
+                "--no-headers",
+                "-o=custom-columns=NAME:.metadata.name",
+            ]
+            proc = subprocess.run(cmd, stdout=subprocess.PIPE)
+            stdout = proc.stdout.decode("utf8")
+            return stdout.split()[0]
+
+        pod_name = get_istio_gateway_pod_name()
+        pod_spec = lightkube_client.get(Pod, pod_name, namespace=model_name).spec
+        expected_securitycontext = ISTIO_GATEWAY_INDEPENDENT_WORKLOAD_POD_SECURITY_CONTEXT
+
+        # the security context is defined at the pod level, not at the container
+        # level...
+        actual_pod_securitycontext = pod_spec.securityContext
+        for key, expected_value in expected_securitycontext.items():
+            try:
+                actual_value = getattr(actual_pod_securitycontext, key)
+            except AttributeError as exception:
+                raise AssertionError(exception)  # to be collected in "failed_checks"
+            assert actual_value == expected_value
+
+        # ...so ensuring that it is not overridden at the container level is also
+        # necessary:
+        for container in pod_spec.containers:
+            actual_container_securitycontext = container.securityContext
+            for key, expected_value in expected_securitycontext.items():
+                try:
+                    actual_value = getattr(actual_container_securitycontext, key)
+                except AttributeError:
+                    continue  # not a problem if not overridden at the container level
+                if actual_value is not None:
+                    assert actual_value == expected_value
 
 
 async def test_ingress_relation(ops_test: OpsTest):

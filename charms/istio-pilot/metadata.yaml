@@ -101,5 +101,6 @@ requires:
 peers:
   peers:
     interface: istio_pilot_peers
+charm-user: non-root
 assumes:
 - juju >= 3.1
