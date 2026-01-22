@@ -39,7 +39,7 @@ ISTIO_GATEWAY_INDEPENDENT_WORKLOAD_POD_SECURITY_CONTEXT: ContainerSecurityContex
     "runAsNonRoot": True,
     "runAsUser": 1337,
 }
-ISTIO_RELEASE = "release-1.24"
+ISTIO_RELEASE = "release-1.25"
 USERNAME = "user123"
 PASSWORD = "user123"
 
