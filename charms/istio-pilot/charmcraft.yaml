@@ -89,5 +89,5 @@ parts:
   # Include the `istioctl` binary in the charm
   istioctl:
     plugin: dump
-    source: https://github.com/istio/istio/releases/download/1.24.2/istioctl-1.24.2-linux-amd64.tar.gz
+    source: https://github.com/istio/istio/releases/download/1.26.8/istioctl-1.26.8-linux-amd64.tar.gz
     source-type: tar
