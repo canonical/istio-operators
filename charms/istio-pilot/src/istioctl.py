@@ -168,6 +168,8 @@ class Istioctl:
         except subprocess.CalledProcessError as cpe:
             raise IstioctlError("Failed to get Istio version") from cpe
 
+        logging.info("\n\n\nJUST DEBUGGING\n\n\n")
+        logging.info(version_string)
         version_dict = yaml.safe_load(version_string)
         return {
             "client": get_client_version(version_dict),
