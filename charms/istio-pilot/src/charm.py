@@ -248,7 +248,7 @@ class Operator(CharmBase):
         """Install charm."""
 
         self._log_and_set_status(
-            MaintenanceStatus("Deploying Istio control plane with Istio CNI plugin.")
+            MaintenanceStatus("Deploying Istio control plane.")
         )
 
         # Call the istioctl wrapper to install the Istio Control Plane
