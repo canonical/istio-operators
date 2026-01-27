@@ -36,6 +36,16 @@ class Istioctl:
             istioctl_extra_flags if istioctl_extra_flags is not None else []
         )
 
+    @staticmethod
+    def _remove_warning_lines_from_istioctl_version_output(command_output: str) -> str:
+        """Remove all lines containing warnings from the command output of `istioctl version`."""
+        all_lines = command_output.split("\n")
+        lines_without_warnings = []
+        for line in all_lines:
+            if "warn" not in line.lower():
+                lines_without_warnings.append()
+        return "\n".join(lines_without_warnings)
+
     @property
     def _istioctl_flags(self):
         istioctl_flags = [
@@ -46,6 +56,7 @@ class Istioctl:
         ]
         istioctl_flags.extend(self._istioctl_extra_flags)
         return istioctl_flags
+
 
     def install(self):
         """Wrapper for the `istioctl install` command."""
@@ -161,7 +172,6 @@ class Istioctl:
                 [
                     self._istioctl_path,
                     "version",
-                    '-r="default"',
                     f"-i={self._namespace}",
                     "-o=yaml",
                 ]
@@ -169,8 +179,9 @@ class Istioctl:
         except subprocess.CalledProcessError as cpe:
             raise IstioctlError("Failed to get Istio version") from cpe
 
-        logging.info("\n\n\nJUST DEBUGGING\n\n\n")
-        logging.info(version_string)
+        version_string = self._remove_warning_lines_from_istioctl_version_output(
+            version_string.decode("utf-8")
+        )
         version_dict = yaml.safe_load(version_string)
         return {
             "client": get_client_version(version_dict),
