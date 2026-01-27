@@ -38,7 +38,20 @@ class Istioctl:
 
     @staticmethod
     def _remove_warning_lines_from_istioctl_version_output(command_output: str) -> str:
-        """Remove all lines containing warnings from the command output of `istioctl version`."""
+        """Remove all lines containing warnings from the command output of `istioctl version`.
+
+        The problem is given by version `1.28.0` of `istioctl` adding warnings that cannot be
+        suppressed to the YAML output of `kubectl version`.
+        No such options are available for `istioctl`:
+        https://istio.io/latest/docs/reference/commands/istioctl/#envvars
+        And the upstream source confirms the warning is generated:
+        https://github.com/istio/istio/blob/1.28.0/istioctl/pkg/cli/context.go#L236
+        Version `1.28.1` already tackles this problem by turning the warning into a debugging log,
+        which should no longer pollute the output:
+        https://github.com/istio/istio/blob/1.28.1/istioctl/pkg/cli/context.go#L236)].
+        Therefore, until Kubeflow bumps the minor of Istio, this manipulation of the output of
+        `istioctl version` to remove warning lines is required.
+        """
         all_lines = command_output.split("\n")
         lines_without_warnings = []
         for line in all_lines:
