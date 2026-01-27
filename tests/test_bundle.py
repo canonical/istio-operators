@@ -33,6 +33,10 @@ ISTIO_GATEWAY_METADATA = yaml.safe_load(Path("charms/istio-gateway/metadata.yaml
 ISTIO_PILOT_METADATA = yaml.safe_load(Path("charms/istio-pilot/metadata.yaml").read_text())
 ISTIO_GATEWAY_APP_NAME = "istio-ingressgateway"
 ISTIO_PILOT_APP_NAME = "istio-pilot"
+ISTIO_GATEWAY_CHARM_NAME = ISTIO_GATEWAY_METADATA["name"]
+ISTIO_PILOT_CHARM_NAME = ISTIO_PILOT_METADATA["name"]
+ISTIO_PILOT_CONFIG_OPTION_FOR_CNI_BIN_DIR = "cni-bin-dir"
+ISTIO_PILOT_CONFIG_OPTION_FOR_CNI_CONF_DIR = "cni-conf-dir"
 ISTIO_GATEWAY_KIND = "ingress"
 ISTIO_GATEWAY_INDEPENDENT_WORKLOAD_POD_SECURITY_CONTEXT: ContainerSecurityContext = {
     "runAsGroup": 1337,
@@ -90,14 +94,14 @@ async def test_kubectl_access(ops_test: OpsTest):
 @pytest.mark.abort_on_fail
 async def test_build_and_deploy_istio_charms(ops_test: OpsTest, request):
     # Build, deploy, and relate istio charms
-    istio_gateway_name = ISTIO_GATEWAY_METADATA["name"]
-    istio_pilot_name = ISTIO_PILOT_METADATA["name"]
     if charms_path := request.config.getoption("--charms-path"):
         istio_gateway = (
-            f"{charms_path}/{istio_gateway_name}/{istio_gateway_name}_ubuntu@24.04-amd64.charm"
+            f"{charms_path}/{ISTIO_GATEWAY_CHARM_NAME}"
+            f"/{ISTIO_GATEWAY_CHARM_NAME}_ubuntu@24.04-amd64.charm"
         )
         istio_pilot = (
-            f"{charms_path}/{istio_pilot_name}/{istio_pilot_name}_ubuntu@24.04-amd64.charm"
+            f"{charms_path}/{ISTIO_PILOT_CHARM_NAME}"
+            f"/{ISTIO_PILOT_CHARM_NAME}_ubuntu@24.04-amd64.charm"
         )
     else:
         istio_gateway = await ops_test.build_charm("charms/istio-gateway")
@@ -118,6 +122,45 @@ async def test_build_and_deploy_istio_charms(ops_test: OpsTest, request):
 
     await ops_test.model.add_relation(
         f"{ISTIO_PILOT_APP_NAME}:istio-pilot", f"{ISTIO_GATEWAY_APP_NAME}:istio-pilot"
+    )
+
+    await ops_test.model.wait_for_idle(
+        status="active",
+        raise_on_blocked=False,
+        timeout=90 * 10,
+    )
+
+
+@pytest.mark.abort_on_fail
+async def test_istio_cni_enablement(ops_test: OpsTest, request):
+    """Test charms are active after enabling Istio CNI and after (re-)disabling it."""
+    # reading K8s distribution-specific test configurations:
+    cni_bin_dir = request.config.getoption("--cni-bin-dir")
+    cni_conf_dir = request.config.getoption("--cni-conf-dir")
+    for test_parameter in (cni_bin_dir, cni_conf_dir):
+        # NOTE: neither `None` nor `""` allowed (empty strings as charm configs disable Istio CNI)
+        assert test_parameter
+
+    # enabling Istio CNI:
+    await ops_test.model.applications[ISTIO_PILOT_APP_NAME].set_config(
+        {
+            ISTIO_PILOT_CONFIG_OPTION_FOR_CNI_BIN_DIR: cni_bin_dir,
+            ISTIO_PILOT_CONFIG_OPTION_FOR_CNI_CONF_DIR: cni_conf_dir,
+        }
+    )
+
+    await ops_test.model.wait_for_idle(
+        status="active",
+        raise_on_blocked=False,
+        timeout=90 * 10,
+    )
+
+    # disabling Istio CNI:
+    await ops_test.model.applications[ISTIO_PILOT_APP_NAME].set_config(
+        {
+            ISTIO_PILOT_CONFIG_OPTION_FOR_CNI_BIN_DIR: "",
+            ISTIO_PILOT_CONFIG_OPTION_FOR_CNI_CONF_DIR: "",
+        }
     )
 
     await ops_test.model.wait_for_idle(

@@ -169,7 +169,7 @@ jobs:
       - name: Run integration tests
         run: |
           juju add-model test-istio
-          tox -e ${{ matrix.integration-types }} -- --model test-istio --charms-path=${{ github.workspace }}/charms/
+          tox -e ${{ matrix.integration-types }} -- --model test-istio --charms-path=${{ github.workspace }}/charms/ --cni-bin-dir=/opt/cni/bin --cni-conf-dir=/etc/cni/net.d
         timeout-minutes: 80
 
       - name: Setup Debug Artifact Collection
