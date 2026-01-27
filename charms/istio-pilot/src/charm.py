@@ -247,9 +247,7 @@ class Operator(CharmBase):
     def install(self, _):
         """Install charm."""
 
-        self._log_and_set_status(
-            MaintenanceStatus("Deploying Istio control plane.")
-        )
+        self._log_and_set_status(MaintenanceStatus("Deploying Istio control plane."))
 
         # Call the istioctl wrapper to install the Istio Control Plane
         istioctl = Istioctl(
