@@ -151,9 +151,8 @@ jobs:
           sudo concierge prepare --trace
 
       - name: Configure Cilium for Istio
-        if: matrix.test-type == 'integration-ambient'
         run: |
-          # https://docs.cilium.io/en/stable/network/servicemesh/istio/
+          # for context, see https://docs.cilium.io/en/stable/network/servicemesh/istio/
           kubectl -n kube-system patch configmap cilium-config --type merge --patch '{"data":{"bpf-lb-sock-hostns-only":"true"}}'
           kubectl -n kube-system patch configmap cilium-config --type merge --patch '{"data":{"cni-exclusive":"false"}}'
           kubectl -n kube-system rollout restart daemonset cilium
