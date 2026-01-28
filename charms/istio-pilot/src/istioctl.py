@@ -70,7 +70,6 @@ class Istioctl:
         istioctl_flags.extend(self._istioctl_extra_flags)
         return istioctl_flags
 
-
     def install(self):
         """Wrapper for the `istioctl install` command."""
         install_msg = (
@@ -192,9 +191,6 @@ class Istioctl:
         except subprocess.CalledProcessError as cpe:
             raise IstioctlError("Failed to get Istio version") from cpe
 
-        version_string = self._remove_warning_lines_from_istioctl_version_output(
-            version_string.decode("utf-8")
-        )
         version_dict = yaml.safe_load(version_string)
         return {
             "client": get_client_version(version_dict),
