@@ -1375,6 +1375,8 @@ class TestCharmUpgrade:
                 "--set",
                 f"values.global.tag={pilot_image_tag}",
                 "--set",
+                f"values.global.revision={pilot_image_tag.replace(".", "-")}",
+                "--set",
                 "values.global.hub=docker.io/istio",
                 "--set",
                 "values.global.proxy.image=proxyv2",

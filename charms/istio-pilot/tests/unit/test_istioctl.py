@@ -211,7 +211,7 @@ def test_istioctl_version(mocked_check_output):
     istioctl_version_output_str = template.render(
         client_version=expected_client_version,
         control_version=expected_control_version,
-    ).encode("utf-8")
+    )
     mocked_check_output.return_value = istioctl_version_output_str
 
     ictl = Istioctl(istioctl_path=ISTIOCTL_BINARY, namespace=NAMESPACE, profile=PROFILE)
@@ -234,7 +234,7 @@ def test_istioctl_version(mocked_check_output):
 def test_istioctl_version_no_versions(mocked_check_output):
     """Tests that istioctl.version() returns successfully when expected"""
     # Mock with empty return
-    mocked_check_output.return_value = "".encode("utf-8")
+    mocked_check_output.return_value = ""
 
     ictl = Istioctl(istioctl_path=ISTIOCTL_BINARY, namespace=NAMESPACE, profile=PROFILE)
 
