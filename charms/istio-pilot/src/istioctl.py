@@ -161,6 +161,7 @@ class Istioctl:
                 [
                     self._istioctl_path,
                     "version",
+                    "-r=default"
                     f"-i={self._namespace}",
                     "-o=yaml",
                 ]
