@@ -213,7 +213,7 @@ class Operator(CharmBase):
             "--set",
             f"values.global.tag={global_tag}",
             "--set",
-            f"values.global.revision={global_tag.replace(".", "-")}",
+            f"values.global.revision=default",
             "--set",
             f"values.global.hub={global_hub}",
             "--set",
