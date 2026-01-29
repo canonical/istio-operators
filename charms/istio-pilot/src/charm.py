@@ -212,8 +212,12 @@ class Operator(CharmBase):
             f"values.pilot.image={pilot_image}",
             "--set",
             f"values.global.tag={global_tag}",
+            # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+            # NOTE: setting the default revision was necessary to solve
+            # https://github.com/canonical/istio-operators/issues/680
             "--set",
             "values.global.revision=default",
+            # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
             "--set",
             f"values.global.hub={global_hub}",
             "--set",
