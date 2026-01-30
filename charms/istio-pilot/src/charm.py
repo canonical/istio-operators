@@ -212,6 +212,12 @@ class Operator(CharmBase):
             f"values.pilot.image={pilot_image}",
             "--set",
             f"values.global.tag={global_tag}",
+            # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+            # NOTE: setting the default revision was necessary to solve
+            # https://github.com/canonical/istio-operators/issues/680
+            "--set",
+            "values.global.revision=default",
+            # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
             "--set",
             f"values.global.hub={global_hub}",
             "--set",
@@ -247,9 +253,7 @@ class Operator(CharmBase):
     def install(self, _):
         """Install charm."""
 
-        self._log_and_set_status(
-            MaintenanceStatus("Deploying Istio control plane with Istio CNI plugin.")
-        )
+        self._log_and_set_status(MaintenanceStatus("Deploying Istio control plane."))
 
         # Call the istioctl wrapper to install the Istio Control Plane
         istioctl = Istioctl(

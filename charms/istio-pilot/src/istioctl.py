@@ -51,9 +51,9 @@ class Istioctl:
         """Wrapper for the `istioctl install` command."""
         install_msg = (
             "Installing the Istio Control Plane with the following settings:\n"
-            "Profile: {self._profile}\n"
-            "Namespace: {self._namespace}\n"
-            "Istioctl extra flags: {self._istioctl_extra_flags}"
+            f"Profile: {self._profile}\n"
+            f"Namespace: {self._namespace}\n"
+            f"Istioctl extra flags: {self._istioctl_extra_flags}"
         )
 
         try:
@@ -161,6 +161,7 @@ class Istioctl:
                 [
                     self._istioctl_path,
                     "version",
+                    "-r=default",
                     f"-i={self._namespace}",
                     "-o=yaml",
                 ]

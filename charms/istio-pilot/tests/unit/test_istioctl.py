@@ -222,6 +222,7 @@ def test_istioctl_version(mocked_check_output):
         [
             ISTIOCTL_BINARY,
             "version",
+            "-r=default",
             f"-i={NAMESPACE}",
             "-o=yaml",
         ]
