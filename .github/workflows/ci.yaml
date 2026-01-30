@@ -150,6 +150,13 @@ jobs:
           sudo snap install concierge --classic
           sudo concierge prepare --trace
 
+      - name: Configure Cilium for Istio
+        run: |
+          # for context, see https://docs.cilium.io/en/stable/network/servicemesh/istio/
+          kubectl -n kube-system patch configmap cilium-config --type merge --patch '{"data":{"bpf-lb-sock-hostns-only":"true"}}'
+          kubectl -n kube-system patch configmap cilium-config --type merge --patch '{"data":{"cni-exclusive":"false"}}'
+          kubectl -n kube-system rollout restart daemonset cilium
+
       - name: Download packed charm(s)
         id: download-charms
         timeout-minutes: 5
@@ -161,7 +168,7 @@ jobs:
       - name: Run integration tests
         run: |
           juju add-model test-istio
-          tox -e ${{ matrix.integration-types }} -- --model test-istio --charms-path=${{ github.workspace }}/charms/
+          tox -e ${{ matrix.integration-types }} -- --model test-istio --charms-path=${{ github.workspace }}/charms/ --cni-bin-dir=/opt/cni/bin --cni-conf-dir=/etc/cni/net.d
         timeout-minutes: 80
 
       - name: Setup Debug Artifact Collection
