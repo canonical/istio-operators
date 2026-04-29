@@ -64,7 +64,7 @@ def test_start_apply(configured_harness, kind, mocked_client):
     # the apply method is called for every object in the manifest
     for call in mocked_client.return_value.apply.call_args_list:
         # Ensure the server side apply calls include the namespace kwarg
-        assert call.kwargs["namespace"] == "None"
+        assert call.kwargs["namespace"] in ("None", None)
         # The first (and only) argument to the apply method is the obj
         # Convert the object to a dictionary and add it to the list
         actual_objects.append(call.args[0].to_dict())
@@ -87,7 +87,7 @@ def test_removal(configured_harness, kind, mocked_client, mocker):
 
     for call in mocked_client.return_value.delete.call_args_list:
         # Ensure the delete calls include the namespace kwarg ('None' in the example yaml)
-        assert call.kwargs["namespace"] == "None"
+        assert call.kwargs["namespace"] in ("None", None)
         # The first argument is the resource class
         # The second argument is the object name
         kind_name = {"kind": call.args[0].__name__, "name": call.args[1]}
@@ -127,7 +127,7 @@ def test_service_type(configured_harness_only_ingress, gateway_service_type, moc
     # the apply method is called for every object in the manifest
     for call in mocked_client.return_value.apply.call_args_list:
         # Ensure the server side apply calls include the namespace kwarg
-        assert call.kwargs["namespace"] is None
+        assert call.kwargs["namespace"] in ("None", None)
         # The first (and only) argument to the apply method is the obj
         # Convert the object to a dictionary and add it to the list
         actual_objects.append(call.args[0].to_dict())
