@@ -9,21 +9,21 @@ SELF_SIGNED_CERTIFICATES = CharmSpec(
 )
 DEX_AUTH = CharmSpec(
     charm="dex-auth",
-    channel="latest/edge",
+    channel="2.41/edge",
     trust=True,
 )
 OIDC_GATEKEEPER = CharmSpec(
     charm="oidc-gatekeeper",
-    channel="latest/edge",
+    channel="ckf-1.10/edge",
     trust=True,
 )
 TENSORBOARD_CONTROLLER = CharmSpec(
     charm="tensorboard-controller",
-    channel="latest/edge",
+    channel="1.10/edge",
     trust=True,
 )
 KUBEFLOW_VOLUMES = CharmSpec(
     charm="kubeflow-volumes",
-    channel="latest/edge",
+    channel="1.10/edge",
     trust=True,
 )
