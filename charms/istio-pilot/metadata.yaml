@@ -103,3 +103,4 @@ peers:
     interface: istio_pilot_peers
 assumes:
 - juju >= 3.1
+- k8s-api
